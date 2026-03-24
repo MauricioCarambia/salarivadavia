@@ -1,0 +1,9 @@
+.small-header .panel-body {
+  padding: 5px 5px !important;
+}
+h3, .h3 {
+  font-size: 18px;
+}
+body {
+  font-size: 13px;
+}
