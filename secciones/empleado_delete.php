@@ -29,7 +29,7 @@
                             try {
                                 $conexion->beginTransaction();
 
-                                $stmtempleado = $conexion->prepare("DELETE FROM empleado WHERE Id = ?");
+                                $stmtempleado = $conexion->prepare("DELETE FROM empleados WHERE Id = ?");
                                 $stmtempleado->execute([$id]);
 
                                 $conexion->commit();

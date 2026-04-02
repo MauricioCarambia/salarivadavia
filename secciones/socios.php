@@ -21,17 +21,37 @@ if ($busqueda !== '') {
     ];
 
     $sql = "
-        SELECT 
-            p.*,
-            CASE WHEN pa.paciente_id IS NOT NULL THEN 'si' ELSE '' END AS aldia
-        FROM pacientes p
-        LEFT JOIN (
-            SELECT DISTINCT paciente_id
-            FROM pagos_afiliados
-            WHERE fecha_correspondiente BETWEEN DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 1 MONTH),'%Y-%m-01') AND '2030-01-01'
-        ) pa ON pa.paciente_id = p.Id
-        $where
-        ORDER BY p.apellido ASC
+       SELECT 
+    p.*,
+
+    pa.ultimo_pago,
+
+    CASE 
+        WHEN pa.ultimo_pago IS NULL THEN 999
+        ELSE TIMESTAMPDIFF(MONTH, pa.ultimo_pago, CURDATE())
+    END AS meses_adeudados,
+
+    CASE 
+        WHEN pa.ultimo_pago >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 2 MONTH),'%Y-%m-01') 
+        THEN 'si' ELSE 'no' 
+    END AS aldia
+
+FROM pacientes p
+
+LEFT JOIN (
+    SELECT paciente_id, MAX(fecha_correspondiente) AS ultimo_pago
+    FROM pagos_afiliados
+    GROUP BY paciente_id
+) pa ON pa.paciente_id = p.Id
+
+WHERE 
+    p.nombre LIKE :nombre 
+    OR p.apellido LIKE :apellido 
+    OR p.documento LIKE :documento
+    OR p.nro_afiliado LIKE :afiliado
+
+ORDER BY p.apellido ASC
+LIMIT 25
     ";
 
     $stmt = $conexion->prepare($sql);
@@ -72,82 +92,90 @@ if ($busqueda !== '') {
 </div>
 
 <?php if (!empty($pacientes)): ?>
-<div class="row">
-    <div class="col-12">
-        <div class="card card-primary card-outline">
-            <div class="card-header">
-                <h3 class="card-title">Resultados</h3>
-            </div>
-            <div class="card-body table-responsive">
-                <table class="table table-striped table-bordered datatable" style="width:100%">
-                    <thead class="thead-dark">
-                        <tr>
-                            <th>Apellido</th>
-                            <th>Nombre</th>
-                            <th>Documento</th>
-                            <th>Socio N°</th>
-                            <th>Al día</th>
-                            <th>Historial</th>
-                            <th>Tipo</th>
-                            <th>Celular</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($pacientes as $r): ?>
+    <div class="row">
+        <div class="col-12">
+            <div class="card card-info card-outline">
+                <div class="card-header">
+                    <h3 class="card-title">Resultados</h3>
+                </div>
+                <div class="card-body table-responsive">
+                    <table class="table table-striped  datatable" style="width:100%">
+                        <thead class="thead-dark">
                             <tr>
-                                <td><?= htmlspecialchars($r['apellido']) ?></td>
-                                <td><?= htmlspecialchars($r['nombre']) ?></td>
-                                <td><?= htmlspecialchars($r['tipo_documento']) ?>: <?= htmlspecialchars($r['documento']) ?></td>
-                                <td>
-                                    <?= htmlspecialchars($r['nro_afiliado']) ?>
-                                    <?php if ($r['nro_afiliado'] != ''): ?>
-                                        <span class="float-right ml-2">
-                                            <i class="fa <?= $r['aldia'] === 'si' ? 'fa-check text-success' : 'fa-times text-danger' ?>"></i>
-                                        </span>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <?= $r['aldia'] === 'si' ? '<span class="text-success">Si</span>' : '<span class="text-danger">No</span>' ?>
-                                </td>
-                                <td>
-                                    <a href="./?seccion=socios_historial&id=<?= $r['Id'] ?>&nc=<?= $rand ?>" 
-                                       class="btn btn-info btn-sm rounded-circle" title="Historial">
-                                        <i class="fa fa-eye"></i>
-                                    </a>
-                                </td>
-                                <td><?= htmlspecialchars($r['tipo'] ?? 'No definido') ?></td>
-                                <td><?= htmlspecialchars($r['celular']) ?></td>
-                                <td class="text-center">
-                                    <div class="btn-group">
-                                        <a href="./?seccion=afiliados_new&id=<?= $r['Id'] ?>&nc=<?= $rand ?>" 
-                                           class="btn btn-success btn-sm rounded-circle" 
-                                           title="Nuevo pago">
-                                            <i class="fa fa-plus"></i>
-                                        </a>
-                                        <a href="./?seccion=pacientes_edit&id=<?= $r['Id'] ?>&nc=<?= $rand ?>" 
-                                           class="btn btn-warning btn-sm rounded-circle" 
-                                           title="Editar">
-                                            <i class="fas fa-pencil-alt"></i>
-                                        </a>
-                                    </div>
-                                </td>
+                                <th>Apellido</th>
+                                <th>Nombre</th>
+                                <th>Documento</th>
+                                <th>Celular</th>
+                                <th>Socio N°</th>
+                                <th>Al día</th>
+                                <th>Meses adeudados</th>
+                                
+                                <th>Acciones</th>
                             </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($pacientes as $r): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($r['apellido']) ?></td>
+                                    <td><?= htmlspecialchars($r['nombre']) ?></td>
+                                    <td><?= htmlspecialchars($r['tipo_documento']) ?>: <?= htmlspecialchars($r['documento']) ?>
+                                    </td>
+                                    
+                                    <td><?= htmlspecialchars($r['celular']) ?></td>
+                                    <td>
+                                        <?= htmlspecialchars($r['nro_afiliado']) ?>
+                                       
+                                    </td>
+                                    <td>
+                                        <?= $r['aldia'] === 'si' ? '<span class="text-success">Si</span>' : '<span class="text-danger">No</span>' ?>
+                                    </td>
+                                    <td>
+                                        <?php
+                                        $meses = (int) $r['meses_adeudados'];
+
+                                        if ($meses === 999) {
+                                            echo '<span class="text-danger">Nunca pagó</span>';
+                                        } elseif ($meses <= 2) {
+                                            echo '<span class="text-success">' . $meses . '</span>';
+                                        } elseif ($meses <= 4) {
+                                            echo '<span class="text-warning">' . $meses . '</span>';
+                                        } else {
+                                            echo '<span class="text-danger">' . $meses . '</span>';
+                                        }
+                                        ?>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="btn-group">
+                                             <a href="./?seccion=socios_historial&id=<?= $r['Id'] ?>&nc=<?= $rand ?>"
+                                            class="btn btn-info btn-sm rounded-circle" title="Historial">
+                                            <i class="fa fa-eye"></i>
+                                        </a>
+                                            <a href="./?seccion=afiliados_new&id=<?= $r['Id'] ?>&nc=<?= $rand ?>"
+                                                class="btn btn-success btn-sm rounded-circle" title="Nuevo pago">
+                                                <i class="fa fa-plus"></i>
+                                            </a>
+                                            <a href="./?seccion=pacientes_edit&id=<?= $r['Id'] ?>&nc=<?= $rand ?>"
+                                                class="btn btn-warning btn-sm rounded-circle" title="Editar">
+                                                <i class="fas fa-pencil-alt"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
-</div>
 <?php elseif ($busqueda !== ''): ?>
     <p>No se encontraron resultados para "<strong><?= htmlspecialchars($busqueda) ?></strong>".</p>
 <?php endif; ?>
 
 <script>
-document.addEventListener("DOMContentLoaded", function () {
-    $('.datatable').each(function () {
-        initDataTable($(this));
+    document.addEventListener("DOMContentLoaded", function () {
+        $('.datatable').each(function () {
+            initDataTable($(this));
+        });
     });
-});
 </script>

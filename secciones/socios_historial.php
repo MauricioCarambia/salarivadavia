@@ -14,19 +14,35 @@ $stmtPaciente->execute([':id' => $id]);
 $paciente = $stmtPaciente->fetch(PDO::FETCH_ASSOC);
 
 /* ===============================
-   AL DÍA
+   ESTADO SOCIO (MOROSO > 3 MESES)
 ================================ */
-$stmtAldia = $conexion->prepare("
-    SELECT Id
+$stmtEstado = $conexion->prepare("
+    SELECT MAX(fecha_correspondiente) as ultima_fecha
     FROM pagos_afiliados
     WHERE paciente_id = :id
-    AND fecha_correspondiente BETWEEN DATE_FORMAT(NOW(),'%Y-%m-01')
-    AND '2030-01-01'
-    LIMIT 1
 ");
-$stmtAldia->execute([':id' => $id]);
+$stmtEstado->execute([':id' => $id]);
 
-$aldia = ($stmtAldia->rowCount() > 0);
+$ultimaFecha = $stmtEstado->fetchColumn();
+
+$aldia = false;
+
+if ($ultimaFecha) {
+
+   $fechaUltimoPago = new DateTime($ultimaFecha);
+   $hoy = new DateTime();
+
+   $diff = $fechaUltimoPago->diff($hoy);
+
+   $mesesDeuda = ($diff->y * 12) + $diff->m;
+
+   // 🔥 regla: si debe MÁS de 3 meses → moroso
+   $aldia = ($mesesDeuda <= 2);
+   $mesesDeuda = max(0, $mesesDeuda);
+} else {
+   // nunca pagó → moroso directo
+   $aldia = false;
+}
 
 /* ===============================
    PAGOS
@@ -50,11 +66,11 @@ $pagos = $stmtPagos->fetchAll(PDO::FETCH_ASSOC);
             <h3 class="card-title">Historial de pagos del socio
 
 
-               <?php if ($user_tipo == 'admin' || $user_tipo == 'contable'): ?>
+              
                   <a href="./?seccion=afiliados_new&id=<?= $id ?>&nc=<?= $rand ?>" class="btn btn-success btn-sm">
                      <i class="fas fa-plus"></i> Nuevo pago
                   </a>
-               <?php endif; ?>
+            
 
                <a href="./?seccion=socios&nc=<?= $rand ?>" class="btn btn-secondary btn-sm ml-2 rounded">
                   Volver
@@ -102,7 +118,11 @@ $pagos = $stmtPagos->fetchAll(PDO::FETCH_ASSOC);
                   <span class="badge badge-danger p-2">
                      <i class="fas fa-times"></i> Moroso
                   </span>
+                  <small class="text-danger">
+                     Debe <?= $mesesDeuda ?> meses
+                  </small>
                <?php endif; ?>
+
             </div>
 
          </div>
@@ -118,7 +138,7 @@ $pagos = $stmtPagos->fetchAll(PDO::FETCH_ASSOC);
 
                <div class="card-body table-responsive">
 
-                  <table class="table table-bordered table-striped datatable">
+                  <table class="table table-striped datatable">
                      <thead>
                         <tr>
                            <th>Fecha correspondiente</th>
@@ -147,21 +167,25 @@ $pagos = $stmtPagos->fetchAll(PDO::FETCH_ASSOC);
                               <td>$<?= number_format($pago['monto'], 2) ?></td>
 
                               <td>
-                                 <div class="btn-group">
-                                    <?php if ($user_tipo == 'admin' || $user_tipo == 'contable'): ?>
+                              
+                                    <div class="btn-group">
 
-                                       <a href="./?seccion=afiliados_edit&pid=<?= $pago['Id'] ?>&id=<?= $id ?>&nc=<?= $rand ?>"
-                                          class="btn btn-sm btn-success rounded-circle">
+                                       <!-- EDITAR -->
+                                       <button class="btn btn-sm btn-success btnEdit rounded-circle"
+                                          data-id="<?= $pago['Id'] ?>" data-monto="<?= $pago['monto'] ?>"
+                                          data-fecha="<?= date('Y-m', strtotime($pago['fecha_correspondiente'])) ?>"
+                                          title="Editar">
                                           <i class="fas fa-edit"></i>
-                                       </a>
+                                       </button>
 
+                                       <!-- ELIMINAR -->
                                        <button class="btn btn-sm btn-danger btnDelete rounded-circle"
-                                          data-id="<?= $pago['Id'] ?>">
+                                          data-id="<?= $pago['Id'] ?>" title="Eliminar">
                                           <i class="fas fa-trash"></i>
                                        </button>
-                                    </div>
-                                 <?php endif; ?>
 
+                                    </div>
+                               
                               </td>
                            </tr>
                         <?php endforeach; ?>
@@ -176,17 +200,102 @@ $pagos = $stmtPagos->fetchAll(PDO::FETCH_ASSOC);
 
    </div>
 </div>
+<div class="modal fade" id="modalEditarPago">
+   <div class="modal-dialog">
+      <div class="modal-content">
+
+         <div class="modal-header bg-info">
+            <h5 class="modal-title">Editar pago</h5>
+            <button type="button" class="close" data-dismiss="modal">&times;</button>
+         </div>
+
+         <form id="formEditarPago">
+
+            <div class="modal-body">
+
+               <input type="hidden" name="id" id="edit_id">
+
+               <div class="form-group">
+                  <label>Monto</label>
+                  <input type="number" name="monto" id="edit_monto" class="form-control" required>
+               </div>
+
+               <div class="form-group">
+                  <label>Mes</label>
+                  <input type="month" name="fecha" id="edit_fecha" class="form-control" required>
+               </div>
+
+            </div>
+
+            <div class="modal-footer">
+               <button type="submit" class="btn btn-success">Guardar</button>
+               <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+            </div>
+
+         </form>
+
+      </div>
+   </div>
 </div>
 <script>
    $(function () {
 
-      // Inicializar DataTable
       let tabla = $('.datatable').DataTable({
          order: [[0, 'desc']]
+      });
+
+      /* =========================
+         EDITAR - ABRIR MODAL
+      ========================= */
+      $(document).on('click', '.btnEdit', function () {
+
+         $('#edit_id').val($(this).data('id'));
+         $('#edit_monto').val($(this).data('monto'));
+         $('#edit_fecha').val($(this).data('fecha'));
+
+         $('#modalEditarPago').modal('show');
+      });
+
+      /* =========================
+         EDITAR - GUARDAR AJAX
+      ========================= */
+      $('#formEditarPago').submit(function (e) {
+         e.preventDefault();
+
+         $.ajax({
+            url: 'ajax/afiliado_pago_update.php',
+            type: 'POST',
+            data: $(this).serialize(),
+            dataType: 'json',
+
+            success: function (resp) {
+
+               if (resp.success) {
+
+                  Swal.fire({
+                     icon: 'success',
+                     title: 'Actualizado',
+                     timer: 1500,
+                     showConfirmButton: false
+                  });
+
+                  setTimeout(() => location.reload(), 1200);
+
+               } else {
+                  Swal.fire('Error', resp.message, 'error');
+               }
+            },
+
+            error: function () {
+               Swal.fire('Error', 'Error de conexión', 'error');
+            }
+         });
 
       });
 
-      // DELETE AJAX
+      /* =========================
+         ELIMINAR
+      ========================= */
       $(document).on('click', '.btnDelete', function () {
 
          let id = $(this).data('id');
@@ -208,14 +317,11 @@ $pagos = $stmtPagos->fetchAll(PDO::FETCH_ASSOC);
                   type: 'POST',
                   data: { id: id },
                   dataType: 'json',
-                  xhrFields: {
-                     withCredentials: true
-                  },
+
                   success: function (resp) {
 
                      if (resp.success) {
 
-                        // ✅ ELIMINAR BIEN EN DATATABLE
                         tabla.row(fila).remove().draw();
 
                         Swal.fire({

@@ -1,89 +1,129 @@
 <?php
 date_default_timezone_set('America/Argentina/Buenos_Aires');
+
 session_set_cookie_params(0, '/');
 session_name("turnos");
 session_cache_limiter("private");
 session_start();
+
 require_once "inc/db.php";
 
 $rand = mt_rand();
 $mensaje = '';
 
 if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
-    $usuario = trim($_POST['usuario']);
-    $contrasenia = trim($_POST['contrasenia']);
 
-    if (strlen($usuario) < 3 || strlen($contrasenia) < 3) {
-        $mensaje = '<div class="alert alert-warning">El usuario y la contraseña deben tener al menos 3 caracteres.</div>';
+  $usuario = trim($_POST['usuario']);
+  $contrasenia = trim($_POST['contrasenia']);
+
+  if (strlen($usuario) < 3 || strlen($contrasenia) < 3) {
+
+    $mensaje = '<div class="alert alert-warning">El usuario y la contraseña deben tener al menos 3 caracteres.</div>';
+
+  } else {
+
+    // =============================
+// BUSCAR EMPLEADO
+// =============================
+    $stmt = $conexion->prepare("
+    SELECT e.Id, e.usuario, e.contrasenia, e.nombre, e.rol_id, e.activo, r.nombre AS rol_nombre
+    FROM empleados e
+    LEFT JOIN roles r ON e.rol_id = r.id
+    WHERE e.usuario = ?
+    LIMIT 1
+");
+    $stmt->execute([$usuario]);
+    $empleado = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($empleado) {
+
+      // 👉 EXISTE COMO EMPLEADO → validar contraseña
+      if (!password_verify($contrasenia, $empleado['contrasenia'])) {
+        $mensaje = '<div class="alert alert-danger">Contraseña incorrecta.</div>';
+      } elseif (!$empleado['activo']) {
+        $mensaje = '<div class="alert alert-danger">Usuario inactivo</div>';
+      } else {
+
+        session_regenerate_id(true);
+        $_SESSION = [];
+
+        $_SESSION["login"] = 'si';
+        $_SESSION["tipo"] = 'empleado';
+        $_SESSION["user_id"] = $empleado['Id'];
+        $_SESSION["user_nombre"] = $empleado['usuario'];
+        $_SESSION["nombre_completo"] = $empleado['nombre'];
+        $_SESSION["rol_id"] = $empleado['rol_id'];
+        $_SESSION["rol_nombre"] = $empleado['rol_nombre'];
+
+        $_SESSION['es_admin'] = (
+          strtolower(trim($empleado['rol_nombre'])) === 'administrador'
+        );
+
+        if ($_SESSION['es_admin']) {
+          $_SESSION['accesos'] = ['*'];
+        } else {
+
+          $stmtAccesos = $conexion->prepare("
+                SELECT a.nombre
+                FROM roles_accesos ra
+                INNER JOIN accesos a ON a.id = ra.acceso_id
+                WHERE ra.rol_id = ?
+            ");
+          $stmtAccesos->execute([$empleado['rol_id']]);
+
+          $_SESSION['accesos'] = array_column(
+            $stmtAccesos->fetchAll(PDO::FETCH_ASSOC),
+            'nombre'
+          );
+        }
+
+        header("Location: index.php");
+        exit;
+      }
+
     } else {
 
-        // ----------------------------
-        // USUARIOS FIJOS (ADMIN)
-        // ----------------------------
-        $usuarios_fijos = [
-            'administrador' => ['pass' => 'turnoSs', 'tipo' => 'admin', 'nombre' => 'Administrador']
+      // =============================
+      // BUSCAR PROFESIONAL
+      // =============================
+      $stmt = $conexion->prepare("
+        SELECT Id, nombre, apellido, usuario, contrasenia
+        FROM profesionales
+        WHERE usuario = ?
+        LIMIT 1
+    ");
+      $stmt->execute([$usuario]);
+      $profesional = $stmt->fetch(PDO::FETCH_ASSOC);
+
+      if ($profesional && $contrasenia === $profesional['contrasenia']){
+
+        session_regenerate_id(true);
+        $_SESSION = [];
+
+        $_SESSION["login"] = 'si';
+        $_SESSION["tipo"] = 'profesional';
+        $_SESSION["user_id"] = $profesional['Id'];
+        $_SESSION["nombre_completo"] = $profesional['nombre'] . ' ' . $profesional['apellido'];
+
+        $_SESSION["accesos"] = [
+          'historia_pacientes',
+          'turnos_profesional',
+          'salir'
         ];
 
-        if (isset($usuarios_fijos[$usuario]) && $contrasenia === $usuarios_fijos[$usuario]['pass']) {
-            // Login admin
-            $_SESSION["login"] = 'si';
-            $_SESSION["tipo"] = $usuarios_fijos[$usuario]['tipo'];
-            $_SESSION["user_nombre"] = $usuarios_fijos[$usuario]['nombre'];
+        $_SESSION["es_admin"] = false;
 
-        } else {
-            // ----------------------------
-            // EMPLEADOS
-            // ----------------------------
-            $stmt = $conexion->prepare("SELECT Id, usuario, contrasenia, rol_id FROM empleado WHERE usuario = ?");
-            $stmt->execute([$usuario]);
-            $empleado = $stmt->fetch(PDO::FETCH_ASSOC);
+        header("Location: index.php");
+        exit;
 
-            if ($empleado && password_verify($contrasenia, $empleado['contrasenia'])) {
-                $_SESSION["login"] = 'si';
-                $_SESSION["tipo"] = 'empleado';
-                $_SESSION["user_nombre"] = $empleado['usuario'];
-                $_SESSION["user_id"] = $empleado['Id'];
-                $_SESSION["rol_id"] = $empleado['rol_id'];
-
-                // Cargar accesos
-                if ($_SESSION["rol_id"]) {
-                    $stmtAccesos = $conexion->prepare("SELECT acceso_id FROM roles_accesos WHERE rol_id = ?");
-                    $stmtAccesos->execute([$_SESSION["rol_id"]]);
-                    $_SESSION["accesos"] = array_column($stmtAccesos->fetchAll(PDO::FETCH_ASSOC), 'acceso_id');
-                } else {
-                    $_SESSION["accesos"] = [];
-                }
-
-            } else {
-                // ----------------------------
-                // PROFESIONALES
-                // ----------------------------
-                $stmt = $conexion->prepare("SELECT Id, nombre, apellido, contrasenia FROM profesionales WHERE usuario = ?");
-                $stmt->execute([$usuario]);
-                $profesional = $stmt->fetch(PDO::FETCH_ASSOC);
-
-                if ($profesional && $contrasenia === $profesional['contrasenia']) {
-                    $_SESSION["login"] = 'si';
-                    $_SESSION["tipo"] = 'profesional';
-                    $_SESSION["user_nombre"] = $profesional['nombre'] . ' ' . $profesional['apellido'];
-                    $_SESSION["user_id"] = $profesional['Id'];
-                } else {
-                    // Usuario o contraseña incorrectos
-                    $mensaje = '<div class="alert alert-danger">Usuario o contraseña incorrectos.</div>';
-                }
-            }
-        }
-
-        // Redirección si logueó
-        if (isset($_SESSION["login"]) && $_SESSION["login"] === 'si') {
-            $redir = !empty($_SESSION["redir"]) ? $_SESSION["redir"] : './';
-            $_SESSION["redir"] = '';
-            header("Location: " . $redir . '?nc=' . $rand);
-            exit;
-        }
+      } else {
+        $mensaje = '<div class="alert alert-danger">Usuario o contraseña incorrectos.</div>';
+      }
     }
+  }
 }
 ?>
+
 
 <!DOCTYPE html>
 <html lang="es">
@@ -100,7 +140,7 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
   <link rel="stylesheet" href="adminlte/plugins/icheck-bootstrap/icheck-bootstrap.min.css">
   <link rel="stylesheet" href="adminlte/dist/css/adminlte.min.css">
 
- 
+
 
 </head>
 

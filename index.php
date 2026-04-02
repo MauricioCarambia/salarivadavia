@@ -3,7 +3,25 @@ session_name("turnos");
 session_start();
 
 require_once "inc/db.php";
-
+$cajas = [];
+$stmt = $pdo->query("SELECT * FROM cajas ORDER BY nombre");
+if ($stmt) {
+    $cajas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+function obtenerCajaAbierta($pdo, $usuarioId)
+{
+    $stmt = $pdo->prepare("
+        SELECT cs.*, c.id AS caja_id, c.nombre
+        FROM caja_sesion cs
+        INNER JOIN cajas c ON c.id = cs.caja_id
+        WHERE cs.estado = 'abierta'
+          AND cs.usuario_id = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$usuarioId]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+$cajaAbierta = obtenerCajaAbierta($pdo, $usuarioId);
 /* =============================
    VALIDAR LOGIN
 =============================*/
@@ -15,10 +33,19 @@ if (!isset($_SESSION["login"]) || $_SESSION["login"] !== 'si') {
     header("Location: login.php");
     exit;
 }
-require_once "inc/db.php";
+$tipoUsuario = $_SESSION['tipo'] ?? null;
 
-$seccion = $_GET['seccion'] ?? "home";
-$rand = rand(1, 9999);
+$seccion = $_GET['seccion'] ?? '';
+
+if (empty($seccion)) {
+
+    if ($tipoUsuario === 'profesional') {
+        $seccion = 'turnos_profesional';
+    } else {
+        $seccion = 'home';
+    }
+}
+$rand = mt_rand(1, 9999);
 
 $dias = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 
@@ -36,6 +63,19 @@ $meses = [
     "Noviembre",
     "Diciembre"
 ];
+$totalSistema = 0;
+if (isset($cajaAbierta['id'])) {
+    $stmt = $pdo->prepare("
+        SELECT 
+            COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE 0 END),0) -
+            COALESCE(SUM(CASE WHEN tipo='EGRESO' THEN monto ELSE 0 END),0) as total
+        FROM caja_movimientos
+        WHERE caja_id = ?
+        AND fecha >= ?
+    ");
+    $stmt->execute([$cajaAbierta['id'], $cajaAbierta['fecha_apertura']]);
+    $totalSistema = (float) $stmt->fetchColumn();
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -56,8 +96,9 @@ $meses = [
     <link rel="stylesheet" href="vendor/datatables/buttons.bootstrap4.min.css">
     <link rel="stylesheet" href="vendor/datatables/jquery.dataTables.min.css">
     <link rel="stylesheet" href="vendor/datatables/buttons.dataTables.min.css">
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
     <link rel="stylesheet" href="styles/style.css">
-    
+
 </head>
 
 <body class="hold-transition sidebar-mini layout-fixed layout-navbar-fixed">
@@ -82,12 +123,15 @@ $meses = [
                     <?= $dias[date('w')] . " " . date('d') . " de " . $meses[date('n') - 1] . " de " . date('Y'); ?>
                 </li>
             </ul>
+            <!-- En la navbar, junto al botón de abrir caja -->
             <ul class="navbar-nav ml-auto align-items-center">
+
+                
 
                 <li class="nav-item">
                     <span id="userNombre" class="nav-link mb-0">
                         <i class="fas fa-user mr-1"></i>
-                        <?php echo $_SESSION['user_nombre'] ?? 'Usuario'; ?>
+                        <?= htmlspecialchars($_SESSION['nombre_completo'] ?? 'Usuario'); ?>
                     </span>
                 </li>
                 <li class="nav-item">
@@ -100,15 +144,9 @@ $meses = [
                         <i class="fas fa-sign-out-alt"></i>
                     </a>
                 </li>
-
-
-
             </ul>
-
         </nav>
-
         <!-- SIDEBAR -->
-
         <aside class="main-sidebar sidebar-dark-info elevation-4">
 
             <!-- TITULO -->
@@ -129,11 +167,42 @@ $meses = [
                     style="max-width:70%; max-height:100%; object-fit:contain; position:absolute; opacity:0;">
 
             </a>
-
+            <!-- INFO CAJA Y TURNO ABAJO DEL LOGO -->
+            <div id="sidebarCaja" class="p-2  d-flex justify-content-center">
+                <?php
+                // Obtenemos la caja abierta si hay
+                $cajaAbierta = obtenerCajaAbierta($pdo, $_SESSION['user_id']);
+                if ($cajaAbierta):
+                    ?>
+                    <small><i class="fas fa-cash-register"></i> <?= htmlspecialchars($cajaAbierta['nombre']) ?> |
+                        Turno: <?= htmlspecialchars($cajaAbierta['turno']) ?></small>
+                <?php else: ?>
+                    <small><i class="fas fa-exclamation-circle"></i> No hay caja abierta</small>
+                <?php endif; ?>
+            </div>
             <div class="sidebar">
 
-                <nav class="mt-2">
-                    <?php include "secciones/menu.php"; ?>
+                <nav>
+
+                    <?php
+                    // Asegurar variables
+                    $tipoUsuario = $_SESSION["tipo"] ?? null;
+
+                    // Generar random si no existe
+                    $rand = mt_rand(1, 9999);
+
+                    // Incluir menú según tipo de usuario
+                    if ($tipoUsuario === 'profesional') {
+
+                        include "secciones/menu_profesional.php";
+
+                    } else {
+
+                        include "secciones/menu.php"; // empleados/admin
+                    
+                    }
+                    ?>
+
                 </nav>
 
             </div>
@@ -149,6 +218,18 @@ $meses = [
                 <div class="container-fluid">
 
                     <?php
+
+                    $tipoUsuario = $_SESSION['tipo'] ?? null;
+
+                    // Si no viene sección por URL, definir una por defecto según rol
+                    if (empty($seccion)) {
+
+                        if ($tipoUsuario === 'profesional') {
+                            $seccion = 'turnos_profesional';
+                        } else {
+                            $seccion = 'home';
+                        }
+                    }
 
                     $archivo = "secciones/" . basename($seccion) . ".php";
 
@@ -195,6 +276,10 @@ $meses = [
     <!-- Botones -->
     <script src="vendor/datatables/buttons.html5.min.js"></script>
     <script src="vendor/datatables/buttons.print.min.js"></script>
+    <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qz-tray/qz-tray.js"></script>
+
     <script>
         function applyTheme(theme) {
 
@@ -285,7 +370,7 @@ $meses = [
                 navbar.classList.add('navbar-white', 'navbar-light');
             }
         }
-        
+
         function initDataTable(selector, options = {}) {
 
             // 🔥 Si ya existe, la destruye
@@ -348,6 +433,30 @@ $meses = [
 
             applyTheme(savedTheme);
         });
+        function actualizarSidebar(caja) {
+            const sidebar = document.querySelector("#sidebarCaja");
+            if (!sidebar) return;
+
+            if (caja) {
+                sidebar.innerHTML = `<small><i class="fas fa-cash-register"></i> ${caja.nombre} | Turno: ${caja.turno}</small>`;
+            } else {
+                sidebar.innerHTML = `<small><i class="fas fa-exclamation-circle"></i> No hay caja abierta</small>`;
+            }
+        }
+
+        // Función que consulta el backend para saber si hay caja abierta
+        function fetchCajaAbierta() {
+            fetch("ajax/obtener_caja_abierta.php")
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.caja) {
+                        actualizarSidebar(data.caja);
+                    } else {
+                        actualizarSidebar(null);
+                    }
+                });
+        }
+
     </script>
 
 </body>

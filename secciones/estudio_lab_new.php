@@ -115,7 +115,7 @@ if (isset($_POST['guardar'])) {
                                 Volver al turno
                             </a>
                         <?php else: ?>
-                            <a href="./?seccion=estudios&nc=<?= $rand ?>" class="btn btn-secondary">
+                            <a href="./?seccion=estudios_laboratorio&nc=<?= $rand ?>" class="btn btn-secondary">
                                 Volver
                             </a>
                         <?php endif; ?>

@@ -4,7 +4,7 @@ require_once "inc/db.php";
 $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 // Obtener datos del empleado
-$stmt = $conexion->prepare("SELECT * FROM empleado WHERE id = :id");
+$stmt = $conexion->prepare("SELECT * FROM empleados WHERE id = :id");
 $stmt->execute([':id' => $id]);
 $empleado = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -20,7 +20,7 @@ $mensaje = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nuevo_rol = intval($_POST['rol_id'] ?? 0);
 
-    $stmt = $conexion->prepare("UPDATE empleado SET rol_id = :rol_id WHERE id = :id");
+    $stmt = $conexion->prepare("UPDATE empleados SET rol_id = :rol_id WHERE id = :id");
     $stmt->execute([':rol_id' => $nuevo_rol, ':id' => $id]);
     $empleado['rol_id'] = $nuevo_rol; // actualizar variable en memoria
     $nombre = $nuevo_nombre;

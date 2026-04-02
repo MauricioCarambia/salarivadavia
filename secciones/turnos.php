@@ -16,7 +16,7 @@ $rand = rand(1000,9999);
                 </h3>
             </div>
             <div class="card-body table-responsive">
-                <table class="table table-striped table-bordered table-hover datatable" style="width:100%">
+                <table class="table table-striped  table-hover datatable" style="width:100%">
                     <thead class="thead-dark">
                         <tr>
                             <th>Acción</th>

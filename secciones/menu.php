@@ -1,153 +1,217 @@
 <?php
 
+// =============================
+// FUNCIÓN DE PERMISOS
+// =============================
+function tieneAcceso($permiso)
+{
+
+    if (!empty($_SESSION['es_admin']))
+        return true;
+
+    if (in_array('*', $_SESSION['accesos'] ?? []))
+        return true;
+
+    return in_array($permiso, $_SESSION['accesos'] ?? []);
+}
+
+
+// =============================
+// RENDER MENU
+// =============================
 function renderMenu($menuItems, $seccion, $rand)
 {
     foreach ($menuItems as $item) {
 
-        // Detectar activo en item normal
-        $isActive = isset($item['seccion']) && ($seccion === $item['seccion']);
+        // 🔥 VALIDAR PERMISO DEL ITEM
+        if (isset($item['permiso']) && !tieneAcceso($item['permiso'])) {
+            continue;
+        }
 
-        // MENU CON SUBMENU
+        // =============================
+        // SUBMENU
+        // =============================
         if (isset($item['submenu'])) {
 
+            $submenuVisible = [];
             $submenuActive = false;
 
             foreach ($item['submenu'] as $sub) {
+
+                // 🔥 VALIDAR PERMISO SUBMENU
+                if (isset($sub['permiso']) && !tieneAcceso($sub['permiso'])) {
+                    continue;
+                }
+
+                $submenuVisible[] = $sub;
+
                 if ($seccion === $sub['seccion']) {
                     $submenuActive = true;
-                    break;
                 }
             }
-?>
 
-<li class="nav-item <?= $submenuActive ? 'menu-open' : '' ?>">
+            // 🔥 SI NO HAY ITEMS VISIBLES NO MOSTRAR EL MENÚ
+            if (empty($submenuVisible))
+                continue;
+            ?>
 
-<a href="#" class="nav-link <?= $submenuActive ? 'active' : '' ?>">
+            <li class="nav-item <?= $submenuActive ? 'menu-open' : '' ?>">
 
-<i class="nav-icon <?= $item['icon'] ?>"></i>
+                <a href="#" class="nav-link <?= $submenuActive ? 'active' : '' ?>">
+                    <i class="nav-icon <?= $item['icon'] ?>"></i>
+                    <p>
+                        <?= $item['label'] ?>
+                        <i class="right fas fa-angle-right"></i>
+                    </p>
+                </a>
 
-<p>
-<?= $item['label'] ?>
+                <ul class="nav nav-treeview">
 
-<?php if(isset($item['badge'])): ?>
-<span class="badge badge-primary right"><?= $item['badge'] ?></span>
-<?php endif; ?>
+                    <?php foreach ($submenuVisible as $sub):
 
-<i class="right fas fa-angle-right"></i>
-</p>
+                        $subActive = ($seccion === $sub['seccion']);
+                        ?>
 
-</a>
+                        <li class="nav-item">
+                            <a href="./?seccion=<?= $sub['seccion'] ?>&nc=<?= $rand ?>"
+                                class="nav-link <?= $subActive ? 'active' : '' ?>">
+                                <i class="nav-icon <?= $sub['icon'] ?? 'far fa-circle' ?>"></i>
+                                <p><?= $sub['label'] ?></p>
+                            </a>
+                        </li>
 
-<ul class="nav nav-treeview">
+                    <?php endforeach; ?>
 
-<?php foreach ($item['submenu'] as $sub):
+                </ul>
 
-$subActive = ($seccion === $sub['seccion']);
-?>
+            </li>
 
-<li class="nav-item">
-
-<a href="./?seccion=<?= $sub['seccion'] ?>&nc=<?= $rand ?>"
-class="nav-link <?= $subActive ? 'active' : '' ?>">
-
-<i class="nav-icon <?= $sub['icon'] ?? 'far fa-circle' ?>"></i>
-
-<p>
-<?= $sub['label'] ?>
-
-<?php if(isset($sub['badge'])): ?>
-<span class="badge badge-warning right"><?= $sub['badge'] ?></span>
-<?php endif; ?>
-
-</p>
-
-</a>
-
-</li>
-
-<?php endforeach; ?>
-
-</ul>
-
-</li>
-
-<?php
-
+            <?php
         } else {
 
+            $isActive = isset($item['seccion']) && ($seccion === $item['seccion']);
             $url = $item['url'] ?? "./?seccion={$item['seccion']}&nc={$rand}";
-?>
+            ?>
 
-<li class="nav-item">
+            <li class="nav-item">
 
-<a href="<?= $url ?>" class="nav-link <?= $isActive ? 'active' : '' ?>">
+                <a href="<?= $url ?>" class="nav-link <?= $isActive ? 'active' : '' ?>">
+                    <i class="nav-icon <?= $item['icon'] ?>"></i>
+                    <p><?= $item['label'] ?></p>
+                </a>
 
-<i class="nav-icon <?= $item['icon'] ?>"></i>
+            </li>
 
-<p>
-<?= $item['label'] ?>
-
-<?php if(isset($item['badge'])): ?>
-<span class="badge badge-info right"><?= $item['badge'] ?></span>
-<?php endif; ?>
-
-</p>
-
-</a>
-
-</li>
-
-<?php
+            <?php
         }
     }
 }
 
+
+// =============================
+// MENÚ (CON PERMISOS)
+// =============================
 $menuItems = [
 
-['seccion'=>'inicio','label'=>'Inicio','icon'=>'fas fa-home'],
-['seccion'=>'turnos','label'=>'Turnos','icon'=>'fas fa-calendar'],
-['seccion'=>'pacientes','label'=>'Pacientes','icon'=>'fas fa-user'],
-['seccion'=>'profesionales','label'=>'Profesionales','icon'=>'fas fa-user-md'],
-['seccion'=>'socios','label'=>'Socios','icon'=>'fas fa-handshake'],
+    ['seccion' => 'inicio', 'label' => 'Inicio', 'icon' => 'fas fa-home', 'permiso' => 'inicio'],
 
-[
-'label'=>'Lista de espera',
-'icon'=>'fas fa-clock',
-'submenu'=>[
-    ['seccion'=>'lista_espera_psico_mayores','label'=>'Psicología Adulto','icon'=>'fas fa-user'],
-    ['seccion'=>'lista_espera_psico_menores','label'=>'Psicología Menores','icon'=>'fas fa-child'],
-    ['seccion'=>'lista_espera_psicopedagogia','label'=>'Psicopedagogía','icon'=>'fas fa-brain'],
-    ['seccion'=>'lista_espera_fono','label'=>'Fonoaudiología','icon'=>'fas fa-comment-medical'],
-    ['seccion'=>'lista_espera_kine','label'=>'Kinesiología','icon'=>'fas fa-dumbbell']
-]
+    ['seccion' => 'turnos', 'label' => 'Turnos', 'icon' => 'fas fa-calendar', 'permiso' => 'turnos'],
+
+    ['seccion' => 'pacientes', 'label' => 'Pacientes', 'icon' => 'fas fa-user', 'permiso' => 'pacientes'],
+
+    ['seccion' => 'profesionales', 'label' => 'Profesionales', 'icon' => 'fas fa-user-md', 'permiso' => 'profesionales'],
+
+    ['seccion' => 'socios', 'label' => 'Socios', 'icon' => 'fas fa-handshake', 'permiso' => 'socios'],
+
+    [
+        'label' => 'Lista de espera',
+        'icon' => 'fas fa-clock',
+        'permiso' => 'lista_espera',
+        'submenu' => [
+            ['seccion' => 'lista_psicologia_adulto', 'label' => 'Psicología Adulto', 'icon' => 'fas fa-user', 'permiso' => 'lista_espera'],
+            ['seccion' => 'lista_psicologia_menores', 'label' => 'Psicología Menores', 'icon' => 'fas fa-child', 'permiso' => 'lista_espera'],
+            ['seccion' => 'lista_psicopedagogia', 'label' => 'Psicopedagogía', 'icon' => 'fas fa-brain', 'permiso' => 'lista_espera'],
+            ['seccion' => 'lista_fonoaudiologia', 'label' => 'Fonoaudiología', 'icon' => 'fas fa-comment-medical', 'permiso' => 'lista_espera'],
+            ['seccion' => 'lista_kinesiologia', 'label' => 'Kinesiología', 'icon' => 'fas fa-dumbbell', 'permiso' => 'lista_espera']
+        ]
+    ],
+
+    ['seccion' => 'estadisticas', 'label' => 'Estadísticas', 'icon' => 'fas fa-chart-bar', 'permiso' => 'estadisticas'],
+
+    [
+        'label' => 'Estudios',
+        'icon' => 'fas fa-vial',
+        'permiso' => 'estudios',
+        'submenu' => [
+            ['seccion' => 'estudios_laboratorio', 'label' => 'Laboratorio', 'icon' => 'fas fa-flask', 'permiso' => 'estudios'],
+            ['seccion' => 'estudios_cardiologia', 'label' => 'Cardiología del Sur', 'icon' => 'fas fa-heartbeat', 'permiso' => 'estudios']
+        ]
+    ],
+
+    [
+    'label' => 'Caja',
+    'icon' => 'fas fa-cash-register',
+    'permiso' => 'caja',
+    'submenu' => [
+        [
+            'seccion' => 'cajas',
+            'label' => 'Abrir/Cerrar caja', // listado de todas las cajas
+            'icon' => 'fas fa-boxes', 
+            'permiso' => 'caja'
+        ],
+        [
+            'seccion' => 'caja',
+            'label' => 'Caja Diaria', // caja abierta / control rápido
+            'icon' => 'fas fa-cash-register', 
+            'permiso' => 'caja'
+        ]
+    ]
 ],
 
-['seccion'=>'estadisticas','label'=>'Estadísticas','icon'=>'fas fa-chart-bar'],
+    ['seccion' => 'historia_pacientes', 'label' => 'Historia clínica', 'icon' => 'fas fa-folder-open', 'permiso' => 'historia_pacientes'],
 
+  [
+    'seccion' => 'pagos',
+    'label' => 'Pagos profesionales',
+    'icon' => 'fas fa-money-bill-alt', // 💰 pagos
+    'permiso' => 'pagos'
+],
 [
-'label'=>'Estudios',
-'icon'=>'fas fa-vial',
-'submenu'=>[
-    ['seccion'=>'estudios_laboratorio','label'=>'Laboratorio','icon'=>'fas fa-flask'],
-    ['seccion'=>'estudios_cardiologia','label'=>'Cardiología del Sur','icon'=>'fas fa-heartbeat']
-]
+    'label' => 'Administrar pagos',
+    'icon' => 'fas fa-sliders-h', // ⚙️ configuración
+    'permiso' => 'administrar_pagos',
+    'submenu' => [
+        [
+            'seccion' => 'practicas',
+            'label' => 'Prácticas',
+            'icon' => 'fas fa-stethoscope', // 🩺 médico
+            'permiso' => 'administrar_pagos'
+        ],
+        [
+            'seccion' => 'practica_precio',
+            'label' => 'Precios',
+            'icon' => 'fas fa-dollar-sign', // 💲 precios
+            'permiso' => 'administrar_pagos'
+        ],
+        [
+            'seccion' => 'practica_reparto',
+            'label' => 'Reglas',
+            'icon' => 'fas fa-percentage', // 📊 reparto
+            'permiso' => 'administrar_pagos'
+        ]
+    ]
 ],
 
-['seccion'=>'caja','label'=>'Caja','icon'=>'fas fa-cash-register'],
-['seccion'=>'historia_pacientes','label'=>'Historia clínica','icon'=>'fas fa-folder-open'],
-['seccion'=>'pagos','label'=>'Pagos profesionales','icon'=>'fas fa-credit-card'],
-['seccion'=>'empleado','label'=>'Administrar','icon'=>'fas fa-cogs'],
-['seccion'=>'salir','label'=>'Salir','icon'=>'fas fa-sign-out-alt','url'=>'./secciones/logout.php']
+    ['seccion' => 'empleado', 'label' => 'Administrar Empleados', 'icon' => 'fas fa-cogs', 'permiso' => 'administrar'],
+
+    ['seccion' => 'salir', 'label' => 'Salir', 'icon' => 'fas fa-sign-out-alt', 'url' => './secciones/logout.php']
 
 ];
+
 ?>
 
-<ul class="nav nav-pills nav-sidebar flex-column"
-data-widget="treeview"
-role="menu"
-data-accordion="false">
+<ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
 
-<?php renderMenu($menuItems, $seccion, $rand); ?>
+    <?php renderMenu($menuItems, $seccion, $rand); ?>
 
 </ul>
-

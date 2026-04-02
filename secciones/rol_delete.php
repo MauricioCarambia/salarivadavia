@@ -1,58 +1,63 @@
-<!-- Main Wrapper -->
-<div id="wrapper">
-    <div class="normalheader transition animated fadeIn small-header">
-        <div class="hpanel">
-            <div class="panel-body">
-                <h2>Eliminar rol</h2>
-            </div>
+<?php
+require_once "inc/db.php";
+
+$rand = rand();
+$id = $_GET['id'] ?? null;
+$confirmar = $_GET['confirmar'] ?? '';
+
+if (!is_numeric($id)) {
+    die('<div class="alert alert-danger">ID inválido</div>');
+}
+
+$rol_id = (int)$id;
+
+// Verificar empleados asociados
+$stmt = $conexion->prepare("SELECT COUNT(*) FROM empleado WHERE rol_id = :rol_id");
+$stmt->execute([':rol_id' => $rol_id]);
+$empleados_con_rol = $stmt->fetchColumn();
+?>
+
+<div class="container-fluid">
+
+    <div class="row mb-3">
+        <div class="col-12">
+            <h3>Eliminar rol</h3>
         </div>
     </div>
 
-    <div class="content animate-panel">
-        <div class="row">
-            <div class="col-lg-4">
-                <div class="hpanel">
-                    <div class="panel-body">
-                        <?php
-                        require_once "inc/db.php"; // $conexion debe ser un PDO válido
-                        
-                        $confirmar = $_GET['confirmar'] ?? '';
-                        $id = $_GET['id'] ?? '';
-                        $rand = rand();
-                        $rol_id = intval($id);
+    <div class="row">
+        <div class="col-md-6 offset-md-3">
 
-                        // Validar ID
-                        if (!is_numeric($id)) {
-                            ?>
-                            <div class="alert alert-danger">ID inválido.</div>
+            <div class="card card-outline card-danger">
+
+                <div class="card-header">
+                    <h3 class="card-title">Confirmación</h3>
+                </div>
+
+                <div class="card-body text-center">
+
+                    <?php if ($empleados_con_rol > 0): ?>
+
+                        <div class="alert alert-warning">
+                            <i class="fa fa-exclamation-triangle"></i><br><br>
+                            No se puede eliminar el rol porque tiene empleados asignados.
+                            <br><br>
+                            <small>Reasigná los empleados antes de eliminarlo.</small>
+                        </div>
+
+                        <a href="?seccion=empleado&nc=<?= $rand ?>" class="btn btn-secondary">
+                            Volver
+                        </a>
+
+                    <?php else: ?>
+
+                        <?php if ($confirmar === 'si'): ?>
+
                             <?php
-                            return;
-                        }
-
-                        // Verificar si hay empleados con ese rol
-                        $stmt = $conexion->prepare("SELECT COUNT(*) FROM empleado WHERE rol_id = :rol_id");
-                        $stmt->execute([':rol_id' => $rol_id]);
-                        $empleados_con_rol = $stmt->fetchColumn();
-
-                        if ($empleados_con_rol > 0) {
-                            ?>
-                            <div class="alert alert-warning">
-                                No se puede eliminar el rol porque hay empleados asignados.<br>
-                                Para eliminar este rol, primero reasigneles otro rol o elimine esos empleados.
-                            </div>
-                            <div class="pull-right">
-                                <a href="?seccion=empleado&nc=<?= $rand ?>" class="btn btn-info">Volver</a>
-                            </div>
-                            <?php
-                            return;
-                        }
-
-                        // Confirmar eliminación
-                        if ($confirmar === 'si') {
                             try {
                                 $conexion->beginTransaction();
 
-                                // Eliminar accesos del rol
+                                // Eliminar accesos
                                 $stmt = $conexion->prepare("DELETE FROM roles_accesos WHERE rol_id = :rol_id");
                                 $stmt->execute([':rol_id' => $rol_id]);
 
@@ -62,40 +67,59 @@
 
                                 $conexion->commit();
                                 ?>
-                                <div class="alert alert-info">
-                                    Se eliminó el rol correctamente.
+
+                                <div class="alert alert-success">
+                                    <i class="fa fa-check"></i><br><br>
+                                    El rol fue eliminado correctamente.
                                 </div>
-                                <div class="pull-right">
-                                    <a href="?seccion=empleado&nc=<?= $rand ?>" class="btn btn-info">Aceptar</a>
-                                </div>
-                                <?php
+
+                                <a href="?seccion=empleado&nc=<?= $rand ?>" class="btn btn-primary">
+                                    Aceptar
+                                </a>
+
+                            <?php
                             } catch (Exception $e) {
                                 $conexion->rollBack();
                                 ?>
-                                <div class="alert alert-danger">
-                                    Error al eliminar: <?= htmlspecialchars($e->getMessage()) ?>
-                                </div>
-                                <?php
-                            }
-                            return;
-                        }
 
-                        // Mostrar confirmación
-                        ?>
-                        <div class="alert alert-danger">
-                            ¿Confirma eliminar el rol?<br>
-                            Esta acción no puede deshacerse.
-                        </div>
-                        <div class="pull-right">
-                            <a href="?seccion=rol_delete&id=<?= htmlspecialchars($id) ?>&confirmar=si&nc=<?= $rand ?>"
-                                class="btn btn-danger">Eliminar</a>
-                            <a href="?seccion=empleado&nc=<?= $rand ?>" class="btn btn-info">Cancelar</a>
-                        </div>
-                        <?php
-                        ?>
-                    </div> <!-- .panel-body -->
-                </div> <!-- .hpanel -->
-            </div> <!-- .col-lg-4 -->
-        </div> <!-- .row -->
-    </div> <!-- .content -->
-</div> <!-- #wrapper -->
+                                <div class="alert alert-danger">
+                                    Error al eliminar el rol.
+                                </div>
+
+                                <a href="?seccion=empleado&nc=<?= $rand ?>" class="btn btn-secondary">
+                                    Volver
+                                </a>
+
+                            <?php } ?>
+
+                        <?php else: ?>
+
+                            <div class="alert alert-danger">
+                                <i class="fa fa-trash"></i><br><br>
+                                ¿Seguro que querés eliminar este rol?
+                                <br>
+                                <strong>Esta acción no se puede deshacer.</strong>
+                            </div>
+
+                            <a href="?seccion=rol_delete&id=<?= $rol_id ?>&confirmar=si&nc=<?= $rand ?>"
+                               class="btn btn-danger">
+                                <i class="fa fa-trash"></i> Eliminar
+                            </a>
+
+                            <a href="?seccion=empleado&nc=<?= $rand ?>"
+                               class="btn btn-secondary">
+                                Cancelar
+                            </a>
+
+                        <?php endif; ?>
+
+                    <?php endif; ?>
+
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+</div>

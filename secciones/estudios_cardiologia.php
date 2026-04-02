@@ -76,7 +76,7 @@ $estudios = $pdo->query("SELECT DISTINCT estudio FROM cardiologia_sur ORDER BY e
 
                 <!-- TABLA -->
                 <div class="table-responsive">
-                    <table class="table table-bordered table-hover table-striped datatable" style="width:100%">
+                    <table class="table  table-hover table-striped datatable" style="width:100%">
 
                         <thead class="thead-dark">
                             <tr>

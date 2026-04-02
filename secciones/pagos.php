@@ -1,132 +1,120 @@
 <?php
 require_once 'inc/db.php';
 
-$rand = random_int(1000, 9999);
+/* ==============================
+    📊 CONSULTA DE RENDIMIENTO POR PROFESIONAL 
+    - Total_Facturado: Suma de todo el dinero ingresado.
+    - Total_A_Cobrar: Lo que le corresponde al profesional.
+    - Ganancia_Clinica: La diferencia entre lo facturado y lo que se lleva el médico.
+============================== */
 
-// Traer todos los profesionales con su especialidad
-$sql = "SELECT 
-            p.Id,
-            p.apellido,
-            p.nombre,
-            p.porcentaje,
-            e.especialidad
-        FROM profesionales p
-        LEFT JOIN especialidades e ON e.Id = p.especialidad_id
-        ORDER BY p.apellido ASC";
+$sql = "
+SELECT 
+p.Id,
+    p.nombre AS Nombre,
+    p.apellido as Apellido, 
+    -- Total bruto generado
+    SUM(cr_total.monto) AS Total_Facturado,
+    -- Neto para el profesional
+    SUM(CASE WHEN cr_total.destino = 'profesional' THEN cr_total.monto ELSE 0 END) AS Total_A_Cobrar,
+    -- Diferencia (Lo que queda para la clínica/otros destinos)
+    (SUM(cr_total.monto) - SUM(CASE WHEN cr_total.destino = 'profesional' THEN cr_total.monto ELSE 0 END)) AS Ganancia_Clinica
+FROM profesionales p
+JOIN cobros c ON p.Id = c.profesional_id
+JOIN cobros_reparto cr_total ON c.id = cr_total.cobro_id
+WHERE c.estado = 'activo'
+GROUP BY p.Id, p.nombre
+ORDER BY Ganancia_Clinica DESC";
 
-$stmt = $conexion->prepare($sql);
-$stmt->execute();
-$profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
+try {
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute();
+    $reporte = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    die("Error en la consulta: " . $e->getMessage());
+}
 ?>
 
-<!-- Main Wrapper -->
-<div id="wrapper">
-<div class="normalheader transition animated fadeIn small-header">
-  <div class="hpanel">
-    <div class="panel-body">
-      <h2>Pagos a profesionales</h2>
-    </div>
-  </div>
-</div>
+<div class="row">
+  <div class="col-12">
+    <div class="card card-outline card-primary">
+      <div class="card-header">
+        <h3 class="card-title">
+          <i class="fas fa-user-md"></i> Facturación y Pagos a Profesionales
+        </h3>
+      </div>
 
-<div class="content animate-panel">
-  <div class="row">
-    <div class="col-lg-12">
-      <div class="hpanel">
-        <div class="panel-body">
-          <table class="table table-striped table-bordered table-hover dataTables-example">
-            <thead>
+      <div class="card-body table-responsive">
+        <table class="table table-striped datatable">
+          <thead>
+            <tr class="text-center">
+              <th>Profesional</th>
+              <th>Total facturado</th>
+              <th>Pago profesional</th>
+              <th>Ganancia</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <?php foreach ($reporte as $fila): ?>
               <tr>
-                <th>Apellido</th>
-                <th>Nombre</th>
-                <th>Especialidad</th>
-                <th>Saldo</th>
-                <th>&Uacute;ltimo pago</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-            <?php foreach($profesionales as $prof): 
-                $profId = $prof['Id'];
-
-                // Total pagado al profesional
-                $sql1 = "SELECT COALESCE(SUM(monto),0) AS total_profesional 
-                         FROM pagos_profesionales 
-                         WHERE profesional_id = :pid";
-                $stmt1 = $conexion->prepare($sql1);
-                $stmt1->execute(['pid' => $profId]);
-                $totalProfesional = $stmt1->fetchColumn();
-
-                // Total generado en turnos según porcentaje
-                $sql2 = "SELECT COALESCE(SUM(pago),0) * :porcentaje / 100 AS total_recibido 
-                         FROM turnos 
-                         WHERE profesional_id = :pid";
-                $stmt2 = $conexion->prepare($sql2);
-                $stmt2->execute([
-                    'pid' => $profId,
-                    'porcentaje' => $prof['porcentaje']
-                ]);
-                $totalRecibido = $stmt2->fetchColumn();
-
-                // Diferencia / saldo
-                $saldo = $totalRecibido - $totalProfesional;
-
-                // Último pago
-                $sql3 = "SELECT fecha FROM pagos_profesionales 
-                         WHERE profesional_id = :pid 
-                         ORDER BY fecha DESC LIMIT 1";
-                $stmt3 = $conexion->prepare($sql3);
-                $stmt3->execute(['pid' => $profId]);
-                $ultimoPago = $stmt3->fetchColumn();
-            ?>
-              <tr>
-                <td><?= htmlspecialchars($prof['apellido']) ?></td>
-                <td><?= htmlspecialchars($prof['nombre']) ?></td>
-                <td><?= htmlspecialchars($prof['especialidad']) ?></td>
-                <td>$<?= number_format($saldo,2) ?></td>
-                <td><?= $ultimoPago ? date('d/m/Y', strtotime($ultimoPago)) : '-' ?></td>
-                <td>
-                  <a href="./?seccion=pagos_new&id=<?= $profId ?>&nc=<?= $rand ?>" class="btn btn-info"><i class="fa fa-plus"></i></a>
-                  <a href="./?seccion=pagos_view&id=<?= $profId ?>&nc=<?= $rand ?>" class="btn btn-success"><i class="fa fa-eye"></i> Historial de pagos</a>
-                  <a href="./?seccion=pagos_fechas&id=<?= $profId ?>&nc=<?= $rand ?>" class="btn btn-warning"><i class="fa fa-eye"></i> Historial de turnos</a>
+                <td><?= htmlspecialchars($fila['Apellido'] . ' ' . $fila['Nombre']) ?></td>
+                <td class="text-center">$ <?= number_format($fila['Total_Facturado'], 2, ',', '.') ?></td>
+                <td class="text-center">$ <?= number_format($fila['Total_A_Cobrar'], 2, ',', '.') ?></td>
+                <td class="text-center">$ <?= number_format($fila['Ganancia_Clinica'], 2, ',', '.') ?></td>                
+                
+                <td class="text-center">
+                  <div class="btn-group">
+                    <button class="btn btn-info btn-sm rounded-circle" title="Nuevo pago"
+                      onclick="nuevoPago(<?= $fila['Id'] ?>)">
+                      <i class="fas fa-plus"></i>
+                    </button>
+                    <button class="btn btn-success btn-sm rounded-circle" title="Historial pagos"
+                      onclick="verPagos(<?= $fila['Id'] ?>)">
+                      <i class="fas fa-eye"></i>
+                    </button>
+                    <button class="btn btn-warning btn-sm rounded-circle" title="Historial turnos"
+                      onclick="verTurnos(<?= $fila['Id'] ?>)">
+                      <i class="fas fa-calendar-alt"></i>
+                    </button>
+                  </div>
                 </td>
               </tr>
             <?php endforeach; ?>
-            </tbody>
-          </table>
-        </div>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Page-Level Scripts -->
 <script>
-$(document).ready(function(){
-    $('.dataTables-example').DataTable({
-        "iDisplayLength": 100,
-        "aLengthMenu": [[10, 25, 50, 100, 1000],[10, 25, 50, 100, 1000]],
-        dom: '<"html5buttons"B>lTfgitp',
-        buttons: [
-            {extend: 'excel', title: 'profesionales'},
-            {extend: 'pdf', title: 'profesionales'},
-            {extend: 'print', text: 'IMPRIMIR', customize: function (win){
-                $(win.document.body).addClass('white-bg');
-                $(win.document.body).css('font-size', '10px');
-                $(win.document.body).find('table').addClass('compact').css('font-size','inherit');
-            }}
-        ],
-        "language": {
-            "sProcessing": "Procesando...",
-            "sLengthMenu": "Mostrar _MENU_ registros",
-            "sZeroRecords": "No se encontraron resultados",
-            "sEmptyTable": "Ningún dato disponible en esta tabla",
-            "sInfo": "Mostrando registros del _START_ al _END_ de un total de _TOTAL_ registros",
-            "sInfoEmpty": "Mostrando registros del 0 al 0 de un total de 0 registros",
-            "sInfoFiltered": "(filtrado de un total de _MAX_ registros)",
-            "sSearch": "Buscar:",
-            "oPaginate": { "sFirst":"Primero", "sLast":"Último", "sNext":"Siguiente", "sPrevious":"Anterior" }
-        }
+  $(document).ready(function () {
+    $('.datatable').each(function () {
+      initDataTable($(this));
     });
-});
+  });
+
+  function nuevoPago(profesionalId) {
+    Swal.fire({
+      title: '¿Desea crear un nuevo pago?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, crear',
+      cancelButtonText: 'Cancelar'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        window.location.href = `./?seccion=pagos_new&id=${profesionalId}&nc=<?= $rand ?>`;
+      }
+    });
+  }
+
+  function verPagos(profesionalId) {
+    window.location.href = `./?seccion=pagos_view&id=${profesionalId}&nc=<?= $rand ?>`;
+  }
+
+  function verTurnos(profesionalId) {
+    window.location.href = `./?seccion=pagos_fechas&id=${profesionalId}&nc=<?= $rand ?>`;
+  }
 </script>

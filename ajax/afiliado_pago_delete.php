@@ -6,22 +6,11 @@ header('Content-Type: application/json');
 $response = ['success' => false];
 
 /* ===============================
-   VALIDAR PERMISOS
-================================ */
-if (!isset($_SESSION['tipo']) || 
-   !in_array($_SESSION['tipo'], ['admin','contable'])) {
-
-    $response['message'] = 'No autorizado';
-    echo json_encode($response);
-    exit;
-}
-
-/* ===============================
    VALIDAR ID
 ================================ */
-$id = $_POST['id'] ?? 0;
+$id = isset($_POST['id']) ? (int) $_POST['id'] : 0;
 
-if (!$id) {
+if ($id <= 0) {
     $response['message'] = 'ID inválido';
     echo json_encode($response);
     exit;
@@ -30,13 +19,19 @@ if (!$id) {
 /* ===============================
    ELIMINAR
 ================================ */
-$stmt = $pdo->prepare("
+$stmt = $conexion->prepare("
     DELETE FROM pagos_afiliados
     WHERE Id = :id
 ");
 
 if ($stmt->execute([':id' => $id])) {
-    $response['success'] = true;
+
+    if ($stmt->rowCount() > 0) {
+        $response['success'] = true;
+    } else {
+        $response['message'] = 'No se encontró el registro';
+    }
+
 } else {
     $response['message'] = 'Error al eliminar';
 }

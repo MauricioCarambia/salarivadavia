@@ -1,245 +1,203 @@
 <?php
+require_once 'inc/db.php';
+
 $mensaje = '';
+$tipoMensaje = '';
 
-$nombre = '';
-$apellido = '';
-$documento = '';
-$especialidad = '';
-$disponibilidad = '';
-$horario = '';
-$celular = '';
-$edad = '';
-$estudio = '';
-$profesional = '';
-$asignado = '';
+$nombre = $apellido = $documento = $especialidad = '';
+$disponibilidad = $horario = $celular = $edad = '';
+$estudio = $profesional = $asignado = '';
 
-$v = $_GET['v'] ?? '';
+/* =========================
+   ESPECIALIDADES (DB)
+========================= */
+$stmt = $conexion->query("SELECT especialidad FROM especialidades ORDER BY especialidad ASC");
+$especialidades = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-if (isset($_POST['guardar'])) {
+/* =========================
+   GUARDAR
+========================= */
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    $nombre          = $_POST['nombre'];
-    $apellido        = $_POST['apellido'];
-    $documento       = $_POST['documento'];
-    $especialidad    = $_POST['especialidad'];
-    $disponibilidad  = $_POST['disponibilidad'];
-    $horario         = $_POST['horario'];
-    $celular         = $_POST['celular'];
-    $edad            = $_POST['edad'];
-    $estudio         = $_POST['estudio'];
-    $profesional     = $_POST['profesional'];
-    $asignado        = $_POST['asignado'];
+    $nombre = trim($_POST['nombre']);
+    $apellido = trim($_POST['apellido']);
+    $documento = trim($_POST['documento']);
+    $especialidad = $_POST['especialidad'];
+    $disponibilidad = $_POST['disponibilidad'];
+    $horario = $_POST['horario'];
+    $celular = $_POST['celular'];
+    $edad = $_POST['edad'];
+    $estudio = $_POST['estudio'];
+    $profesional = $_POST['profesional'];
+    $asignado = $_POST['asignado'];
 
-    $sql = "
-        INSERT INTO lista_espera
-        (
-            nombre,
-            apellido,
-            documento,
-            especialidad,
-            disponibilidad,
-            horario,
-            celular,
-            edad,
-            estudio,
-            profesional,
-            asignado
-        )
-        VALUES
-        (
-            :nombre,
-            :apellido,
-            :documento,
-            :especialidad,
-            :disponibilidad,
-            :horario,
-            :celular,
-            :edad,
-            :estudio,
-            :profesional,
-            :asignado
-        )
-    ";
+    if ($nombre && $apellido && $documento && $especialidad) {
 
-    $stmt = $pdo->prepare($sql);
+        $stmt = $conexion->prepare("
+            INSERT INTO lista_espera
+            (nombre, apellido, documento, especialidad, disponibilidad, horario, celular, edad, estudio, profesional, asignado)
+            VALUES
+            (:nombre, :apellido, :documento, :especialidad, :disponibilidad, :horario, :celular, :edad, :estudio, :profesional, :asignado)
+        ");
 
-    $stmt->execute([
-        ':nombre'         => $nombre,
-        ':apellido'       => $apellido,
-        ':documento'      => $documento,
-        ':especialidad'   => $especialidad,
-        ':disponibilidad' => $disponibilidad,
-        ':horario'        => $horario,
-        ':celular'        => $celular,
-        ':edad'           => $edad,
-        ':estudio'        => $estudio,
-        ':profesional'    => $profesional,
-        ':asignado'       => $asignado
-    ]);
+        $stmt->execute([
+            ':nombre' => $nombre,
+            ':apellido' => $apellido,
+            ':documento' => $documento,
+            ':especialidad' => $especialidad,
+            ':disponibilidad' => $disponibilidad,
+            ':horario' => $horario,
+            ':celular' => $celular,
+            ':edad' => $edad,
+            ':estudio' => $estudio,
+            ':profesional' => $profesional,
+            ':asignado' => $asignado
+        ]);
 
-    $last_id = $pdo->lastInsertId();
+        $tipoMensaje = 'success';
+        $mensaje = 'Paciente agregado correctamente';
 
-    $mensaje = '<div class="alert alert-info">Paciente agregado satisfactoriamente.</div>';
+        // limpiar
+        $nombre = $apellido = $documento = $especialidad = '';
+        $disponibilidad = $horario = $celular = $edad = '';
+        $estudio = $profesional = $asignado = '';
 
-    // limpiar formulario
-    $documento = '';
-    $nombre = '';
-    $apellido = '';
-    $especialidad = '';
-    $disponibilidad = '';
-    $horario = '';
-    $celular = '';
-    $edad = '';
-    $estudio = '';
-    $profesional = '';
-    $asignado = '';
+    } else {
+        $tipoMensaje = 'error';
+        $mensaje = 'Complete los campos obligatorios';
+    }
 }
 ?>
-<!-- Main Wrapper -->
-<div id="wrapper">
-    <div class="normalheader transition animated fadeIn small-header">
-        <div class="hpanel">
-            <div class="panel-body">
-                <h2>
-                    Alta de paciente en lista de espera
-                </h2>
-            </div>
-        </div>
-    </div>
-    <?php echo $mensaje; ?>
-    <div class="content animate-panel">
-        <div class="row">
-            <div class="col-lg-12">
-                <div class="hpanel">
-                    <div class="panel-body">
-                        <form class="form-horizontal" action="./<?php if ($v != '') {
-                            echo 'index_clean.php';
-                        } ?>?seccion=lista_espera_new&v=<?php echo $v; ?>&nc=<?php echo $rand; ?>"
-                            method="POST">
-                            <div class="form-group">
-                                <label class="col-sm-2 control-label">Nombre</label>
-                                <div class="col-sm-10">
-                                    <input type="text" class="form-control" name="nombre" value="<?= htmlspecialchars($nombre) ?>"
-                                        placeholder="Requerido" required>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label class="col-sm-2 control-label">Apellido</label>
-                                <div class="col-sm-10">
-                                    <input type="text" class="form-control" name="apellido"
-                                        value="<?= htmlspecialchars($apellido) ?>" placeholder="Requerido" required>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label class="col-sm-2 control-label">Documento</label>
-                                <div class="col-sm-10">
-                                    <div class="input-group">
-                                        <span class="input-group-addon">S&oacute;lo n&uacute;meros:</span>
-                                        <input type="number" min="0" step="1" class="form-control" name="documento"
-                                            value="<?= htmlspecialchars($documento) ?>" placeholder="Requerido" required>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label class="col-sm-2 control-label">Especialidad</label>
-                                <div class="col-sm-10">
-                                    <select class="form-control" name="especialidad">
-                                        <option value="">Seleccionar</option>
-                                        <option <?php if ($especialidad == 'Psicologia adulto') {
-                                            echo 'selected';
-                                        } ?> value="Psicologia Adulto">Psicologia Adulto</option>
-                                        <option <?php if ($especialidad == 'Psicologia Menores') {
-                                            echo 'selected';
-                                        } ?> value="Psicologia Menores">Psicologia Menores</option>
-                                        <option <?php if ($especialidad == 'Psicopedagogia') {
-                                            echo 'selected';
-                                        } ?> value="Psicopedagogia">Psicopedagogia</option>
-                                        <option <?php if ($especialidad == 'Fonoaudiologia') {
-                                            echo 'selected';
-                                        } ?> value="Fonoaudiologia">Fonoaudiologia</option>
-                                        <option <?php if ($especialidad == 'Kinesiologia') {
-                                            echo 'selected';
-                                        } ?> value="Kinesiologia">Kinesiologia</option>
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card card-info card-outline">
+            <h1 class="ml-2">Alta en lista de espera</h1>
 
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label class="col-sm-2 control-label">Disponibilidad Horaria</label>
-                                <div class="col-sm-10">
-                                    <select class="form-control" name="disponibilidad">
-                                        <option value="">Seleccionar</option>
-                                        <option <?php if ($disponibilidad == 'Mañana') {
-                                            echo 'selected';
-                                        } ?> value="Mañana">Mañana</option>
-                                        <option <?php if ($disponibilidad == 'Tarde') {
-                                            echo 'selected';
-                                        } ?> value="Tarde">Tarde</option>
 
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label class="col-sm-2 control-label">Horario</label>
-                                <div class="col-sm-10">
-                                    <input type="text" class="form-control" name="horario"
-                                        value="<?= htmlspecialchars($horario) ?>">
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label class="col-sm-2 control-label">Celular</label>
-                                <div class="col-sm-10">
-                                    <input type="text" class="form-control" name="celular"
-                                        value="<?= htmlspecialchars($celular) ?>">
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label class="col-sm-2 control-label">Edad</label>
-                                <div class="col-sm-10">
-                                    <input type="text" class="form-control" name="edad" value="<?= htmlspecialchars($edad) ?>">
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label class="col-sm-2 control-label">Observaciones</label>
-                                <div class="col-sm-10">
-                                    <input type="text" class="form-control" name="estudio"
-                                       value="<?= htmlspecialchars($estudio) ?>">
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label class="col-sm-2 control-label">Profesional</label>
-                                <div class="col-sm-10">
-                                    <input type="text" class="form-control" name="profesional"
-                                        value="<?= htmlspecialchars($profesional) ?>">
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label class="col-sm-2 control-label">Asignado</label>
-                                <div class="col-sm-10">
-                                    <select class="form-control" name="asignado">
-                                        <option value="">Seleccionar</option>
-                                        <option <?php if($asignado=='Confirmo'){echo 'selected';}?>>Confirmo</option>
-                                        <option <?php if($asignado=='No Confirmo'){echo 'selected';}?>>No Confirmo</option>
-                                        <option <?php if($asignado=='Pendiente Confirmacion'){echo 'selected';}?>>Pendiente Confirmacion</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <div class="col-sm-12">
-                                    <div class="pull-right">
-                                        <?php
-                                        if ($v != '') {
-                                            echo '<a href="./' . $_SESSION["volver"] . '&nc=' . $rand . '" class="btn btn-info">Volver al turno</a>';
-                                        } else {
-                                            echo '<a href="./?seccion=lista_espera&nc=' . $rand . '" class="btn btn-info">Volver</a>';
-                                        }
-                                        ?>
-                                        <input type="submit" class="btn btn-info" name="guardar" value="Guardar">
-                                    </div>
-                                </div>
-                            </div>
-                        </form>
+            <div class="card-body">
+
+                <form method="POST" id="formPaciente">
+
+                    <div class="row">
+
+                        <div class="col-md-6">
+                            <label>DNI</label>
+                            <input type="number" name="documento" id="dni" class="form-control"
+                                value="<?= $documento ?>" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label>Nombre</label>
+                            <input type="text" name="nombre" id="nombre" class="form-control" value="<?= $nombre ?>"
+                                required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label>Apellido</label>
+                            <input type="text" name="apellido" id="apellido" class="form-control"
+                                value="<?= $apellido ?>" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label>Especialidad</label>
+                            <select name="especialidad" class="form-control" required>
+                                <option value="">Seleccionar</option>
+                                <?php foreach ($especialidades as $esp): ?>
+                                    <option value="<?= $esp ?>" <?= ($especialidad == $esp ? 'selected' : '') ?>>
+                                        <?= $esp ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label>Disponibilidad</label>
+                            <select name="disponibilidad" class="form-control">
+                                <option value="">Seleccionar</option>
+                                <option <?= $disponibilidad == 'Mañana' ? 'selected' : '' ?>>Mañana</option>
+                                <option <?= $disponibilidad == 'Tarde' ? 'selected' : '' ?>>Tarde</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label>Preferencia horario</label>
+                            <input type="text" name="horario" class="form-control" value="<?= $horario ?>">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label>Edad</label>
+                            <input type="number" name="edad" class="form-control" value="<?= $edad ?>">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label>Celular</label>
+                            <input type="text" name="celular" id="celular" class="form-control" value="<?= $celular ?>">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label>Profesional</label>
+                            <input type="text" name="profesional" class="form-control" value="<?= $profesional ?>">
+                        </div>
+
+                       
+                        <div class="col-md-6 mt-2">
+                            <label>Estado</label>
+                            <select name="asignado" class="form-control">
+                                <option value="">Seleccionar</option>
+                                <option <?= $asignado == 'Confirmo' ? 'selected' : '' ?>>Confirmo</option>
+                                <option <?= $asignado == 'No Confirmo' ? 'selected' : '' ?>>No Confirmo</option>
+                                <option <?= $asignado == 'Pendiente Confirmacion' ? 'selected' : '' ?>>Pendiente
+                                    Confirmacion
+                                </option>
+
+                        </div>
+
                     </div>
-                </div>
+
+                    <button class="btn btn-success mt-3 float-right">
+                        <i class="fa fa-save"></i> Guardar
+                    </button>
+
+                </form>
+
             </div>
         </div>
     </div>
+
+</div>
+<script>
+    $('#dni').on('blur', function () {
+
+        let dni = $(this).val();
+
+        if (dni.length < 6) return;
+
+        $.post('ajax/lista_buscar_paciente.php', { dni: dni }, function (resp) {
+
+            if (resp.encontrado) {
+                $('#nombre').val(resp.nombre);
+                $('#apellido').val(resp.apellido);
+                $('#celular').val(resp.celular);
+
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Paciente encontrado',
+                    timer: 1200,
+                    showConfirmButton: false
+                });
+            }
+
+        }, 'json');
+
+    });
+</script>
+<?php if ($mensaje): ?>
+    <script>
+        Swal.fire({
+            icon: '<?= $tipoMensaje ?>',
+            title: '<?= $mensaje ?>',
+            timer: 1500,
+            showConfirmButton: false
+        });
+    </script>
+<?php endif; ?>

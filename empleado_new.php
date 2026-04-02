@@ -15,13 +15,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($contrasenia !== $repite) {
         $mensaje = '<div class="alert alert-danger">Las contraseñas no coinciden.</div>';
     } else {
-        $stmt = $conexion->prepare("SELECT COUNT(*) FROM empleado WHERE usuario = ?");
+        $stmt = $conexion->prepare("SELECT COUNT(*) FROM empleados WHERE usuario = ?");
         $stmt->execute([$usuario]);
         if ($stmt->fetchColumn() > 0) {
             $mensaje = '<div class="alert alert-danger">Ese nombre de usuario ya está en uso.</div>';
         } else {
             $hash = password_hash($contrasenia, PASSWORD_DEFAULT);
-            $stmt = $conexion->prepare("INSERT INTO empleado (usuario, contrasenia, nombre) VALUES (?, ?, ?)");
+            $stmt = $conexion->prepare("INSERT INTO empleados (usuario, contrasenia, nombre) VALUES (?, ?, ?)");
             $stmt->execute([$usuario, $hash, $nombre]);
 
             $mensaje = '<div class="alert alert-success">Cuenta creada correctamente. <a href="login.php">Ingresar</a></div>';

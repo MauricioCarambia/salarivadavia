@@ -5,7 +5,7 @@ $mensaje = '';
 $empleado_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 // Verificar si el empleado existe
-$stmt = $conexion->prepare("SELECT * FROM empleado WHERE id = :id");
+$stmt = $conexion->prepare("SELECT * FROM empleados WHERE id = :id");
 $stmt->execute([':id' => $empleado_id]);
 $empleado = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -22,7 +22,7 @@ if (!$empleado) {
             $mensaje = '<div class="alert alert-danger">Debe ingresar una nueva contraseña.</div>';
         } else {
             $hash = password_hash($nueva, PASSWORD_DEFAULT);
-            $stmt = $conexion->prepare("UPDATE empleado SET contrasenia = :hash WHERE id = :id");
+            $stmt = $conexion->prepare("UPDATE empleados SET contrasenia = :hash WHERE id = :id");
             $stmt->execute([':hash' => $hash, ':id' => $empleado_id]);
             echo '<script>
             window.location.href = "./?seccion=empleado&v=ok&nc=' . rand() . '";

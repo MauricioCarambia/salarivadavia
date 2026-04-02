@@ -80,7 +80,7 @@ if ($busqueda !== '') {
                     <h3 class="card-title">Resultados</h3>
                 </div>
                 <div class="card-body table-responsive">
-                    <table class="table table-striped table-bordered datatable" style="width:100%">
+                    <table class="table table-striped datatable" style="width:100%">
                         <thead class="thead-dark">
                             <tr>
                                 <th>Apellido</th>

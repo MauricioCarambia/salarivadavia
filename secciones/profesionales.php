@@ -15,7 +15,7 @@ $rand = rand(1000, 9999);
                 </h3>
             </div>
             <div class="card-body table-responsive">
-                <table class="table table-striped table-bordered table-hover datatable w-100">
+                <table class="table table-striped table-hover datatable w-100">
                     <thead class="thead-dark">
                         <tr>
                             <th>Apellido</th>
@@ -53,10 +53,11 @@ $rand = rand(1000, 9999);
                                             <i class="fas fa-pencil-alt"></i>
                                         </a>
                                         <a href="./?seccion=profesionales_delete&id=<?= intval($r['Id']) ?>&nc=<?= $rand ?>"
-                                            class="btn btn-danger btn-sm btn-eliminar rounded-circle" title="Eliminar profesional">
-                                             <i class="fas fa-trash"></i>
+                                            class="btn btn-danger btn-sm btn-eliminar rounded-circle"
+                                            title="Eliminar profesional">
+                                            <i class="fas fa-trash"></i>
                                         </a>
-                                       
+
                                     </div>
                                 </td>
                             </tr>
@@ -68,32 +69,32 @@ $rand = rand(1000, 9999);
     </div>
 </div>
 <script>
-document.addEventListener("DOMContentLoaded", function () {
+    document.addEventListener("DOMContentLoaded", function () {
 
-    // Inicializar DataTable usando la función global definida en index.php
-    $('.datatable').each(function () {
-        initDataTable($(this));
-    });
-
-    // SweetAlert eliminar
-    $('.btn-eliminar').click(function () {
-        const id = $(this).data('id');
-        const nc = <?= $rand ?>;
-        Swal.fire({
-            title: '¿Eliminar profesional?',
-            text: "Esta acción no se puede deshacer.",
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#d33',
-            cancelButtonColor: '#3085d6',
-            confirmButtonText: 'Sí, eliminar',
-            cancelButtonText: 'Cancelar'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                window.location.href = `./?seccion=profesionales_delete&id=${id}&confirmar=si&nc=${nc}`;
-            }
+        // Inicializar DataTable usando la función global definida en index.php
+        $('.datatable').each(function () {
+            initDataTable($(this));
         });
-    });
 
-});
+        // SweetAlert eliminar
+        $('.btn-eliminar').click(function () {
+            const id = $(this).data('id');
+            const nc = <?= $rand ?>;
+            Swal.fire({
+                title: '¿Eliminar profesional?',
+                text: "Esta acción no se puede deshacer.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.location.href = `./?seccion=profesionales_delete&id=${id}&confirmar=si&nc=${nc}`;
+                }
+            });
+        });
+
+    });
 </script>

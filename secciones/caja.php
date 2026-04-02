@@ -1,255 +1,402 @@
 <?php
-// require_once 'inc/db.php';
+require_once 'inc/db.php';
 
-// date_default_timezone_set('America/Argentina/Buenos_Aires');
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 
-// $inicioHoy = date('Y-m-d 00:00:00');
-// $finHoy = date('Y-m-d 23:59:59');
+/* =============================
+   📅 FILTROS
+=============================*/
+$desde = $_GET['desde'] ?? date('Y-m-d');
+$hasta = $_GET['hasta'] ?? date('Y-m-d');
 
-// /* =============================
-//    FUNCION REUTILIZABLE
-// =============================*/
-// function obtenerMovimientos($conexion, $tipo, $inicio, $fin)
-// {
-//     $sql = "SELECT id, descripcion, monto, fecha 
-//             FROM caja 
-//             WHERE tipo = :tipo 
-//             AND fecha BETWEEN :inicio AND :fin";
+$inicioHoy = $desde . ' 00:00:00';
+$finHoy = $hasta . ' 23:59:59';
 
-//     $stmt = $conexion->prepare($sql);
-//     $stmt->execute([
-//         ':tipo' => $tipo,
-//         ':inicio' => $inicio,
-//         ':fin' => $fin
-//     ]);
+$caja_id = $_GET['caja_id'] ?? '';
+$turno = $_GET['turno'] ?? '';
+$usuario_id = $_GET['usuario_id'] ?? '';
 
-//     return $stmt->fetchAll(PDO::FETCH_ASSOC);
-// }
+$usuarioSesion = $_SESSION['user_id'] ?? null;
 
-// /* =============================
-//    INGRESOS Y EGRESOS
-// =============================*/
-// $ingresos = obtenerMovimientos($conexion, 'Ingreso', $inicioHoy, $finHoy);
-// $egresos = obtenerMovimientos($conexion, 'Egreso', $inicioHoy, $finHoy);
+if (!$usuarioSesion) {
+    die("Error: usuario no autenticado");
+}
 
-// $totalIngresos = array_sum(array_column($ingresos, 'monto'));
-// $totalEgresos = array_sum(array_column($egresos, 'monto'));
+/* =============================
+   🔐 ROL DESDE SESIÓN
+=============================*/
+$esAdmin = ($_SESSION['es_admin'] ?? 0) == 1;
 
-// /* =============================
-//    PROFESIONALES
-// =============================*/
-// $sqlProf = "
-//     SELECT p.id_profesional, pr.nombre, pr.apellido, 
-//            SUM(p.monto) AS total_pago, 
-//            SUM(p.comision) AS total_comision, 
-//            MAX(p.fecha) AS fecha
-//     FROM pagos_profesionales p
-//     JOIN profesionales pr ON pr.id = p.id_profesional
-//     WHERE p.fecha BETWEEN :inicio AND :fin
-//     GROUP BY p.id_profesional
-// ";
+/* =============================
+   🧾 MOVIMIENTOS (DINÁMICO)
+=============================*/
+$where = "WHERE m.fecha BETWEEN ? AND ?";
+$params = [$inicioHoy, $finHoy];
 
-// $stmtProf = $conexion->prepare($sqlProf);
-// $stmtProf->execute([
-//     ':inicio' => $inicioHoy,
-//     ':fin' => $finHoy
-// ]);
+if (!empty($caja_id)) {
+    $where .= " AND cs.caja_id = ?";
+    $params[] = $caja_id;
+}
 
-// $pagosProf = $stmtProf->fetchAll(PDO::FETCH_ASSOC);
+if (!empty($turno)) {
+    $where .= " AND cs.turno = ?";
+    $params[] = $turno;
+}
 
-// $totalPagos = array_sum(array_column($pagosProf, 'total_pago'));
-// $totalComision = array_sum(array_column($pagosProf, 'total_comision'));
-// $totalGanancia = $totalPagos - $totalComision;
+// 🔐 SEGURIDAD
+if (!$esAdmin) {
+    $where .= " AND cs.usuario_id = ?";
+    $params[] = $usuarioSesion;
+} else {
+    if (!empty($usuario_id)) {
+        $where .= " AND cs.usuario_id = ?";
+        $params[] = $usuario_id;
+    }
+}
 
-// $totalIngresosFinal = $totalIngresos + $totalPagos;
-// $totalEgresosFinal = $totalEgresos + $totalComision;
-// $totalNeto = $totalIngresosFinal - $totalEgresosFinal;
+$stmt = $pdo->prepare("
+    SELECT 
+        m.*, 
+        c.numero_completo, 
+        c.id as cobro_id,
+        cs.usuario_id,
+        cs.turno
+    FROM caja_movimientos m
+    LEFT JOIN cobros c ON c.id = m.cobro_id
+    INNER JOIN caja_sesion cs ON cs.id = m.caja_sesion_id
+    $where
+    ORDER BY m.fecha DESC
+");
+
+$stmt->execute($params);
+$movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+/* =============================
+   💰 TOTALES
+=============================*/
+$totalIngresos = 0;
+$totalEgresos = 0;
+
+foreach ($movimientos as $m) {
+    if ($m['tipo'] == 'INGRESO')
+        $totalIngresos += $m['monto'];
+    else
+        $totalEgresos += $m['monto'];
+}
+
+$totalNeto = $totalIngresos - $totalEgresos;
+
+
+/* =============================
+   🧮 ARQUEO
+=============================*/
+$stmt = $pdo->query("SELECT * FROM arqueos_caja ORDER BY id DESC LIMIT 1");
+$arqueo = $stmt->fetch(PDO::FETCH_ASSOC);
+
+$estadoArqueo = 'secondary';
+$textoArqueo = 'Sin control';
+
+if ($arqueo) {
+    if (abs($arqueo['diferencia']) < 1) {
+        $estadoArqueo = 'success';
+        $textoArqueo = 'Caja Perfecta';
+    } else {
+        $estadoArqueo = 'danger';
+        $textoArqueo = 'Diferencia detectada';
+    }
+}
+$usuarios = $pdo->query("SELECT id, nombre FROM empleados")->fetchAll(PDO::FETCH_KEY_PAIR);
 ?>
 
-<div class="row mb-3">
-    <div class="col-12">
-        <div class="card card-primary card-outline">
-            <h1>Control de Caja</h1>
-            <a href="?seccion=movimiento_new" class="btn btn-primary btn-sm">
-                <i class="fas fa-plus"></i> Nuevo movimiento
-            </a>
+<div class="card card-info card-outline ">
 
+    <h1 class="ml-3">Control de Caja</h1>
 
-            <!-- RESUMEN -->
-            <div class="row">
+    <!-- =============================
+         FILTROS
+    ============================= -->
+    <form method="get" class="m-3">
+        <input type="hidden" name="seccion" value="caja">
 
-                <div class="col-lg-4 col-12">
-                    <div class="small-box bg-success">
-                        <div class="inner">
-                            <h3>$<?= number_format($totalIngresosFinal, 2) ?></h3>
-                            <p>Ingresos Totales</p>
-                        </div>
-                        <div class="icon"><i class="fas fa-arrow-down"></i></div>
-                    </div>
-                </div>
+        <div class="row">
 
-                <div class="col-lg-4 col-12">
-                    <div class="small-box bg-danger">
-                        <div class="inner">
-                            <h3>$<?= number_format($totalEgresosFinal, 2) ?></h3>
-                            <p>Egresos Totales</p>
-                        </div>
-                        <div class="icon"><i class="fas fa-arrow-up"></i></div>
-                    </div>
-                </div>
-
-                <div class="col-lg-4 col-12">
-                    <div class="small-box bg-info">
-                        <div class="inner">
-                            <h3>$<?= number_format($totalNeto, 2) ?></h3>
-                            <p>Balance Neto</p>
-                        </div>
-                        <div class="icon"><i class="fas fa-dollar-sign"></i></div>
-                    </div>
-                </div>
-
+            <div class="col-md-2">
+                <label>Desde</label>
+                <input type="date" name="desde" class="form-control" value="<?= $desde ?>">
             </div>
 
-            <!-- TABLAS -->
-            <div class="row">
-
-                <!-- INGRESOS -->
-                <div class="col-md-6">
-                    <div class="card card-success">
-                        <div class="card-header">
-                            <h3 class="card-title">Ingresos</h3>
-                        </div>
-                        <div class="card-body table-responsive">
-                            <table class="table table-bordered table-striped tabla">
-                                <thead>
-                                    <tr>
-                                        <th>Fecha</th>
-                                        <th>Descripción</th>
-                                        <th>Monto</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php foreach ($ingresos as $ing): ?>
-                                        <tr>
-                                            <td><?= $ing['fecha'] ?></td>
-                                            <td><?= htmlspecialchars($ing['descripcion']) ?></td>
-                                            <td>$<?= number_format($ing['monto'], 2) ?></td>
-                                            <td>
-                                                <button class="btn btn-danger btn-sm btnDelete" data-id="<?= $ing['id'] ?>">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- EGRESOS -->
-                <div class="col-md-6">
-                    <div class="card card-danger">
-                        <div class="card-header">
-                            <h3 class="card-title">Egresos</h3>
-                        </div>
-                        <div class="card-body table-responsive">
-                            <table class="table table-bordered table-striped tabla">
-                                <thead>
-                                    <tr>
-                                        <th>Fecha</th>
-                                        <th>Descripción</th>
-                                        <th>Monto</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php foreach ($egresos as $eg): ?>
-                                        <tr>
-                                            <td><?= $eg['fecha'] ?></td>
-                                            <td><?= htmlspecialchars($eg['descripcion']) ?></td>
-                                            <td>$<?= number_format($eg['monto'], 2) ?></td>
-                                            <td>
-                                                <button class="btn btn-danger btn-sm btnDelete" data-id="<?= $eg['id'] ?>">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
+            <div class="col-md-2">
+                <label>Hasta</label>
+                <input type="date" name="hasta" class="form-control" value="<?= $hasta ?>">
             </div>
 
-            <!-- PROFESIONALES -->
-            <div class="card">
-                <div class="card-header bg-info">
-                    <h3 class="card-title">Pagos a Profesionales</h3>
+            <div class="col-md-2">
+                <label>Caja</label>
+                <select name="caja_id" class="form-control">
+                    <option value="">Todas</option>
+                    <?php
+                    $cajas = $pdo->query("SELECT id, nombre FROM cajas")->fetchAll();
+                    foreach ($cajas as $c) {
+                        $sel = ($caja_id == $c['id']) ? 'selected' : '';
+                        echo "<option value='{$c['id']}' $sel>{$c['nombre']}</option>";
+                    }
+                    ?>
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <label>Turno</label>
+                <select name="turno" class="form-control">
+                    <option value="">Todos</option>
+                    <option value="mañana" <?= $turno == 'mañana' ? 'selected' : '' ?>>Mañana</option>
+                    <option value="tarde" <?= $turno == 'tarde' ? 'selected' : '' ?>>Tarde</option>
+                </select>
+            </div>
+
+            <?php if ($esAdmin): ?>
+                <div class="col-md-2">
+                    <label>Usuario</label>
+                    <select name="usuario_id" class="form-control">
+                        <option value="">Todos</option>
+                        <?php
+                        $emps = $pdo->query("SELECT id, nombre FROM empleados")->fetchAll();
+                        foreach ($emps as $e) {
+                            $sel = ($usuario_id == $e['id']) ? 'selected' : '';
+                            echo "<option value='{$e['id']}' $sel>{$e['nombre']}</option>";
+                        }
+                        ?>
+                    </select>
                 </div>
-                <div class="card-body table-responsive">
-                    <table class="table table-bordered table-striped tabla">
-                        <thead>
-                            <tr>
-                                <th>Fecha</th>
-                                <th>Profesional</th>
-                                <th>Total</th>
-                                <th>Comisión</th>
-                                <th>Ganancia</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($pagosProf as $p): ?>
-                                <tr>
-                                    <td><?= $p['fecha'] ?></td>
-                                    <td><?= $p['apellido'] . ' ' . $p['nombre'] ?></td>
-                                    <td>$<?= number_format($p['total_pago'], 2) ?></td>
-                                    <td>$<?= number_format($p['total_comision'], 2) ?></td>
-                                    <td class="text-success">
-                                        $<?= number_format($p['total_pago'] - $p['total_comision'], 2) ?>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
+            <?php endif; ?>
+
+            <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-primary w-100">Filtrar</button>
+            </div>
+
+        </div>
+    </form>
+
+    <!-- =============================
+         RESUMEN
+    ============================= -->
+    <div class="row">
+        <div class="col-md-4">
+            <div class="small-box bg-success p-2">
+                <h4>$<?= number_format($totalIngresos, 2) ?></h4>
+                <p>Ingresos</p>
             </div>
         </div>
 
+        <div class="col-md-4">
+            <div class="small-box bg-danger p-2">
+                <h4>$<?= number_format($totalEgresos, 2) ?></h4>
+                <p>Egresos</p>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="small-box bg-info p-2">
+                <h4>$<?= number_format($totalNeto, 2) ?></h4>
+                <p>Balance</p>
+            </div>
+        </div>
     </div>
 
-</div>
-<script>
-    $(function () {
+    <!-- =============================
+         TABLA
+    ============================= -->
+    <table class="table table-striped tabla mt-3">
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>Turno</th>
+                <th>Usuario</th>
+                <th>Tipo</th>
+                <th>Comprobante</th>
+                <th>Concepto</th>
+                <th>Monto</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ($movimientos as $m): ?>
+                <tr>
+                    <td><?= $m['fecha'] ?></td>
+                    <td>
+                        <?= ucfirst($m['turno'] ?? '-') ?>
+                    </td>
+                    <td><?= $usuarios[$m['usuario_id']] ?? '-' ?></td>
+                    <td>
+                        <?php
+                        $color = match ($m['tipo']) {
+                            'INGRESO' => 'success',
+                            'EGRESO' => 'danger',
+                            default => 'secondary'
+                        };
+                        ?>
+                        <span class="badge badge-<?= $color ?>">
+                            <?= ucfirst(strtolower($m['tipo'])) ?>
+                        </span>
+                    </td>
+                    <td><?= $m['numero_completo'] ?? '-' ?></td>
+                    <td><?= htmlspecialchars($m['concepto']) ?></td>
+                    <td class="<?= $m['tipo'] == 'EGRESO' ? 'text-danger' : 'text-success' ?>">
+                        <?= $m['tipo'] == 'EGRESO' ? '-' : '' ?>$
+                        <?= number_format($m['monto'], 2) ?>
+                    </td>
+                    <td>
+                        <?php if (!empty($m['cobro_id'])): ?>
+                            <button class="btn btn-info btn-sm ver-cobro rounded-circle" data-id="<?= $m['cobro_id'] ?>">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        <?php else: ?>
+                            -
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
 
-        $('.tabla').DataTable({
-            responsive: true,
-            autoWidth: false,
-            pageLength: 25,
-            language: {
-                url: "//cdn.datatables.net/plug-ins/1.13.4/i18n/es-ES.json"
-            }
+</div>
+<div class="modal fade" id="verCobroModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-invoice"></i> Detalle de Cobro
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+
+            <div class="modal-body" id="detalleCobroContenido">
+                <div class="text-center">Cargando...</div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-dismiss="modal">
+                    Cerrar
+                </button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+
+<script>
+    $(document).ready(function () {
+
+        $('.tabla').each(function () {
+            initDataTable($(this));
         });
 
-        // ELIMINAR CON SWEETALERT
-        $(document).on('click', '.btnDelete', function () {
-            let id = $(this).data('id');
+        /* =============================
+           👁 VER COBRO
+        ============================= */
+        $(document).on("click", ".ver-cobro", function () {
 
-            Swal.fire({
-                title: '¿Eliminar?',
-                text: "No se puede deshacer",
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'Sí, eliminar',
-                cancelButtonText: 'Cancelar'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    window.location = '?seccion=movimiento_delete&id=' + id;
+            const cobroId = $(this).data("id");
+
+            $("#detalleCobroContenido").html("Cargando...");
+            $("#verCobroModal").modal("show");
+
+            $.ajax({
+                url: "ajax/get_cobro.php",
+                type: "POST",
+                contentType: "application/json",
+                dataType: "json",
+                data: JSON.stringify({ cobro_id: cobroId }),
+
+                success: function (data) {
+
+                    if (!data.success) {
+                        $("#detalleCobroContenido").html(
+                            `<div class="alert alert-danger">${data.message}</div>`
+                        );
+                        return;
+                    }
+
+                    let html = `
+                    <div class="mb-3">
+                        <p><strong>Comprobante:</strong> ${data.cobro.numero ?? '-'}</p>
+                        <p><strong>Paciente:</strong> ${data.cobro.paciente ?? '-'}</p>
+                        <p><strong>Fecha:</strong> ${data.cobro.fecha ?? '-'}</p>
+                    </div>
+
+                    <hr>
+
+                    <h5>Detalle</h5>
+                    <table class="table table-sm ">
+                        <thead>
+                            <tr>
+                                <th>Descripción</th>
+                                <th class="text-right">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                    if (data.detalle?.length) {
+                        data.detalle.forEach(d => {
+                            html += `
+                            <tr>
+                                <td>${d.nombre}</td>
+                                <td class="text-right">$${parseFloat(d.precio).toFixed(2)}</td>
+                            </tr>
+                        `;
+                        });
+                    } else {
+                        html += `<tr><td colspan="2">Sin detalles</td></tr>`;
+                    }
+
+                    html += `</tbody></table>`;
+
+                    // REPARTO
+                    if (data.reparto?.length) {
+                        html += `
+                        <h5 class="mt-3">Reparto</h5>
+                        <table class="table table-sm ">
+                            <thead>
+                                <tr>
+                                    <th>Destino</th>
+                                    <th class="text-right">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+
+                        data.reparto.forEach(r => {
+                            html += `
+                            <tr>
+                                <td>${r.destino}</td>
+                                <td class="text-right">$${parseFloat(r.total).toFixed(2)}</td>
+                            </tr>
+                        `;
+                        });
+
+                        html += `</tbody></table>`;
+                    }
+
+                    html += `
+                    <hr>
+                    <h4 class="text-right">
+                        Total: $${parseFloat(data.cobro.total).toFixed(2)}
+                    </h4>
+                `;
+
+                    $("#detalleCobroContenido").html(html);
+                },
+
+                error: function (xhr) {
+                    console.error(xhr.responseText); // 🔥 DEBUG
+                    $("#detalleCobroContenido").html(
+                        `<div class="alert alert-danger">Error al cargar el cobro</div>`
+                    );
                 }
             });
+
         });
 
     });

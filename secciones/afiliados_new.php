@@ -1,38 +1,46 @@
 <?php
+require_once 'inc/db.php';
 
-$id = $_GET['id'] ?? 0;
+$id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
 $mensaje = '';
+$tipoMensaje = '';
 
 /* =========================
    GUARDAR PAGO
 ========================= */
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-if (isset($_POST['monto'])) {
+    $monto = isset($_POST['monto']) ? (float) $_POST['monto'] : 0;
+    $fecha = $_POST['fecha'] ?? '';
 
-    $monto = $_POST['monto'];
-    $fecha = $_POST['fecha'] . '-01';
+    if ($monto > 0 && $fecha) {
 
-    $stmt = $conexion->prepare("
-        INSERT INTO pagos_afiliados
-        (paciente_id, monto, fecha_pago, fecha_correspondiente)
-        VALUES
-        (:paciente_id, :monto, NOW(), :fecha)
-    ");
+        $fecha .= '-01';
 
-    $stmt->execute([
-        ':paciente_id' => $id,
-        ':monto' => $monto,
-        ':fecha' => $fecha
-    ]);
+        $stmt = $conexion->prepare("
+            INSERT INTO pagos_afiliados
+            (paciente_id, monto, fecha_pago, fecha_correspondiente)
+            VALUES
+            (:paciente_id, :monto, NOW(), :fecha)
+        ");
 
-    $mensaje = '<div class="alert alert-info">Pago cargado satisfactoriamente.</div>';
+        $stmt->execute([
+            ':paciente_id' => $id,
+            ':monto' => $monto,
+            ':fecha' => $fecha
+        ]);
+
+        $tipoMensaje = 'success';
+        $mensaje = 'Pago cargado correctamente';
+    } else {
+        $tipoMensaje = 'error';
+        $mensaje = 'Datos inválidos';
+    }
 }
-
 
 /* =========================
    ULTIMO MES PAGADO
 ========================= */
-
 $stmt = $conexion->prepare("
     SELECT 
         MONTH(fecha_correspondiente) AS mes,
@@ -42,170 +50,134 @@ $stmt = $conexion->prepare("
     ORDER BY fecha_correspondiente DESC
     LIMIT 1
 ");
-
 $stmt->execute([':id' => $id]);
-
 $ultimoPago = $stmt->fetch(PDO::FETCH_ASSOC);
-
 
 /* =========================
    DATOS PACIENTE
 ========================= */
-
 $stmtPaciente = $conexion->prepare("
     SELECT 
-        obras_sociales.obra_social,
-        pacientes.*
-    FROM pacientes
-    LEFT JOIN obras_sociales 
-        ON obras_sociales.Id = pacientes.obra_social_id
-    WHERE pacientes.Id = :id
+        os.obra_social,
+        p.*
+    FROM pacientes p
+    LEFT JOIN obras_sociales os 
+        ON os.Id = p.obra_social_id
+    WHERE p.Id = :id
 ");
-
 $stmtPaciente->execute([':id' => $id]);
-
 $paciente = $stmtPaciente->fetch(PDO::FETCH_ASSOC);
 
+/* =========================
+   MESES
+========================= */
+$meses = [
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre'
+];
 ?>
 
-<!-- ================= WRAPPER ================= -->
-
-<div id="wrapper">
-
-<div class="normalheader transition animated fadeIn small-header">
-<div class="hpanel">
-<div class="panel-body">
-<h2>Nuevo pagos de afiliación</h2>
-</div>
-</div>
-</div>
-
-<?= $mensaje ?>
-
-<div class="content animate-panel">
 <div class="row">
+    <div class="col-6">
+        <div class="card card-info card-outline">
+            <h1  class="ml-2"> Nuevo pago de afiliado
 
-<!-- ================= FORM PAGO ================= -->
+            </h1>
+            <div class="card-header">
+                <h3 class="card-title">
+                    Último mes:
+                    <?= $ultimoPago
+                        ? $meses[$ultimoPago['mes'] - 1] . ' de ' . $ultimoPago['anio']
+                        : 'Sin pagos registrados'; ?>
+                </h3>
+            </div>
 
-<div class="col-md-12 col-lg-6">
-<div class="hpanel">
+            <div class="card-body">
 
-<div class="panel-heading hbuilt">
-<h3>
-Último mes:
-<?= $ultimoPago 
-    ? $meses[$ultimoPago['mes']-1].' de '.$ultimoPago['anio']
-    : 'Sin pagos registrados'; ?>
-</h3>
+                <form method="POST">
+
+                    <div class="form-group">
+                        <label>Monto</label>
+                        <div class="input-group">
+                            <div class="input-group-prepend">
+                                <span class="input-group-text">$</span>
+                            </div>
+                            <input type="number" name="monto" step="0.01" min="0" class="form-control" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Mes correspondiente</label>
+                        <input type="month" name="fecha" class="form-control" value="<?= date('Y-m') ?>" required>
+                    </div>
+                    
+                    <button class="btn btn-success float-right  ml-2">
+                        <i class="fa fa-save"></i> Guardar
+                    </button>
+<a href="./?seccion=socios" class="btn btn-secondary float-right">
+                        Volver
+                    </a>
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ================= PACIENTE ================= -->
+
+    <div class="col-6">
+        <div class="card card-info card-outline">
+
+            <div class="card-header">
+                <h3 class="card-title">Datos del paciente</h3>
+            </div>
+
+            <div class="card-body">
+
+                <?php if ($paciente): ?>
+
+                    <strong>Apellido:</strong> <?= $paciente['apellido'] ?><br>
+                    <strong>Nombre:</strong> <?= $paciente['nombre'] ?><br>
+                    <strong>Domicilio:</strong> <?= $paciente['domicilio'] ?><br>
+                    <strong>Provincia:</strong> <?= $paciente['provincia'] ?><br>
+                    <strong>Localidad:</strong> <?= $paciente['localidad'] ?><br>
+                    <strong>Celular:</strong> <?= $paciente['celular'] ?><br>
+                    <strong>Email:</strong> <?= $paciente['email'] ?><br>
+                    <strong>Documento:</strong> <?= $paciente['tipo_documento'] ?>     <?= $paciente['documento'] ?><br>
+                    <strong>N° socio:</strong> <?= $paciente['nro_afiliado'] ?><br>
+                    <strong>Obra social:</strong> <?= $paciente['obra_social'] ?><br>
+
+                <?php else: ?>
+                    <div class="alert alert-warning">Paciente no encontrado</div>
+                <?php endif; ?>
+
+            </div>
+        </div>
+    </div>
 </div>
 
-<div class="panel-body">
 
-<form action="./?seccion=afiliados_new&id=<?= $id ?>&nc=<?= $rand ?>"
-      method="post"
-      class="form-inline">
-
-<label>Monto:</label>
-
-<div class="input-group">
-<span class="input-group-addon">$</span>
-<input type="number"
-       min="0"
-       step="any"
-       class="form-control"
-       name="monto"
-       required>
-</div>
-
-<br>
-
-<div class="m-t">
-<label>Correspondiente al mes:</label>
-
-<div class="input-group">
-<span class="input-group-addon">
-<i class="fa fa-calendar"></i>
-</span>
-
-<input type="month"
-       class="form-control"
-       name="fecha"
-       value="<?= date('Y-m') ?>"
-       required>
-
-</div>
-</div>
-
-<button type="submit"
-        class="btn btn-success m-t pull-right">
-Guardar
-</button>
-
-</form>
-
-</div>
-</div>
-</div>
-
-
-<!-- ================= DATOS PACIENTE ================= -->
-
-<div class="col-lg-6">
-<div class="hpanel">
-
-<div class="panel-heading hbuilt">
-Datos del paciente
-</div>
-
-<div class="panel-body">
-
-<?php if($paciente): ?>
-
-<label>Apellido:</label> <?= $paciente['apellido'] ?><br>
-<label>Nombre:</label> <?= $paciente['nombre'] ?><br>
-<label>Domicilio:</label> <?= $paciente['domicilio'] ?><br>
-<label>Provincia:</label> <?= $paciente['provincia'] ?><br>
-<label>Localidad:</label> <?= $paciente['localidad'] ?><br>
-<label>Celular:</label> <?= $paciente['celular'] ?><br>
-<label>Fijo:</label> <?= $paciente['fijo'] ?><br>
-<label>Email:</label> <?= $paciente['email'] ?><br>
-<label>Documento:</label> 
-<?= $paciente['tipo_documento'] ?>: <?= $paciente['documento'] ?><br>
-
-<label>Fecha nacimiento:</label>
-<?= $paciente['nacimiento'] ?><br>
-
-<label>N° socio:</label>
-<?= $paciente['nro_afiliado'] ?><br>
-
-<label>Obra social:</label>
-<?= $paciente['obra_social'] ?><br>
-
-<label>Plan:</label>
-<?= $paciente['obra_social_plan'] ?><br>
-
-<label>Número OS:</label>
-<?= $paciente['obra_social_numero'] ?><br>
-
-<label>Sexo:</label>
-<?= $paciente['sexo'] ?>
-
+<!-- ================= SWEET ALERT ================= -->
+<?php if ($mensaje): ?>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            Swal.fire({
+                icon: '<?= $tipoMensaje ?>',
+                title: '<?= $mensaje ?>',
+                timer: 2000,
+                showConfirmButton: false
+            });
+        });
+    </script>
 <?php endif; ?>
-
-</div>
-</div>
-</div>
-
-
-<div class="col-md-12">
-<div class="pull-right">
-<a href="./?seccion=socios&nc=<?= $rand ?>"
-   class="btn btn-info">
-Volver
-</a>
-</div>
-</div>
-
-</div>
-</div>
-</div>
