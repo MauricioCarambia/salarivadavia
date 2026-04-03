@@ -8,6 +8,7 @@ $stmt = $pdo->query("SELECT * FROM cajas ORDER BY nombre");
 if ($stmt) {
     $cajas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+$usuarioId = $_SESSION['user_id'] ?? null;
 function obtenerCajaAbierta($pdo, $usuarioId)
 {
     $stmt = $pdo->prepare("
@@ -33,6 +34,7 @@ if (!isset($_SESSION["login"]) || $_SESSION["login"] !== 'si') {
     header("Location: login.php");
     exit;
 }
+$usuarioId = $_SESSION['user_id'] ?? null;
 $tipoUsuario = $_SESSION['tipo'] ?? null;
 
 $seccion = $_GET['seccion'] ?? '';
@@ -76,6 +78,7 @@ if (isset($cajaAbierta['id'])) {
     $stmt->execute([$cajaAbierta['id'], $cajaAbierta['fecha_apertura']]);
     $totalSistema = (float) $stmt->fetchColumn();
 }
+
 ?>
 <!DOCTYPE html>
 <html lang="es">
