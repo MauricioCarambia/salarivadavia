@@ -70,15 +70,12 @@ $stmtExt = $pdo->prepare("
         m.concepto,
         m.monto,
         m.fecha,
-         c.id as cobro_id,
+        c.id as cobro_id,
         c.numero_completo,
-        d.nombre AS destino_nombre,
         c.estado
     FROM caja_movimientos m
     INNER JOIN cobros c ON c.id = m.cobro_id
     INNER JOIN caja_sesion cs ON cs.id = m.caja_sesion_id
-    LEFT JOIN cobros_reparto cr ON cr.cobro_id = c.id
-    LEFT JOIN destinos_reparto d ON d.id = cr.destino_id
     $where
     AND c.turno_id IS NULL
     ORDER BY m.fecha DESC
@@ -246,7 +243,7 @@ $balance = $totalTurnos + $totalIngresosExt - $totalEgresosExt;
                                 </td>
                                 <td><?= $m['destino_nombre'] ?? '-' ?></td>
                                 <td class="text-success font-weight-bold <?= $esAnulado ? 'text-danger' : '' ?>">
-                                    <?= $esAnulado ? '-' : '' ?>$<?= number_format($m['monto'], 2) ?>
+                                    <?= $esAnulado ? '-' : ($m['tipo'] === 'egreso' ? '-' : '+') ?>$<?= number_format($m['monto'], 2) ?>
                                 </td>
                                 <td class="text-center">
                                     <div class="btn-group">
@@ -294,8 +291,8 @@ $balance = $totalTurnos + $totalIngresosExt - $totalEgresosExt;
                                     <?php endif; ?>
                                 </td>
                                 <td><?= $m['destino_nombre'] ?? '-' ?></td>
-                                <td class="text-success font-weight-bold <?= $esAnulado ? 'text-danger' : '' ?>">
-                                    <?= $esAnulado ? '-' : '' ?>$<?= number_format($m['monto'], 2) ?>
+                              <td class="text-danger font-weight-bold <?= $esAnulado ? 'text-muted' : '' ?>">
+                                    <?= $esAnulado ? '-' : ($m['tipo'] === 'egreso' ? '-' : '+') ?>$<?= number_format($m['monto'], 2) ?>
                                 </td>
                                 <td class="text-center">
                                     <div class="btn-group">
