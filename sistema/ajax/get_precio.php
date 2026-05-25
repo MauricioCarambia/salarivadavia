@@ -23,15 +23,52 @@ function obtenerTipoPaciente(PDO $pdo, int $paciente_id): string
         return 'particular';
     }
 
+    /* =========================
+       TRAER PACIENTE
+    =========================*/
+    $stmt = $pdo->prepare("
+        SELECT tipo_socio, fecha_alta
+        FROM pacientes
+        WHERE Id = :id
+    ");
+    $stmt->execute([':id' => $paciente_id]);
+    $paciente = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$paciente) {
+        return 'particular';
+    }
+
+    // 🟣 1. VITALICIO → SIEMPRE SOCIO
+   if (!empty($paciente['tipo_socio']) && strtolower(trim($paciente['tipo_socio'])) === 'vitalicio') {
+    return 'socio';
+}
+
+    /* =========================
+       🟡 2. SOCIO NUEVO (GRACIA)
+    =========================*/
+    if (!empty($paciente['fecha_alta'])) {
+        $hoy = new DateTime();
+        $alta = new DateTime($paciente['fecha_alta']);
+        $dias = $hoy->diff($alta)->days;
+
+        if ($dias <= 30) {
+            return 'particular';
+        }
+    }
+
+    /* =========================
+       🔵 3. DEUDA
+    =========================*/
     $stmt = $pdo->prepare("
         SELECT MAX(fecha_correspondiente)
         FROM pagos_afiliados
-        WHERE paciente_id = ?
+        WHERE paciente_id = :id
     ");
-    $stmt->execute([$paciente_id]);
+    $stmt->execute([':id' => $paciente_id]);
 
     $ultimaFecha = $stmt->fetchColumn();
 
+    // Nunca pagó
     if (!$ultimaFecha) {
         return 'particular';
     }
@@ -42,7 +79,13 @@ function obtenerTipoPaciente(PDO $pdo, int $paciente_id): string
     $diff = $ultimo->diff($actual);
     $mesesDeuda = ($diff->y * 12) + $diff->m;
 
-    return ($mesesDeuda <= 3) ? 'socio' : 'particular';
+    // 🔵 hasta 3 meses → socio
+    if ($mesesDeuda <= 3) {
+        return 'socio';
+    }
+
+    // 🔴 más de 3 meses → particular
+    return 'particular';
 }
 
 $tipo_paciente = obtenerTipoPaciente($pdo, $paciente_id);
@@ -98,7 +141,7 @@ if ($precio === false || !$nombre) {
 =============================*/
 echo json_encode([
     'success' => true,
-    'nombre' => $nombre,
+    'nombre' => $nombre . ' (' . strtoupper($tipo_paciente) . ')',
     'precio' => (float)$precio,
     'tipo_paciente' => $tipo_paciente
 ]);

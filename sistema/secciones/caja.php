@@ -1,157 +1,130 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/services/CajaService.php';
 
+$cajaService = new CajaService($pdo);
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 /* =================================
-   📅 FILTROS
+    👤 USUARIO Y ROL
 ================================= */
-$desde = $_GET['desde'] ?? date('Y-m-d');
-$hasta = $_GET['hasta'] ?? date('Y-m-d');
+$usuarioSesionId = $_SESSION['user_id'] ?? 0;
 
-$inicioHoy = $desde . ' 00:00:00';
-$finHoy = $hasta . ' 23:59:59';
-
-$caja_id = $_GET['caja_id'] ?? '';
-$turno_sesion = $_GET['turno'] ?? '';
-$usuario_id = $_GET['usuario_id'] ?? '';
-
-/* =================================
-   🧾 WHERE DINÁMICO (REUTILIZABLE)
-================================= */
-$where = "WHERE m.fecha BETWEEN ? AND ?";
-$params = [$inicioHoy, $finHoy];
-
-if (!empty($caja_id)) {
-    $where .= " AND cs.caja_id = ?";
-    $params[] = $caja_id;
-}
-if (!empty($turno_sesion)) {
-    $where .= " AND cs.turno = ?";
-    $params[] = $turno_sesion;
-}
-if (!empty($usuario_id)) {
-    $where .= " AND cs.usuario_id = ?";
-    $params[] = $usuario_id;
-}
-
-/* =================================
-   🧾 1) TURNOS (SIN DUPLICAR)
-================================= */
-$stmtTurnos = $pdo->prepare("
-    SELECT 
-        c.id as cobro_id,
-        c.numero_completo,
-        c.total as monto,
-        MAX(m.fecha) as fecha,
-        cs.turno as sesion_turno,
-        e.nombre as empleado_nombre,
-        c.estado,
-        m.concepto
-    FROM cobros c
-    INNER JOIN caja_movimientos m ON m.cobro_id = c.id
-    INNER JOIN caja_sesion cs ON cs.id = m.caja_sesion_id
-    LEFT JOIN empleados e ON e.id = cs.usuario_id
-    $where
-    AND c.turno_id IS NOT NULL
-    GROUP BY c.id
-    ORDER BY c.fecha DESC
+$stmt = $pdo->prepare("
+    SELECT r.nombre as rol
+    FROM empleados e
+    INNER JOIN roles r ON r.id = e.rol_id
+    WHERE e.id = ?
 ");
-$stmtTurnos->execute($params);
-$tablaTurnos = $stmtTurnos->fetchAll(PDO::FETCH_ASSOC);
+$stmt->execute([$usuarioSesionId]);
+$rol = $stmt->fetchColumn();
+$esAdmin = ($rol === 'Administrador');
 
-/* =================================
-   💸 2) EXTERNOS (CON DESTINO)
-================================= */
-$stmtExt = $pdo->prepare("
-    SELECT 
-        m.id,
-        m.tipo,
-        m.concepto,
-        m.monto,
-        m.fecha,
-        c.id as cobro_id,
-        c.numero_completo,
-        c.estado
-    FROM caja_movimientos m
-    INNER JOIN cobros c ON c.id = m.cobro_id
-    INNER JOIN caja_sesion cs ON cs.id = m.caja_sesion_id
-    $where
-    AND c.turno_id IS NULL
-    ORDER BY m.fecha DESC
+// ==============================
+// 🟢 CAJA ACTIVA DEL USUARIO
+// ==============================
+$stmt = $pdo->prepare("
+    SELECT caja_id
+    FROM caja_sesion
+    WHERE usuario_id = ? AND estado = 'abierta'
+    LIMIT 1
 ");
-$stmtExt->execute($params);
-$externos = $stmtExt->fetchAll(PDO::FETCH_ASSOC);
+$stmt->execute([$usuarioSesionId]);
+$cajaActiva = $stmt->fetchColumn();
 
 /* =================================
-   📊 CLASIFICACIÓN
+    📅 FILTROS
 ================================= */
-$tablaIngresosExt = [];
-$tablaEgresosExt = [];
+$desde = ($esAdmin && isset($_GET['desde'])) ? $_GET['desde'] : date('Y-m-d');
+$hasta = ($esAdmin && isset($_GET['hasta'])) ? $_GET['hasta'] : date('Y-m-d');
 
-foreach ($externos as $m) {
-    if (strtolower($m['tipo']) === 'ingreso') {
-        $tablaIngresosExt[] = $m;
-    } else {
-        $tablaEgresosExt[] = $m;
+$caja_id       = $_GET['caja_id'] ?? $cajaActiva;
+$turno_sesion  = $_GET['turno'] ?? null;
+$usuarioFiltro = $_GET['usuario_id'] ?? $usuarioSesionId;
+
+$filtros = [
+    'desde' => $desde,
+    'hasta' => $hasta,
+    'caja_id' => $caja_id ?: null,
+    'turno' => $turno_sesion ?: null,
+    'usuario_id' => $usuarioFiltro ?: null
+];
+
+$data = $cajaService->getResumen($filtros);
+
+
+// 💵 CAJA
+$ingEfectivoReal = $data['caja']['ingresos'];
+$egrEfectivo     = $data['caja']['egresos'];
+$balanceFisico   = $data['caja']['balance'];
+
+// 🏦 BANCO
+$ingTransferenciaReal = $data['banco']['ingresos'];
+$egrTransferencia     = $data['banco']['egresos'];
+$balanceBanco         = $data['banco']['balance'];
+
+// 📊 DESTINOS
+$destinosActualizados = $data['destinos'];
+
+// 📋 MOVIMIENTOS
+$tablaTurnos = $data['turnos'];
+$externos    = $data['externos'];
+
+// 👤 DEUDAS
+$deudasProfesionales = $data['deudas'];
+
+// 💳 TRANSFERENCIAS EMPLEADOS (🔥 lo que te faltaba)
+$transferenciasEmpleados = $data['transferencias'];
+
+function formatearMedioPago($medio, $tipoTransferencia = '', $empDestino = '', $profNom = '', $profApe = '')
+{
+    $medioLower = strtolower($medio ?? '');
+
+    if ($medioLower === 'efectivo') {
+        return '<span class="badge badge-success">Efectivo</span>';
     }
-}
 
-/* =================================
-   💰 TOTALES
-================================= */
-$totalTurnos = 0;
-foreach ($tablaTurnos as $t) {
-    if (($t['estado'] ?? 'activo') !== 'anulado') {
-        $totalTurnos += $t['monto'];
+    if ($medioLower === 'transferencia') {
+
+        // profesional
+        if ($tipoTransferencia === 'profesional') {
+            $nombre = trim($profApe . ' ' . $profNom);
+            return '<span class="badge badge-primary">Transferencia → ' . htmlspecialchars($nombre) . '</span>';
+        }
+
+        // empleado / caja
+        if ($tipoTransferencia === 'empleado' || !empty($empDestino)) {
+            return '<span class="badge badge-info">Transferencia → ' . htmlspecialchars($empDestino) . '</span>';
+        }
+
+        // clínica (fondo)
+        if ($tipoTransferencia === 'clinica') {
+            return '<span class="badge badge-primary">Transferencia → Clínica</span>';
+        }
+
+        return '<span class="badge badge-info">Transferencia</span>';
     }
+
+    return '<span class="badge badge-secondary">' . htmlspecialchars($medio) . '</span>';
 }
-
-$totalIngresosExt = 0;
-foreach ($tablaIngresosExt as $m) {
-    if (($m['estado'] ?? 'activo') !== 'anulado') {
-        $totalIngresosExt += $m['monto'];
-    }
-}
-
-$totalEgresosExt = 0;
-foreach ($tablaEgresosExt as $m) {
-    if (($m['estado'] ?? 'activo') !== 'anulado') {
-        $totalEgresosExt += $m['monto'];
-    }
-}
-
-$balance = $totalTurnos + $totalIngresosExt - $totalEgresosExt;
-
 ?>
 
 <div class="card card-outline card-info p-3 mb-3">
     <form method="get" class="row">
         <input type="hidden" name="seccion" value="caja">
-
-        <div class="col-md-2">
-            <label>Desde</label>
-            <input type="date" name="desde" value="<?= $desde ?>" class="form-control">
-        </div>
-
-        <div class="col-md-2">
-            <label>Hasta</label>
-            <input type="date" name="hasta" value="<?= $hasta ?>" class="form-control">
-        </div>
-
+        <?php if ($esAdmin): ?>
+            <div class="col-md-2"><label>Desde</label><input type="date" name="desde" value="<?= $desde ?>" class="form-control"></div>
+            <div class="col-md-2"><label>Hasta</label><input type="date" name="hasta" value="<?= $hasta ?>" class="form-control"></div>
+        <?php endif; ?>
         <div class="col-md-2">
             <label>Caja</label>
             <select name="caja_id" class="form-control">
                 <option value="">Todas</option>
                 <?php foreach ($pdo->query("SELECT id, nombre FROM cajas")->fetchAll() as $cj): ?>
-                    <option value="<?= $cj['id'] ?>" <?= $caja_id == $cj['id'] ? 'selected' : '' ?>>
-                        <?= $cj['nombre'] ?>
-                    </option>
+                    <option value="<?= $cj['id'] ?>" <?= $caja_id == $cj['id'] ? 'selected' : '' ?>><?= $cj['nombre'] ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
-
-        <!-- 🔥 TURNO -->
         <div class="col-md-2">
             <label>Turno</label>
             <select name="turno" class="form-control">
@@ -160,28 +133,20 @@ $balance = $totalTurnos + $totalIngresosExt - $totalEgresosExt;
                 <option value="tarde" <?= $turno_sesion == 'tarde' ? 'selected' : '' ?>>Tarde</option>
             </select>
         </div>
-
-        <!-- 🔥 EMPLEADO -->
         <div class="col-md-2">
             <label>Empleado</label>
             <select name="usuario_id" class="form-control">
                 <option value="">Todos</option>
-                <?php
-                $empleados = $pdo->query("SELECT id, nombre FROM empleados ORDER BY nombre")->fetchAll();
-                foreach ($empleados as $emp): ?>
-                    <option value="<?= $emp['id'] ?>" <?= $usuario_id == $emp['id'] ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($emp['nombre']) ?>
-                    </option>
+                <?php foreach ($pdo->query("SELECT id, nombre FROM empleados ORDER BY nombre")->fetchAll() as $emp): ?>
+                    <option value="<?= $emp['id'] ?>" <?= $usuarioFiltro == $emp['id'] ? 'selected' : '' ?>><?= htmlspecialchars($emp['nombre']) ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
-
         <div class="col-md-1 d-flex align-items-end">
-            <button class="btn btn-primary w-100 mr-1">Filtrar</button>
+            <button class="btn btn-primary w-100">Filtrar</button>
         </div>
-
         <div class="col-md-1 d-flex align-items-end">
-            <a href="?seccion=caja" class="btn btn-secondary w-100">
+            <a href="?seccion=<?= $_GET['seccion'] ?? '' ?>" class="btn btn-secondary w-100">
                 Limpiar
             </a>
         </div>
@@ -189,178 +154,258 @@ $balance = $totalTurnos + $totalIngresosExt - $totalEgresosExt;
 </div>
 
 <div class="row mb-3">
-    <div class="col-md-3">
-        <div class="card bg-info text-white p-3">
-            <h6>Ingresos por turnos</h6>
-            <h3>$<?= number_format($totalTurnos, 2) ?></h3>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card bg-success text-white p-3">
-            <h6>Ingresos Externos</h6>
-            <h3>$<?= number_format($totalIngresosExt, 2) ?></h3>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card bg-danger text-white p-3">
-            <h6>Egresos Externos</h6>
-            <h3>$<?= number_format($totalEgresosExt, 2) ?></h3>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card bg-dark text-white p-3">
-            <h6>Balance Neto</h6>
-            <h3>$<?= number_format($balance, 2) ?></h3>
-        </div>
-    </div>
-</div>
-<div class="row mb-3">
+
+    <!-- 💵 CAJA FÍSICA -->
     <div class="col-md-6">
-        <div class="card mb-3 card-outline card-success">
-            <div class="card-header"><strong>Ingresos Externos / Manuales</strong></div>
-            <div class="card-body p-0 table-responsive">
-                <table class="table table-sm table-striped mb-0 tabla">
-                    <thead class="thead-dark">
-                        <tr>
-                            <th>Fecha</th>
-                            <th>Concepto</th>
-                            <th>Destino</th>
-                            <th>Monto</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($tablaIngresosExt as $m): ?>
-                            <?php $esAnulado = ($m['estado'] === 'anulado'); ?>
+        <div class="card bg-dark text-white shadow text-center p-3">
+            <h5>
+                <i class="fas fa-cash-register mr-2"></i> EFECTIVO EN CAJA
+            </h5>
 
-                            <tr>
-                                <td data-order="<?= $m['fecha'] ?>">
-                                    <?= date('d/m/Y H:i', strtotime($m['fecha'])) ?>
-                                </td>
-                                <td><?= htmlspecialchars($m['concepto']) ?> <?php if ($esAnulado): ?>
-                                        <span class="badge badge-danger ml-1">Anulado</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td><?= $m['destino_nombre'] ?? '-' ?></td>
-                                <td class="text-success font-weight-bold <?= $esAnulado ? 'text-danger' : '' ?>">
-                                    <?= $esAnulado ? '-' : ($m['tipo'] === 'egreso' ? '-' : '+') ?>$<?= number_format($m['monto'], 2) ?>
-                                </td>
-                                <td class="text-center">
-                                    <div class="btn-group">
+            <h2 class="display-4 font-weight-bold">
+                $<?= number_format($balanceFisico, 2, ',', '.') ?>
+            </h2>
 
-                                        <?php if (!empty($m['cobro_id'])): ?>
-                                            <button class="btn btn-info btn-sm ver-cobro rounded-circle" data-id="<?= $m['cobro_id'] ?>">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
-                                        <?php else: ?>
-                                            -
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+            <div class="d-flex justify-content-around mt-2">
+                <small class="text-success">
+                    Ingresos Efec: $<?= number_format($ingEfectivoReal, 2, ',', '.') ?>
+                </small>
+
+                <small class="text-danger">
+                    Egresos Efec: $<?= number_format($egrEfectivo, 2, ',', '.') ?>
+                </small>
             </div>
         </div>
     </div>
+
+    <!-- 🏦 BANCO -->
     <div class="col-md-6">
-        <div class="card mb-3 card-outline card-danger">
-            <div class="card-header"><strong>Egresos / Gastos</strong></div>
-            <div class="card-body p-0 table-responsive">
-                <table class="table table-sm table-striped mb-0 tabla">
-                    <thead class="thead-dark">
-                        <tr>
-                            <th>Fecha</th>
-                            <th>Concepto</th>
-                            <th>Destino</th>
-                            <th>Monto</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($tablaEgresosExt as $m): ?>
-                            <?php $esAnulado = ($m['estado'] === 'anulado'); ?>
+        <div class="card bg-info text-white shadow text-center p-3">
+            <h5>
+                <i class="fas fa-university mr-2"></i> TRANSFERENCIAS
+            </h5>
 
-                            <tr>
-                                <td data-order="<?= $m['fecha'] ?>">
-                                    <?= date('d/m/Y H:i', strtotime($m['fecha'])) ?>
-                                </td>
-                                <td><?= htmlspecialchars($m['concepto']) ?> <?php if ($esAnulado): ?>
-                                        <span class="badge badge-danger ml-1">Anulado</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td><?= $m['destino_nombre'] ?? '-' ?></td>
-                              <td class="text-danger font-weight-bold <?= $esAnulado ? 'text-muted' : '' ?>">
-                                    <?= $esAnulado ? '-' : ($m['tipo'] === 'egreso' ? '-' : '+') ?>$<?= number_format($m['monto'], 2) ?>
-                                </td>
-                                <td class="text-center">
-                                    <div class="btn-group">
+            <h2 class="display-4 font-weight-bold">
+                $<?= number_format($balanceBanco, 2, ',', '.') ?>
+            </h2>
 
-                                        <?php if (!empty($m['cobro_id'])): ?>
-                                            <button class="btn btn-info btn-sm ver-cobro rounded-circle" data-id="<?= $m['cobro_id'] ?>">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
-                                        <?php else: ?>
-                                            -
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+            <div class="d-flex justify-content-around mt-2">
+                <small>
+                    Entró: $<?= number_format($ingTransferenciaReal, 2, ',', '.') ?>
+                </small>
+
+                <small>
+                    Salió: $<?= number_format($egrTransferencia, 2, ',', '.') ?>
+                </small>
             </div>
         </div>
     </div>
+
 </div>
-<div class="row mb-3">
-    <div class="col-md-12">
-        <div class="card mb-3 card-outline card-info">
-            <div class="card-header"><strong>Cobros por Turnos</strong></div>
-            <div class="card-body p-0 table-responsive">
-                <table class="table table-sm table-striped mb-0 tabla">
-                    <thead class="thead-dark">
-                        <tr>
-                            <th>Fecha</th>
-                            <th>Comprobante</th>
-                            <th>Concepto</th>
-                            <th>Monto</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($tablaTurnos as $t): ?>
-                            <?php $esAnulado = ($t['estado'] === 'anulado'); ?>
 
-                            <tr>
-                                <td data-order="<?= $t['fecha'] ?>">
-                                    <?= date('d/m/Y H:i', strtotime($t['fecha'])) ?>
-                                </td>
-                                <td>
-                                    <?= $t['numero_completo'] ?>
-                                    <?php if ($esAnulado): ?>
-                                        <span class="badge badge-danger ml-1">Anulado</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td><?= $t['concepto'] ?></td>
-                                <td class="text-primary font-weight-bold <?= $esAnulado ? 'text-danger' : '' ?>">
-                                    <?= $esAnulado ? '-' : '' ?>$<?= number_format($t['monto'], 2) ?>
-                                </td>
-                                <td class="text-center">
-                                    <div class="btn-group">
+<div class="row mb-4">
+    <?php foreach ($destinosActualizados as $d): ?>
 
-                                        <button class="btn btn-info btn-sm ver-cobro rounded-circle" data-id="<?= $t['cobro_id'] ?>">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+        <?php
+        $tipo = strtolower($d['tipo'] ?? '');
+        $categoria = strtolower($d['categoria'] ?? '');
+
+        if ($tipo === 'egreso') {
+            $label = 'EGRESO';
+            $colorClase = 'danger';
+            $textColor = 'text-danger';
+        } elseif ($categoria === 'fondo') {
+            $label = 'FONDO';
+            $colorClase = 'primary';
+            $textColor = 'text-primary';
+        } else {
+            $label = 'INGRESO';
+            $colorClase = 'success';
+            $textColor = 'text-success';
+        }
+        ?>
+
+        <div class="col-md-3 mb-2">
+            <div class="card shadow-sm border-left-<?= $colorClase ?> h-100">
+                <div class="card-body p-2">
+
+                    <div class="d-flex justify-content-between align-items-start">
+                        <small class="text-muted font-weight-bold text-uppercase">
+                            <?= htmlspecialchars($d['nombre']) ?>
+                        </small>
+
+                        <span class="badge badge-<?= $colorClase ?> text-white">
+                            <?= $label ?>
+                        </span>
+                    </div>
+
+                    <div class="h5 mb-1 <?= $textColor ?>">
+                        $<?= number_format($d['total_general'], 2, ',', '.') ?>
+                    </div>
+
+                    <div class="d-flex justify-content-between" style="font-size: 0.75rem;">
+                        <span class="text-success">
+                            Efec: $<?= number_format($d['total_efectivo'], 2, ',', '.') ?>
+                        </span>
+
+                        <span class="text-info">
+                            Trans: $<?= number_format($d['total_transferencia'], 2, ',', '.') ?>
+                        </span>
+                    </div>
+
+                </div>
             </div>
         </div>
+
+    <?php endforeach; ?>
+</div>
+<!-- <div class="row mb-4">
+<?php foreach ($deudasProfesionales as $p): ?>
+    <div class="col-md-3 mb-2">
+        <div class="card shadow-sm border-left-warning h-100">
+            <div class="card-body p-2">
+
+                <div class="d-flex justify-content-between align-items-start">
+                    <small class="text-muted font-weight-bold text-uppercase">
+                        <?= htmlspecialchars($p['apellido'] . ' ' . $p['nombre']) ?>
+                    </small>
+
+                    <span class="badge badge-warning">
+                        DEUDA
+                    </span>
+                </div>
+
+                <div class="h5 mb-1 text-warning">
+                    $<?= number_format($p['deuda_total'], 2, ',', '.') ?>
+                </div>
+
+                <small class="text-muted">
+                    Debe a la clínica
+                </small>
+
+            </div>
+        </div>
+    </div>
+<?php endforeach; ?>
+</div> -->
+<div class="row mb-4">
+
+    <?php if (empty($transferenciasEmpleados)): ?>
+        <div class="col-12">
+            <div class="alert alert-light text-center">
+                No hay transferencias a empleados en este período
+            </div>
+        </div>
+    <?php endif; ?>
+
+    <?php foreach ($transferenciasEmpleados as $emp): ?>
+
+        <div class="col-md-3 mb-2">
+            <div class="card shadow-sm border-left-info h-100">
+                <div class="card-body p-2">
+
+                    <div class="d-flex justify-content-between align-items-start">
+                        <small class="text-muted font-weight-bold text-uppercase">
+                            <?= htmlspecialchars($emp['nombre']) ?>
+                        </small>
+
+                        <span class="badge badge-info">
+                            TRANSFERENCIA
+                        </span>
+                    </div>
+
+                    <div class="h5 mb-1 text-info">
+                        $<?= number_format($emp['total_transferencias'], 2, ',', '.') ?>
+                    </div>
+
+                    <small class="text-muted">
+                        Total recibido por transferencia
+                    </small>
+
+                </div>
+            </div>
+        </div>
+
+    <?php endforeach; ?>
+
+</div>
+
+<div class="card card-outline card-primary">
+    <div class="card-header"><strong>Listado de Movimientos</strong></div>
+    <div class="card-body p-0">
+        <table class="table table-sm table-striped tabla">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Concepto / Comprobante</th>
+                    <th>Paciente</th>
+                    <th>Medio</th>
+                    <th>Practica</th>
+                    <th>Monto</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+
+                <?php
+                $movimientos = array_merge($tablaTurnos, $externos);
+
+                // 🔥 Ordenar por fecha DESC (fecha + hora)
+                usort($movimientos, function ($a, $b) {
+                    return strtotime($b['fecha']) - strtotime($a['fecha']);
+                });
+                foreach ($movimientos as $m): ?>
+                    <tr>
+
+                        <td><?= date('d/m H:i', strtotime($m['fecha'])) ?></td>
+                        <td>
+                            <?= $m['numero_completo'] ?? $m['concepto'] ?>
+                            <?= ($m['estado'] == 'anulado') ? '<span class="badge badge-danger">Anulado</span>' : '' ?>
+                        </td>
+                        <td>
+
+
+                            <?php if (!empty($m['pac_nom'])): ?>
+
+
+                                <?= htmlspecialchars($m['pac_ape'] . ' ' . $m['pac_nom']) ?>
+
+                            <?php endif; ?>
+                        </td>
+
+                        <td>
+                            <?= formatearMedioPago(
+                                $m['medio_pago'],
+                                $m['transferencia_tipo'] ?? '',
+                                $m['emp_dest'] ?? '',
+                                $m['prof_nom'] ?? '',
+                                $m['prof_ape'] ?? ''
+                            ) ?>
+                        </td>
+                        <td>
+                            <?= htmlspecialchars(
+                                $m['concepto']
+                                    ?? $m['practica_nombre']
+                                    ?? $m['numero_completo']
+                                    ?? '-'
+                            ) ?>
+                        </td>
+                        <?php
+                        $esEgreso = ($m['tipo'] ?? '') == 'egreso';
+                        ?>
+
+                        <td class="font-weight-bold <?= $esEgreso ? 'text-danger' : 'text-success' ?>">
+                            <?= $esEgreso ? '-' : '' ?>$<?= number_format($m['monto'], 2) ?>
+                        </td>
+                        <td>
+                            <button class="btn btn-info btn-xs ver-cobro rounded-circle" data-id="<?= $m['cobro_id'] ?>">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
     </div>
 </div>
 
@@ -388,52 +433,178 @@ $balance = $totalTurnos + $totalIngresosExt - $totalEgresosExt;
     </div>
 </div>
 <script>
+    document.addEventListener("DOMContentLoaded", function() {
+
+        if (typeof qz === "undefined") {
+            console.error("QZ no está cargado");
+            return;
+        }
+
+        qz.security.setCertificatePromise(function(resolve, reject) {
+            fetch("certificado/certificate.pem")
+                .then(res => res.text())
+                .then(resolve)
+                .catch(reject);
+        });
+
+        qz.security.setSignaturePromise(function(toSign) {
+            return function(resolve, reject) {
+                fetch("certificado/firma.php", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            request: toSign
+                        })
+                    })
+                    .then(res => res.text())
+                    .then(resolve)
+                    .catch(reject);
+            };
+        });
+
+    });
+    window.imprimirTicket = async function(data) {
+        try {
+            if (!qz.websocket.isActive()) {
+                await qz.websocket.connect();
+            }
+
+            const config = qz.configs.create("POS-80C", {
+                encoding: 'CP437'
+            });
+
+            let contenido = [];
+
+            function linea(nombre, precio) {
+                let left = nombre.substring(0, 30);
+                let right = "$" + parseFloat(precio).toFixed(2);
+
+                let spaces = 48 - (left.length + right.length);
+                if (spaces < 1) spaces = 1;
+
+                return left + " ".repeat(spaces) + right;
+            }
+
+           /* ENCABEZADO CON LOGO */
+            contenido.push("\x1B\x61\x01"); // Centrado
+
+            // 1. Insertar la imagen (puede ser URL o Base64)
+            contenido.push({
+                type: 'pixel',
+                format: 'png', // o 'png'
+                flavor: 'file',
+                data: 'images/logo_blanco_negro.png', // Ruta relativa, absoluta o base64
+                options: {
+                    language: "ESCPOS",
+                    dotDensity: "double"
+                }
+            });
+
+            //             const logo = {
+            //    type: 'pixel',
+            //    format: 'png',
+            //    flavor: 'file',
+            //    data: 'https://tuweb.com/logo.png',
+            //    options: { 
+            //       language: "ESCPOS", 
+            //       dotDensity: "double",
+            //       width: 200 // Ajusta el tamaño en píxeles según tu papel de 80mm
+            //    }
+            // };
+
+            // // Luego en tu función:
+            // let contenido = [logo, "\x1B\x61\x01", "SALA RIVADAVIA\n", ...];
+
+            contenido.push("\n"); // Salto de línea después del logo
+            // contenido.push("\x1B\x61\x01");
+            contenido.push("SALA RIVADAVIA\n");
+            contenido.push("Av. Eva Peron 695\n");
+            contenido.push("Temperley\n");
+            contenido.push("Fecha: " + new Date().toLocaleString() + "\n");
+            contenido.push("------------------------------------------------\n");
+
+            contenido.push("\x1B\x61\x00");
+            contenido.push("Paciente: " + data.paciente + "\n");
+            contenido.push("Profesional: " + data.profesional + "\n");
+            contenido.push("------------------------------------------------\n");
+
+            data.detalle.forEach(d => {
+                contenido.push(linea(d.nombre, d.precio) + "\n");
+            });
+
+            contenido.push("------------------------------------------------\n");
+
+            contenido.push("\x1B\x61\x02");
+            contenido.push("TOTAL: $" + parseFloat(data.total).toFixed(2) + "\n");
+
+            contenido.push("\x1B\x61\x01");
+            contenido.push("\nGracias por su visita\n");
+
+            contenido.push("\n\n\n");
+            contenido.push("\x1D\x56\x00");
+
+            await qz.print(config, contenido);
+
+        } catch (err) {
+            console.error(err);
+            throw err;
+        }
+    };
     $(document).ready(function() {
-        // Inicializar DataTable si la función existe
+
+        /* =========================
+           📊 DATATABLE
+        ========================= */
         if (typeof initDataTable === "function") {
             $('.tabla').each(function() {
                 initDataTable($(this), {
                     pageLength: 10,
-
                     order: [
                         [0, "desc"]
-                    ], // 👈 ordenar por columna 0 (fecha DESC)
-
+                    ],
                     columnDefs: [{
                         targets: 0,
-                        type: "date" // 👈 importante
+                        type: "date"
                     }]
                 });
             });
         }
 
-        // Lógica del Modal para ver detalle de cobro
+        /* =========================
+           👁️ VER COBRO
+        ========================= */
         $(document).on("click", ".ver-cobro", function() {
+
             const cobroId = $(this).data("id");
 
             if (!cobroId) {
                 alert("Este movimiento no tiene comprobante asociado");
                 return;
             }
-            // Feedback visual de carga
+
+            // Loader
             $("#detalleCobroContenido").html(`
-        <div class="text-center py-5">
-            <div class="spinner-border text-primary" role="status"></div>
-            <p class="mt-2 text-muted">Buscando información...</p>
-        </div>
-    `);
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary"></div>
+                <p class="mt-2 text-muted">Buscando información...</p>
+            </div>
+        `);
+
             $("#verCobroModal").modal("show");
 
-            // Guardamos el ID en el botón de imprimir del modal por si quiere usarlo
-            $("#btnImprimirDesdeModal").off('click').on('click', function() {
-                window.open('imprimir_ticket.php?cobro_id=' + cobroId, '_blank');
-            });
-
+            // 🔥 UNA SOLA LLAMADA
             $.get("ajax/get_cobro.php", {
                 cobro_id: cobroId
             }, function(res) {
+
                 if (!res.success) {
-                    $("#detalleCobroContenido").html(`<div class="alert alert-custom alert-light-danger"><i class="fas fa-exclamation-circle"></i> ${res.message}</div>`);
+                    $("#detalleCobroContenido").html(`
+                    <div class="alert alert-danger">
+                        ${res.message}
+                    </div>
+                `);
                     return;
                 }
 
@@ -443,80 +614,144 @@ $balance = $totalTurnos + $totalIngresosExt - $totalEgresosExt;
                     reparto
                 } = res;
 
+                /* =========================
+                   🖨️ BOTÓN IMPRIMIR
+                ========================= */
+                $("#btnImprimirDesdeModal")
+                    .off('click')
+                    .on('click', async function() {
+
+                        const btn = $(this);
+                        btn.prop("disabled", true);
+
+                        Swal.fire({
+                            title: "Reimprimiendo...",
+                            text: "Enviando a impresora térmica",
+                            allowOutsideClick: false,
+                            didOpen: () => Swal.showLoading()
+                        });
+
+                        try {
+
+                            const data = {
+                                paciente: cobro.paciente || '-',
+                                profesional: cobro.profesional || '-',
+                                total: cobro.total || 0,
+                                detalle: (detalle || []).map(d => ({
+                                    nombre: d.nombre,
+                                    precio: d.precio
+                                }))
+                            };
+
+                            if (typeof window.imprimirTicket !== "function") {
+                                throw new Error("Impresión no disponible");
+                            }
+
+                            await window.imprimirTicket(data);
+
+                            Swal.fire("OK", "Ticket reimpreso", "success");
+
+                        } catch (err) {
+                            console.error(err);
+                            Swal.fire("Error", err.message || "No se pudo imprimir", "error");
+                        }
+
+                        btn.prop("disabled", false);
+                    });
+
+                /* =========================
+                   🧾 HTML DEL MODAL
+                ========================= */
                 let html = `
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                    <h6 class="text-uppercase text-muted mb-0" style="letter-spacing: 1px; font-size: 0.8rem;">Comprobante</h6>
-                    <span class="h5 font-weight-bold text-primary">${cobro.numero || 'N/A'}</span>
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h6 class="text-uppercase text-muted mb-0">Comprobante</h6>
+                        <span class="h5 font-weight-bold text-primary">
+                            ${cobro.numero || 'N/A'}
+                        </span>
+                    </div>
+                    <div class="text-right">
+                        <span class="badge badge-success">Pagado</span>
+                        <p class="text-muted small mb-0 mt-1">${cobro.fecha}</p>
+                    </div>
                 </div>
-                <div class="text-right">
-                    <span class="badge badge-pill badge-success px-3">Pagado</span>
-                    <p class="text-muted small mb-0 mt-1">${cobro.fecha}</p>
+
+                <div class="mb-4">
+                    <p><strong>Paciente:</strong> ${cobro.paciente}</p>
                 </div>
-            </div>
 
-            <div class="mb-4">
-                <p class="mb-1"><i class="fas fa-user-circle text-muted mr-2"></i><strong>Paciente:</strong> ${cobro.paciente}</p>
-            </div>
-
-            <div class="table-responsive">
-                <table class="table table-borderless table-striped">
-                    <thead class="small text-uppercase text-muted" style="border-bottom: 2px solid #f4f6f9">
-                        <tr>
-                            <th>Descripción</th>
-                            <th class="text-right">Monto</th>
-                        </tr>
-                    </thead>
-                    <tbody>`;
+                <div class="table-responsive">
+                    <table class="table table-borderless table-striped">
+                        <thead>
+                            <tr>
+                                <th>Descripción</th>
+                                <th class="text-right">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
 
                 if (detalle?.length) {
                     detalle.forEach(d => {
                         html += `
-                    <tr>
-                        <td class="py-2">${d.nombre}</td>
-                        <td class="text-right py-2 font-weight-bold">$${parseFloat(d.precio).toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
-                    </tr>`;
+                        <tr>
+                            <td>${d.nombre}</td>
+                            <td class="text-right font-weight-bold">
+                                $${parseFloat(d.precio).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                            </td>
+                        </tr>
+                    `;
                     });
                 }
 
                 html += `</tbody></table></div>`;
 
-                // Sección de Reparto con estilo de tarjeta interna
+                /* =========================
+                   🔁 REPARTO
+                ========================= */
                 if (reparto?.length) {
                     html += `
-                <div class="mt-4 p-3 bg-light rounded shadow-sm">
-                    <h6 class="font-weight-bold small text-uppercase mb-3 text-info"><i class="fas fa-share-alt mr-2"></i>Distribución de fondos</h6>`;
+                    <div class="mt-4 p-3 bg-light rounded">
+                        <h6 class="text-info">Distribución</h6>
+                `;
 
                     reparto.forEach(r => {
                         html += `
-                    <div class="d-flex justify-content-between small mb-1">
-                        <span class="text-muted">${r.destino}:</span>
-                        <span class="font-weight-bold text-dark">$${parseFloat(r.total).toLocaleString('es-AR', {minimumFractionDigits: 2})}</span>
-                    </div>`;
+                        <div class="d-flex justify-content-between small">
+                            <span>${r.destino}</span>
+                            <span>$${parseFloat(r.total).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                    `;
                     });
 
                     html += `</div>`;
                 }
 
-                // Gran Total
+                /* =========================
+                   💰 TOTAL
+                ========================= */
                 html += `
-            <div class="mt-4 pt-3" style="border-top: 2px dashed #dee2e6">
-                <div class="d-flex justify-content-between align-items-center">
-                    <span class="h5 font-weight-bold text-dark mb-0">TOTAL</span>
-                    <span class="h3 font-weight-bold text-primary mb-0">$${parseFloat(cobro.total).toLocaleString('es-AR', {minimumFractionDigits: 2})}</span>
+                <div class="mt-4 pt-3 border-top">
+                    <div class="d-flex justify-content-between">
+                        <strong>TOTAL</strong>
+                        <strong class="text-primary">
+                            $${parseFloat(cobro.total).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                        </strong>
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
 
                 $("#detalleCobroContenido").html(html);
 
             }, 'json').fail(function() {
                 $("#detalleCobroContenido").html(`
-            <div class="alert alert-danger">
-                <i class="fas fa-wifi-slash mr-2"></i> Error de conexión con el servidor.
-            </div>
-        `);
+                <div class="alert alert-danger">
+                    Error de conexión con el servidor.
+                </div>
+            `);
             });
+
         });
+
     });
 </script>

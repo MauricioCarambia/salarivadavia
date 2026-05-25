@@ -2,7 +2,7 @@
 session_name("turnos");
 session_start();
 header('Content-Type: application/json');
-require_once "../inc/db.php";
+require_once __DIR__ . '/../inc/db.php';
 
 $usuarioId = $_SESSION['user_id'] ?? null;
 

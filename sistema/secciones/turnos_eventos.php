@@ -1,5 +1,5 @@
 <?php
-require_once "../inc/db.php";
+require_once __DIR__ . '/../inc/db.php';
 
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
@@ -44,7 +44,7 @@ SELECT
     t.fecha, 
     t.sobreturno, 
     t.asistio,         -- 🔥 Agregado
-    
+    t.atendido,
     t.fecha_actual,    -- 🔥 Agregada (es la hora de recepción)
     p.nombre, 
     p.apellido, 
@@ -82,6 +82,7 @@ while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
             "documento"    => $r['documento'],
             "celular"      => $r['celular'],
             "sobreturno"   => (int)$r['sobreturno'],
+            'atendido' => (int)$r['atendido'], // <--- Forzar a ENTERO aquí
             "asistio"      => (int)$r['asistio'],
             "fecha_actual" => $r['fecha_actual'],
             "hora"         => date('H:i', strtotime($r['fecha']))

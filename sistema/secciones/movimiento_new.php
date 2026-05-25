@@ -1,8 +1,9 @@
 <?php
-require_once 'inc/db.php'; // tu conexión PDO
+require_once __DIR__ . '/../inc/db.php';
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 $mensaje = '';
 $v = isset($_GET["v"]) ? $_GET["v"] : '';
+$rand = uniqid();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tipo = $_POST['tipo'];
     $descripcion = $_POST['descripcion'];

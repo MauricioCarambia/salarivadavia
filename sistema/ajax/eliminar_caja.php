@@ -1,9 +1,9 @@
 <?php
-require_once "../inc/db.php";
+require_once __DIR__ . '/../inc/db.php';
 header('Content-Type: application/json');
 
 $data = json_decode(file_get_contents("php://input"), true);
-$id = $data['id'] ?? 0;
+$id = $_POST['id'] ?? 0;
 
 if (!$id) {
     echo json_encode(['success' => false, 'message' => 'ID inválido']);
@@ -17,7 +17,7 @@ try {
     $stmt->execute([$id]);
 
     if ($stmt->fetchColumn() > 0) {
-        throw new Exception("No se puede eliminar: tiene sesiones asociadas");
+        throw new Exception("No se puede eliminar: contiene cobros realizados antiguamente.");
     }
 
     $stmt = $pdo->prepare("DELETE FROM cajas WHERE id = ?");

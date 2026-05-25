@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../inc/db.php';
 function obtenerListaEspera(PDO $conexion, string $especialidad): array
 {
     $stmt = $conexion->prepare("
@@ -17,8 +18,9 @@ function colorAsignado(?string $estado): string
 {
     return match ($estado) {
         'Confirmo' => 'table-success',
-        'No Confirmo' => 'table-danger',
-        'Pendiente Confirmacion' => 'table-warning',
+        'Rechazo' => 'table-danger',
+        'Pendiente' => 'table-warning',
+        'No respondio' => 'table-info',
         'Agendado' => 'table-primary',
         default => ''
     };
@@ -27,8 +29,9 @@ function badgeEstado(?string $estado): string
 {
     return match ($estado) {
         'Confirmo' => '<span class="badge badge-success"><i class="fa fa-check"></i> Confirmó</span>',
-        'No Confirmo' => '<span class="badge badge-danger"><i class="fa fa-times"></i> No confirmó</span>',
-        'Pendiente Confirmacion' => '<span class="badge badge-warning"><i class="fa fa-clock"></i> Pendiente</span>',
+        'Rechazo' => '<span class="badge badge-danger"><i class="fa fa-times"></i> Rechazo el turno</span>',
+        'Pendiente' => '<span class="badge badge-warning"><i class="fa fa-clock"></i> Pendiente de Confirmacion</span>',
+        'No respondio' => '<span class="badge badge-info"><i class="fa fa-clock"></i> No respondio</span>',
         'Agendado' => '<span class="badge badge-primary"><i class="fa fa-edit"></i> Agendado</span>',
         default => '<span class="badge badge-secondary">Sin estado</span>'
     };
@@ -55,13 +58,16 @@ $registros = obtenerListaEspera($conexion, $especialidad);
 
             <thead>
                 <tr>
+                    <th>ID</th>
+                    <th>fecha</th>
                     <th>Paciente</th>
                     <th>Documento</th>
                     <th>Celular</th>
                     <th>Edad</th>
-                    <th>Disponibilidad</th>
+                    <th>Derivacion</th>
                     <th>Preferencia horario</th>
                     <th>Profesional / turno</th>
+                    <th>Notas</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                 </tr>
@@ -71,14 +77,16 @@ $registros = obtenerListaEspera($conexion, $especialidad);
 
                 <?php foreach ($registros as $r): ?>
                     <tr>
-
+                        <td><?= $r['Id'] ?></td>
+                       <td><?= date('d/m/Y H:i', strtotime($r['created_date'])) ?></td>
                         <td><?= htmlspecialchars($r['apellido'] . ' ' . $r['nombre']) ?></td>
                         <td><?= htmlspecialchars($r['documento']) ?></td>
                         <td><?= htmlspecialchars($r['celular']) ?></td>
                         <td><?= htmlspecialchars($r['edad']) ?></td>
-                        <td><?= htmlspecialchars($r['disponibilidad']) ?></td>
+                        <td><?= htmlspecialchars($r['derivacion']) ?></td>
                         <td><?= htmlspecialchars($r['horario']) ?></td>
                         <td><?= htmlspecialchars($r['profesional']) ?></td>
+                        <td><?= htmlspecialchars($r['nota']) ?></td>
 
                         <td><?= badgeEstado($r['asignado']) ?></td>
 
@@ -90,8 +98,10 @@ $registros = obtenerListaEspera($conexion, $especialidad);
                                     data-apellido="<?= htmlspecialchars($r['apellido']) ?>"
                                     data-celular="<?= htmlspecialchars($r['celular']) ?>"
                                     data-edad="<?= htmlspecialchars($r['edad']) ?>"
+                                    data-derivacion="<?= htmlspecialchars($r['derivacion']) ?>"
                                     data-horario="<?= htmlspecialchars($r['horario']) ?>"
                                     data-profesional="<?= htmlspecialchars($r['profesional']) ?>"
+                                    data-nota="<?= htmlspecialchars($r['nota']) ?>"
                                     data-asignado="<?= htmlspecialchars($r['asignado']) ?>">
                                     <i class="fas fa-edit"></i>
                                 </button>
@@ -112,7 +122,7 @@ $registros = obtenerListaEspera($conexion, $especialidad);
     </div>
 </div>
 <div class="modal fade" id="modalEditar">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg"> <!-- más ancho -->
         <div class="modal-content">
 
             <div class="modal-header bg-success">
@@ -123,50 +133,75 @@ $registros = obtenerListaEspera($conexion, $especialidad);
             <form id="formEditar">
 
                 <div class="modal-body">
-
                     <input type="hidden" name="id" id="edit_id">
 
-                    <div class="form-group">
-                        <label>Nombre</label>
-                        <input type="text" id="edit_nombre" name="nombre" class="form-control">
-                    </div>
+                    <div class="row">
 
-                    <div class="form-group">
-                        <label>Apellido</label>
-                        <input type="text" id="edit_apellido" name="apellido" class="form-control">
-                    </div>
+                        <!-- COLUMNA IZQUIERDA -->
+                        <div class="col-md-6">
 
-                    <div class="form-group">
-                        <label>Celular</label>
-                        <input type="text" id="edit_celular" name="celular" class="form-control">
-                    </div>
+                            <div class="form-group">
+                                <label>Nombre</label>
+                                <input type="text" id="edit_nombre" name="nombre" class="form-control required">
+                            </div>
 
-                    <div class="form-group">
-                        <label>Edad</label>
-                        <input type="number" id="edit_edad" name="edad" class="form-control">
-                    </div>
+                            <div class="form-group">
+                                <label>Apellido</label>
+                                <input type="text" id="edit_apellido" name="apellido" class="form-control required">
+                            </div>
 
-                    <div class="form-group">
-                        <label>Horario</label>
-                        <input type="text" id="edit_horario" name="horario" class="form-control">
-                    </div>
+                            <div class="form-group">
+                                <label>Celular</label>
+                                <input type="text" id="edit_celular" name="celular" class="form-control required">
+                            </div>
 
-                    <div class="form-group">
-                        <label>Profesional</label>
-                        <input type="text" id="edit_profesional" name="profesional" class="form-control">
-                    </div>
+                            <div class="form-group">
+                                <label>Profesional</label>
+                                <input type="text" id="edit_profesional" name="profesional" class="form-control">
+                            </div>
 
-                    <div class="form-group">
-                        <label>Estado</label>
-                        <select id="edit_asignado" name="asignado" class="form-control">
-                            <option value="">Seleccionar</option>
-                            <option value="Confirmo">Confirmo</option>
-                            <option value="No Confirmo">No Confirmo</option>
-                            <option value="Pendiente Confirmacion">Pendiente Confirmacion</option>
-                            <option value="Agendado">Agendado</option>
-                        </select>
-                    </div>
+                            <div class="form-group">
+                                <label>Estado</label>
+                                <select id="edit_asignado" name="asignado" class="form-control">
+                                    <option value="">Seleccionar</option>
+                                    <option value="Confirmo">Confirmo</option>
+                                    <option value="Rechazo">Rechazo el turno</option>
+                                    <option value="Pendiente">Pendiente de Confirmacion</option>
+                                    <option value="No respondio">No respondio</option>
+                                    <option value="Agendado">Agendado</option>
+                                </select>
+                            </div>
 
+
+
+                        </div>
+
+                        <!-- COLUMNA DERECHA -->
+                        <div class="col-md-6">
+
+                            <div class="form-group">
+                                <label>Derivación</label>
+                                <input type="text" id="edit_derivacion" name="derivacion" class="form-control">
+                            </div>
+
+                            <div class="form-group">
+                                <label>Horario</label>
+                                <input type="text" id="edit_horario" name="horario" class="form-control required">
+                            </div>
+
+
+                            <div class="form-group">
+                                <label>Edad</label>
+                                <input type="number" id="edit_edad" name="edad" class="form-control required">
+                            </div>
+                            <div class="form-group">
+                                <label>Notas</label>
+                                <textarea id="edit_nota" name="nota" class="form-control" rows="4"></textarea>
+                            </div>
+
+                        </div>
+
+                    </div>
                 </div>
 
                 <div class="modal-footer">
@@ -180,86 +215,94 @@ $registros = obtenerListaEspera($conexion, $especialidad);
     </div>
 </div>
 <script>
-    $(function(){
+    $(function() {
 
-    let tabla = $('.datatable').DataTable();
+        let tabla = $('.datatable').DataTable({
+    order: [[0, 'desc']], // ordenar por ID
+    columnDefs: [
+        { targets: 0, visible: false } // ocultar ID
+    ]
+});
+        /* ================= EDITAR ================= */
+        $(document).on('click', '.btnEdit', function() {
 
-    /* ================= EDITAR ================= */
-    $(document).on('click','.btnEdit',function(){
+            $('#edit_id').val($(this).data('id'));
+            $('#edit_nombre').val($(this).data('nombre'));
+            $('#edit_apellido').val($(this).data('apellido'));
+            $('#edit_celular').val($(this).data('celular'));
+            $('#edit_edad').val($(this).data('edad'));
+            $('#edit_derivacion').val($(this).data('derivacion'));
+            $('#edit_horario').val($(this).data('horario'));
+            $('#edit_profesional').val($(this).data('profesional'));
+            $('#edit_nota').val($(this).data('nota'));
+            $('#edit_asignado').val($(this).data('asignado'));
 
-        $('#edit_id').val($(this).data('id'));
-        $('#edit_nombre').val($(this).data('nombre'));
-        $('#edit_apellido').val($(this).data('apellido'));
-        $('#edit_celular').val($(this).data('celular'));
-        $('#edit_edad').val($(this).data('edad'));
-        $('#edit_horario').val($(this).data('horario'));
-        $('#edit_profesional').val($(this).data('profesional'));
-        $('#edit_asignado').val($(this).data('asignado'));
+            $('#modalEditar').modal('show');
+        });
 
-        $('#modalEditar').modal('show');
-    });
+        /* ================= GUARDAR EDIT ================= */
+        $('#formEditar').submit(function(e) {
+            e.preventDefault();
 
-    /* ================= GUARDAR EDIT ================= */
-    $('#formEditar').submit(function(e){
-        e.preventDefault();
+            $.post('ajax/lista_espera_update.php', $(this).serialize(), function(resp) {
 
-        $.post('ajax/lista_espera_update.php', $(this).serialize(), function(resp){
+                if (resp.success) {
 
-            if(resp.success){
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Actualizado',
+                        timer: 1200,
+                        showConfirmButton: false
+                    });
 
-                Swal.fire({
-                    icon:'success',
-                    title:'Actualizado',
-                    timer:1200,
-                    showConfirmButton:false
-                });
+                    setTimeout(() => location.reload(), 1200);
 
-                setTimeout(()=>location.reload(),1200);
+                } else {
+                    Swal.fire('Error', resp.message, 'error');
+                }
 
-            }else{
-                Swal.fire('Error',resp.message,'error');
-            }
+            }, 'json');
+        });
 
-        },'json');
-    });
+        /* ================= ELIMINAR ================= */
+        $(document).on('click', '.btnDelete', function() {
 
-    /* ================= ELIMINAR ================= */
-    $(document).on('click','.btnDelete',function(){
+            let id = $(this).data('id');
+            let fila = $(this).closest('tr');
 
-        let id = $(this).data('id');
-        let fila = $(this).closest('tr');
+            Swal.fire({
+                title: '¿Eliminar paciente?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, eliminar'
+            }).then((r) => {
 
-        Swal.fire({
-            title:'¿Eliminar paciente?',
-            icon:'warning',
-            showCancelButton:true,
-            confirmButtonText:'Sí, eliminar'
-        }).then((r)=>{
+                if (r.isConfirmed) {
 
-            if(r.isConfirmed){
+                    $.post('ajax/lista_espera_delete.php', {
+                        id: id
+                    }, function(resp) {
 
-                $.post('ajax/lista_espera_delete.php',{id:id},function(resp){
+                        if (resp.success) {
+                            tabla.row(fila).remove().draw();
 
-                    if(resp.success){
-                        tabla.row(fila).remove().draw();
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Eliminado',
+                                timer: 1200,
+                                showConfirmButton: false
+                            });
+                        } else {
+                            Swal.fire('Error', resp.message, 'error');
+                        }
 
-                        Swal.fire({
-                            icon:'success',
-                            title:'Eliminado',
-                            timer:1200,
-                            showConfirmButton:false
-                        });
-                    }else{
-                        Swal.fire('Error',resp.message,'error');
-                    }
+                    }, 'json');
 
-                },'json');
+                }
 
-            }
+            });
 
         });
 
     });
-
-});
 </script>

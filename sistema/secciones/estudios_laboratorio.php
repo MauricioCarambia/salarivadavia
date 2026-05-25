@@ -62,10 +62,10 @@ $laboratorio = $pdo->query("
                     <div>
                         <button id="btn_resumen" class="btn btn-info btn-sm">
                             <i class="fa fa-calculator"></i> Ver resumen
-                       
-                        <button id="btn_limpiar" class="btn btn-danger btn-sm">
-                            <i class="fa fa-times"></i> Limpiar
-                        </button>
+
+                            <button id="btn_limpiar" class="btn btn-danger btn-sm">
+                                <i class="fa fa-times"></i> Limpiar
+                            </button>
                     </div>
                 </div>
                 <div class="mb-3">
@@ -108,13 +108,45 @@ $laboratorio = $pdo->query("
 
 
 <script>
-    $(document).ready(function () {
+    document.addEventListener("DOMContentLoaded", function() {
+
+        if (typeof qz === "undefined") {
+            console.error("QZ no está cargado");
+            return;
+        }
+
+        qz.security.setCertificatePromise(function(resolve, reject) {
+            fetch("certificado/certificate.pem")
+                .then(res => res.text())
+                .then(resolve)
+                .catch(reject);
+        });
+
+        qz.security.setSignaturePromise(function(toSign) {
+            return function(resolve, reject) {
+                fetch("certificado/firma.php", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            request: toSign
+                        })
+                    })
+                    .then(res => res.text())
+                    .then(resolve)
+                    .catch(reject);
+            };
+        });
+
+    });
+    $(document).ready(function() {
 
         function calcularTotal() {
 
             let suma = 0;
 
-            $('.checkbox_lab:checked').each(function () {
+            $('.checkbox_lab:checked').each(function() {
                 suma += parseFloat($(this).val()) || 0;
             });
 
@@ -124,7 +156,7 @@ $laboratorio = $pdo->query("
         // =========================
         // CLICK EN CARD
         // =========================
-        $('.item-estudio').click(function (e) {
+        $('.item-estudio').click(function(e) {
 
             if (e.target.tagName !== 'INPUT') {
                 let checkbox = $(this).find('.checkbox_lab');
@@ -136,7 +168,7 @@ $laboratorio = $pdo->query("
         // =========================
         // SELECCION VISUAL
         // =========================
-        $('.checkbox_lab').change(function () {
+        $('.checkbox_lab').change(function() {
 
             let card = $(this).closest('.item-estudio');
 
@@ -152,11 +184,11 @@ $laboratorio = $pdo->query("
         // =========================
         // BUSCADOR EN TIEMPO REAL
         // =========================
-        $('#buscador_estudios').on('keyup', function () {
+        $('#buscador_estudios').on('keyup', function() {
 
             let texto = $(this).val().toLowerCase();
 
-            $('.item-estudio').each(function () {
+            $('.item-estudio').each(function() {
 
                 let nombre = $(this).find('strong').text().toLowerCase();
 
@@ -173,7 +205,7 @@ $laboratorio = $pdo->query("
         // =========================
         // LIMPIAR
         // =========================
-        $('#btn_limpiar').click(function () {
+        $('#btn_limpiar').click(function() {
 
             $('.checkbox_lab').prop('checked', false);
             $('.item-estudio').removeClass('activo');
@@ -184,47 +216,47 @@ $laboratorio = $pdo->query("
         // =========================
         // RESUMEN
         // =========================
-     $('#btn_resumen').click(function () {
+        $('#btn_resumen').click(function() {
 
-    let seleccionados = [];
-    let total = 0;
+            let seleccionados = [];
+            let total = 0;
 
-    $('.checkbox_lab:checked').each(function () {
+            $('.checkbox_lab:checked').each(function() {
 
-        let nombre = $(this).closest('.item-estudio').find('strong').text();
-        let valor = parseFloat($(this).val());
+                let nombre = $(this).closest('.item-estudio').find('strong').text();
+                let valor = parseFloat($(this).val());
 
-        total += valor;
+                total += valor;
 
-        seleccionados.push({
-            nombre: nombre,
-            valor: valor
-        });
+                seleccionados.push({
+                    nombre: nombre,
+                    valor: valor
+                });
 
-    });
+            });
 
-    if (!seleccionados.length) {
-        Swal.fire('Atención', 'No seleccionaste estudios', 'warning');
-        return;
-    }
+            if (!seleccionados.length) {
+                Swal.fire('Atención', 'No seleccionaste estudios', 'warning');
+                return;
+            }
 
-    // =========================
-    // HTML RESUMEN
-    // =========================
-    let html = `
+            // =========================
+            // HTML RESUMEN
+            // =========================
+            let html = `
         <div style="text-align:left;">
     `;
 
-    seleccionados.forEach(item => {
-        html += `
+            seleccionados.forEach(item => {
+                html += `
         <div style="display:flex; justify-content:space-between;">
             <span>${item.nombre}</span>
             <strong>$ ${item.valor.toLocaleString('es-AR')}</strong>
         </div>
         `;
-    });
+            });
 
-    html += `
+            html += `
         <hr>
         <div style="display:flex; justify-content:space-between; font-size:16px;">
             <strong>Total</strong>
@@ -233,103 +265,119 @@ $laboratorio = $pdo->query("
     </div>
     `;
 
-    // =========================
-    // SWEET ALERT CON BOTÓN IMPRIMIR
-    // =========================
-    Swal.fire({
-        title: 'Resumen de estudios',
-        html: html,
-        width: 500,
-        showCancelButton: true,
-        confirmButtonText: 'Imprimir ticket 🧾',
-        cancelButtonText: 'Cerrar',
-        confirmButtonColor: '#3498DB'
-    }).then(result => {
+            // =========================
+            // SWEET ALERT CON BOTÓN IMPRIMIR
+            // =========================
+            Swal.fire({
+                title: 'Resumen de estudios',
+                html: html,
+                width: 500,
+                showCancelButton: true,
+                confirmButtonText: 'Imprimir ticket 🧾',
+                cancelButtonText: 'Cerrar',
+                confirmButtonColor: '#3498DB'
+            }).then(result => {
 
-        if (result.isConfirmed) {
+                if (result.isConfirmed) {
 
-            imprimirTicket(seleccionados, total);
+                    imprimirTicketLab(seleccionados, total);
 
+                }
+
+            });
+
+        });
+
+        async function imprimirTicketLab(items, total) {
+
+            try {
+
+                if (!qz.websocket.isActive()) {
+                    await qz.websocket.connect();
+                }
+
+                const config = qz.configs.create("POS-80C", {
+                    encoding: 'CP437'
+                });
+
+                let contenido = [];
+
+                function linea(nombre, valor) {
+
+                    let left = nombre.substring(0, 30);
+                    let right = "$" + parseFloat(valor).toFixed(2);
+
+                    let spaces = 48 - (left.length + right.length);
+                    if (spaces < 1) spaces = 1;
+
+                    return left + " ".repeat(spaces) + right;
+                }
+
+              /* ENCABEZADO CON LOGO */
+            contenido.push("\x1B\x61\x01"); // Centrado
+
+            // 1. Insertar la imagen (puede ser URL o Base64)
+            contenido.push({
+                type: 'pixel',
+                format: 'png', // o 'png'
+                flavor: 'file',
+                data: 'images/logo_blanco_negro.png', // Ruta relativa, absoluta o base64
+                options: {
+                    language: "ESCPOS",
+                    dotDensity: "double"
+                }
+            });
+
+            //             const logo = {
+            //    type: 'pixel',
+            //    format: 'png',
+            //    flavor: 'file',
+            //    data: 'https://tuweb.com/logo.png',
+            //    options: { 
+            //       language: "ESCPOS", 
+            //       dotDensity: "double",
+            //       width: 200 // Ajusta el tamaño en píxeles según tu papel de 80mm
+            //    }
+            // };
+
+            // // Luego en tu función:
+            // let contenido = [logo, "\x1B\x61\x01", "SALA RIVADAVIA\n", ...];
+
+            contenido.push("\n"); // Salto de línea después del logo
+            // contenido.push("\x1B\x61\x01");
+            contenido.push("SALA RIVADAVIA\n");
+                contenido.push("LABORATORIO\n");
+                contenido.push("Av. Eva Perón 695\n");
+                contenido.push("Temperley\n");
+                contenido.push("Fecha: " + new Date().toLocaleString() + "\n");
+                contenido.push("------------------------------------------\n");
+
+                /* ================= DETALLE ================= */
+                contenido.push("\x1B\x61\x00");
+
+                items.forEach(i => {
+                    contenido.push(linea(i.nombre, i.valor) + "\n");
+                });
+
+                contenido.push("------------------------------------------\n");
+
+                /* ================= TOTAL ================= */
+                contenido.push("\x1B\x61\x02");
+                contenido.push("TOTAL: $" + parseFloat(total).toFixed(2) + "\n");
+
+                contenido.push("\x1B\x61\x01");
+                contenido.push("\nGracias por su visita\n");
+
+                /* ================= CORTE ================= */
+                contenido.push("\n\n\n");
+                contenido.push("\x1D\x56\x00");
+
+                await qz.print(config, contenido);
+
+            } catch (err) {
+                console.error("ERROR IMPRESIÓN LAB:", err);
+                Swal.fire("Error", "No se pudo imprimir", "error");
+            }
         }
-
-    });
-
-});
-function imprimirTicket(items, total) {
-
-    let contenido = `
-    <html>
-    <head>
-        <style>
-            body {
-                font-family: monospace;
-                font-size: 12px;
-                width: 250px;
-                padding: 10px;
-            }
-
-            .center { text-align:center; }
-            .line { border-top:1px dashed #000; margin:5px 0; }
-
-            .row {
-                display:flex;
-                justify-content:space-between;
-            }
-
-            .total {
-                font-weight:bold;
-                font-size:14px;
-            }
-        </style>
-    </head>
-    <body>
-
-        <div class="center">
-            <strong>Sala Bernardino Rivadavia</strong><br>
-              <strong>Presupuesto Laboratorio</strong><br>
-            ${new Date().toLocaleString()}
-        </div>
-
-        <div class="line"></div>
-    `;
-
-    items.forEach(i => {
-        contenido += `
-        <div class="row">
-            <span>${i.nombre}</span>
-            <span>$ ${i.valor.toLocaleString('es-AR')}</span>
-        </div>
-        `;
-    });
-
-    contenido += `
-        <div class="line"></div>
-
-        <div class="row total">
-            <span>TOTAL</span>
-            <span>$ ${total.toLocaleString('es-AR')}</span>
-        </div>
-
-        <div class="line"></div>
-
-        <div class="center">
-            Gracias
-        </div>
-
-    </body>
-    </html>
-    `;
-
-    let w = window.open('', '', 'blank');
-    w.document.write(contenido);
-    w.document.close();
-
-    w.onload = () => {
-        setTimeout(() => {
-            w.print();
-            w.close();
-        }, 300);
-    };
-}
     });
 </script>

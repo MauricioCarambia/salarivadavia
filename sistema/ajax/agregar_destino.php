@@ -1,16 +1,20 @@
 <?php
-require_once '../inc/db.php';
+require_once __DIR__ . '/../inc/db.php';
 
 header('Content-Type: application/json');
 
-$destino   = strtolower(trim($_POST['destino'] ?? ''));
-$tipo      = strtolower(trim($_POST['tipo'] ?? 'egreso')); // ingreso | egreso
-$categoria = strtolower(trim($_POST['categoria'] ?? 'normal')); // normal | profesional | fondo
+$data = json_decode(file_get_contents("php://input"), true);
 
-/* =========================
-   VALIDACIONES
-========================= */
-if (!$destino) {
+if (!$data) {
+    $data = $_POST;
+}
+
+$nombre    = strtolower(trim($data['nombre'] ?? ''));
+$tipo      = strtolower(trim($data['tipo'] ?? 'egreso'));
+$categoria = strtolower(trim($data['categoria'] ?? 'caja'));
+$id        = $data['id'] ?? null;
+
+if (!$nombre) {
     echo json_encode([
         'success' => false,
         'message' => 'El nombre del destino es obligatorio'
@@ -18,62 +22,34 @@ if (!$destino) {
     exit;
 }
 
-$tiposValidos = ['ingreso', 'egreso'];
-if (!in_array($tipo, $tiposValidos)) {
-    echo json_encode([
-        'success' => false,
-        'message' => 'Tipo inválido'
-    ]);
-    exit;
-}
-
-$categoriasValidas = ['normal', 'profesional', 'fondo'];
-if (!in_array($categoria, $categoriasValidas)) {
-    echo json_encode([
-        'success' => false,
-        'message' => 'Categoría inválida'
-    ]);
-    exit;
-}
-
 try {
 
-    /* =========================
-       VALIDAR EXISTENCIA
-    ========================= */
-    $stmt = $pdo->prepare("
-        SELECT id 
-        FROM destinos_reparto 
-        WHERE LOWER(TRIM(nombre)) = ?
-        LIMIT 1
-    ");
-    $stmt->execute([$destino]);
+    if ($id) {
 
-    if ($stmt->fetch()) {
-        echo json_encode([
-            'success' => false,
-            'message' => 'El destino ya existe'
-        ]);
-        exit;
+        // ======================
+        // UPDATE
+        // ======================
+        $stmt = $pdo->prepare("
+            UPDATE destinos_reparto 
+            SET nombre = ?, tipo = ?, categoria = ?
+            WHERE id = ?
+        ");
+        $stmt->execute([$nombre, $tipo, $categoria, $id]);
+
+    } else {
+
+        // ======================
+        // INSERT
+        // ======================
+        $stmt = $pdo->prepare("
+            INSERT INTO destinos_reparto (nombre, tipo, categoria)
+            VALUES (?, ?, ?)
+        ");
+        $stmt->execute([$nombre, $tipo, $categoria]);
     }
 
-    /* =========================
-       INSERTAR
-    ========================= */
-    $stmt = $pdo->prepare("
-        INSERT INTO destinos_reparto (nombre, tipo, categoria) 
-        VALUES (?, ?, ?)
-    ");
-    $stmt->execute([$destino, $tipo, $categoria]);
-
-    $id = $pdo->lastInsertId();
-
     echo json_encode([
-        'success' => true,
-        'id' => $id,
-        'nombre' => ucfirst($destino),
-        'tipo' => $tipo,
-        'categoria' => $categoria
+        'success' => true
     ]);
 
 } catch (PDOException $e) {

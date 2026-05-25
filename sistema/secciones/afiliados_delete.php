@@ -19,6 +19,7 @@
           $confirmar = $_GET['confirmar'] ?? '';
           $id  = $_GET['id']  ?? 0;
           $pid = $_GET['pid'] ?? 0;
+          $rand = $_GET['nc'] ?? '';
 
           if($confirmar == 'si'){
 

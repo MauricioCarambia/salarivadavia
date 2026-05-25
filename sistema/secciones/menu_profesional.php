@@ -80,6 +80,9 @@ function renderMenu($menuItems, $seccion, $rand)
 // =============================
 if (isset($_SESSION["tipo"]) && $_SESSION["tipo"] === 'profesional') {
 
+    $seccion = $_GET['seccion'] ?? '';
+    $rand = rand(1000, 9999);
+
     $menuItems = [
 
         [

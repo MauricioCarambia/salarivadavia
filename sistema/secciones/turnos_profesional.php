@@ -1,6 +1,6 @@
 <?php
 date_default_timezone_set('America/Argentina/Buenos_Aires');
-require_once 'inc/db.php';
+require_once __DIR__ . '/../inc/db.php';
 
 $profesionalId = $_SESSION['user_id'] ?? 0;
 $rand = random_int(1000, 9999);

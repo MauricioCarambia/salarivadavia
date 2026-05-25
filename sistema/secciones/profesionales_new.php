@@ -287,7 +287,7 @@ $provincias = [
                             value="<?= htmlspecialchars($campos['matricula_provincial']) ?>">
                     </div>
                     <div class="form-group col-md-4">
-                        <label>Porcentaje % <span class="text-danger">*</span></label>
+                        <label>Porcentaje %</label>
                         <input type="number" min="0" step="0.01" name="porcentaje" class="form-control"
                             value="<?= htmlspecialchars($campos['porcentaje']) ?>">
                     </div>
@@ -344,19 +344,7 @@ $provincias = [
                     </div>
                 </div>
 
-                <!-- Vacaciones -->
-                <div class="form-row">
-                    <div class="form-group col-md-6">
-                        <label>Vacaciones desde</label>
-                        <input type="date" name="vacaciones_desde" class="form-control"
-                            value="<?= htmlspecialchars($campos['vacaciones_desde']) ?>">
-                    </div>
-                    <div class="form-group col-md-6">
-                        <label>Vacaciones hasta</label>
-                        <input type="date" name="vacaciones_hasta" class="form-control"
-                            value="<?= htmlspecialchars($campos['vacaciones_hasta']) ?>">
-                    </div>
-                </div>
+               
 
                 <!-- Comentario -->
                 <div class="form-group">

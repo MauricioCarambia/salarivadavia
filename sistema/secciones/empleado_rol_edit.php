@@ -1,5 +1,5 @@
 <?php
-require_once "inc/db.php";
+require_once __DIR__ . '/../inc/db.php';
 
 $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
@@ -23,8 +23,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt = $conexion->prepare("UPDATE empleados SET rol_id = :rol_id WHERE id = :id");
     $stmt->execute([':rol_id' => $nuevo_rol, ':id' => $id]);
     $empleado['rol_id'] = $nuevo_rol; // actualizar variable en memoria
-    $nombre = $nuevo_nombre;
-    $accesos_actuales = $accesos;
     echo '<script>
             window.location.href = "./?seccion=empleado&v=ok&nc=' . rand() . '";
         </script>';

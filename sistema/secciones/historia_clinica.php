@@ -165,9 +165,9 @@ function mostrarCampo($label, $valor)
                                             <button class="btn btn-success btn-sm" onclick="abrirHCModal(<?= (int) $hc['Id'] ?>)">
                                                 <i class="fa fa-edit"></i>
                                             </button>
-                                            <button class="btn btn-danger btn-sm" onclick="eliminarHC(<?= $hc['Id'] ?>)">
+                                            <!-- <button class="btn btn-danger btn-sm" onclick="eliminarHC(<?= $hc['Id'] ?>)">
                                                 <i class="fa fa-trash"></i>
-                                            </button>
+                                            </button> -->
                                         <?php else: ?>
                                             <!-- celda vacía pero EXISTE -->
                                             &nbsp;

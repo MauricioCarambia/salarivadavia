@@ -89,8 +89,11 @@ function renderMenu($menuItems, $seccion, $rand)
             <?php
         } else {
 
-            $isActive = isset($item['seccion']) && ($seccion === $item['seccion']);
-            $url = $item['url'] ?? "./?seccion={$item['seccion']}&nc={$rand}";
+            $isLogout = isset($item['url']); // 👉 si tiene URL, es acción (logout)
+
+$isActive = (!$isLogout && isset($item['seccion']) && $seccion === $item['seccion']);
+
+$url = $item['url'] ?? "./?seccion={$item['seccion']}&nc={$rand}";
             ?>
 
             <li class="nav-item">
@@ -136,7 +139,7 @@ $menuItems = [
         ]
     ],
 
-    ['seccion' => 'estadisticas', 'label' => 'Estadísticas', 'icon' => 'fas fa-chart-bar', 'permiso' => 'estadisticas'],
+    // ['seccion' => 'estadisticas', 'label' => 'Estadísticas', 'icon' => 'fas fa-chart-bar', 'permiso' => 'estadisticas'],
 
     [
         'label' => 'Estudios',
@@ -214,21 +217,27 @@ $menuItems = [
     ]
 ],
 [
-    'label' => 'Administracion',
-    'icon' => 'fas fa-chart-pie', // ⚙️ configuración
-    'permiso' => 'administrar_sistema',
+    'label' => 'Arrastre',
+    'icon' => 'fas fa-arrows-alt', // ⚙️ panel/configuración
+    'permiso' => 'arrastre',
     'submenu' => [
         [
-            'seccion' => 'arqueo',
-            'label' => 'Arqueo',
-            'icon' => 'fas fa-stethoscope', // 🩺 médico
-            'permiso' => 'administrar_sistema'
+            'seccion' => 'arrastre',
+            'label' => 'Arrastre',
+            'icon' => 'fas fa-random', // 🔄 movimiento/transferencia
+            'permiso' => 'arrastre'
+        ],
+        [
+            'seccion' => 'egresos',
+            'label' => 'Egresos',
+            'icon' => 'fas fa-file-invoice-dollar', // 📄💸 gastos
+            'permiso' => 'arrastre'
         ],
         [
             'seccion' => 'articulos',
-            'label' => 'Articulos',
-            'icon' => 'fas fa-dollar-sign', // 💲 precios
-            'permiso' => 'administrar_sistema'
+            'label' => 'Artículos',
+            'icon' => 'fas fa-boxes', // 📦 inventario
+            'permiso' => 'arrastre'
         ]
     ]
 ],
@@ -243,6 +252,10 @@ $menuItems = [
 
 <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
 
-    <?php renderMenu($menuItems, $seccion, $rand); ?>
+    <?php
+    $seccion = $_GET['seccion'] ?? 'inicio';
+    $rand = $_GET['nc'] ?? time();
+    renderMenu($menuItems, $seccion, $rand);
+    ?>
 
 </ul>

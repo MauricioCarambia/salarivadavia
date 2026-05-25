@@ -1,12 +1,109 @@
 <?php
-require_once __DIR__ . '/../inc/db.php';
 
+require_once __DIR__ . '/../inc/db.php';
+/* =================================
+    👤 USUARIO Y ROL
+================================= */
 $usuarioId = $_SESSION['user_id'] ?? null;
+
+$stmt = $pdo->prepare("
+    SELECT r.nombre as rol
+    FROM empleados e
+    INNER JOIN roles r ON r.id = e.rol_id
+    WHERE e.id = ?
+");
+$stmt->execute([$usuarioId]);
+$rol = $stmt->fetchColumn();
+$esAdmin = ($rol === 'Administrador');
+
 if (!$usuarioId) {
     header("Location: login.php");
     exit;
 }
+/* =================================
+    📅 FILTROS
+================================= */
+$hoy = date('Y-m-d');
 
+$desde = $_GET['desde'] ?? $hoy;
+$hasta = $_GET['hasta'] ?? $hoy;
+$caja_id = $_GET['caja_id'] ?? null;
+$turno = $_GET['turno'] ?? null;
+$usuarioFiltro = $_GET['usuario_id'] ?? null;
+
+/* =================================
+    🧠 QUERY DINÁMICA
+================================= */
+$where = [];
+$params = [];
+
+if ($desde) {
+    $where[] = "DATE(cs.fecha_apertura) >= ?";
+    $params[] = $desde;
+}
+
+if ($hasta) {
+    $where[] = "DATE(cs.fecha_apertura) <= ?";
+    $params[] = $hasta;
+}
+
+if ($caja_id) {
+    $where[] = "cs.caja_id = ?";
+    $params[] = $caja_id;
+}
+
+if ($turno) {
+    $where[] = "cs.turno = ?";
+    $params[] = $turno;
+}
+
+if ($usuarioFiltro) {
+    $where[] = "cs.usuario_id = ?";
+    $params[] = $usuarioFiltro;
+}
+
+/* 🔥 ARMAR WHERE */
+$whereSQL = "";
+if (!empty($where)) {
+    $whereSQL = "WHERE " . implode(" AND ", $where);
+}
+
+/* =================================
+    📊 CONSULTA FINAL
+================================= */
+$sql = "
+SELECT 
+    cs.id,
+    cs.caja_id,
+    cs.turno,
+    cs.estado,
+    cs.fecha_apertura,
+    cs.fecha_cierre,
+    cs.monto_inicial,
+cs.usuario_id,
+    c.nombre AS caja_nombre,
+    u.nombre AS nombre_usuario,
+
+    ac.total_sistema,
+    ac.total_caja,
+    ac.total_fondo,
+    ac.total_real,
+    ac.diferencia
+
+FROM caja_sesion cs
+JOIN cajas c ON c.id = cs.caja_id
+LEFT JOIN empleados u ON u.id = cs.usuario_id
+LEFT JOIN arqueos_caja ac ON ac.caja_sesion_id = cs.id
+
+$whereSQL
+
+ORDER BY cs.fecha_cierre DESC
+";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+
+$historialSesiones = $stmt->fetchAll(PDO::FETCH_ASSOC);
 if (!function_exists('obtenerCajaAbierta')) {
     function obtenerCajaAbierta($pdo, $usuarioId)
     {
@@ -37,35 +134,52 @@ function obtenerCajaSesionActiva($pdo, $usuarioId)
     return $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
-$stmt = $pdo->query("
-    SELECT 
-        cs.id,
-        cs.caja_id,
-        cs.turno,
-        cs.estado,
-        cs.fecha_apertura,
-        cs.fecha_cierre,
-        cs.monto_inicial,
 
-        c.nombre AS caja_nombre,
-        u.nombre AS nombre_usuario,
-
-        ac.total_sistema,
-        ac.total_real,
-        ac.diferencia
-
-    FROM caja_sesion cs
-    JOIN cajas c ON c.id = cs.caja_id
-    LEFT JOIN empleados u ON u.id = cs.usuario_id
-
-    LEFT JOIN arqueos_caja ac 
-        ON ac.caja_sesion_id = cs.id
-
-    ORDER BY cs.fecha_cierre DESC
-");
-$historialSesiones = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
-
+<div class="card card-outline card-info p-3 mb-3">
+    <form method="get" class="row">
+        <input type="hidden" name="seccion" value="cajas">
+        <?php if ($esAdmin): ?>
+            <div class="col-md-2"><label>Desde</label><input type="date" name="desde" value="<?= $desde ?>" class="form-control"></div>
+            <div class="col-md-2"><label>Hasta</label><input type="date" name="hasta" value="<?= $hasta ?>" class="form-control"></div>
+        <?php endif; ?>
+        <div class="col-md-2">
+            <label>Caja</label>
+            <select name="caja_id" class="form-control">
+                <option value="">Todas</option>
+                <?php foreach ($pdo->query("SELECT id, nombre FROM cajas")->fetchAll() as $cj): ?>
+                    <option value="<?= $cj['id'] ?>" <?= $caja_id == $cj['id'] ? 'selected' : '' ?>><?= $cj['nombre'] ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label>Turno</label>
+            <select name="turno" class="form-control">
+                <option value="">Todos</option>
+                <option value="mañana" <?= $turno == 'mañana' ? 'selected' : '' ?>>Mañana</option>
+                <option value="tarde" <?= $turno == 'tarde' ? 'selected' : '' ?>>Tarde</option>
+            </select>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label>Empleado</label>
+            <select name="usuario_id" class="form-control">
+                <option value="">Todos</option>
+                <?php foreach ($pdo->query("SELECT id, nombre FROM empleados ORDER BY nombre")->fetchAll() as $emp): ?>
+                    <option value="<?= $emp['id'] ?>" <?= $usuarioFiltro == $emp['id'] ? 'selected' : '' ?>><?= htmlspecialchars($emp['nombre']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="col-md-1 d-flex align-items-end">
+            <button class="btn btn-primary w-100">Filtrar</button>
+        </div>
+        <div class="col-md-1 d-flex align-items-end">
+            <a href="?seccion=<?= $_GET['seccion'] ?? '' ?>" class="btn btn-secondary w-100">
+                Limpiar
+            </a>
+        </div>
+    </form>
+</div>
 <!-- Tabla principal -->
 <div class="row mb-3">
     <div class="col-12">
@@ -114,6 +228,10 @@ $historialSesiones = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                                     <td class="text-center">
                                         <div class="btn-group">
+                                            <?php
+                                            $puedeCerrar = $sesionActiva && $sesionActiva['usuario_id'] == $usuarioId;
+                                            ?>
+
                                             <?php if (!$sesionActiva): ?>
                                                 <button class="btn btn-info btn-sm abrir-caja"
                                                     data-id="<?= $c['id'] ?>"
@@ -121,10 +239,16 @@ $historialSesiones = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                                     Abrir
                                                 </button>
                                             <?php else: ?>
-                                                <button class="btn btn-warning btn-sm cerrar-caja"
-                                                    data-sesion-id="<?= $sesionActiva['id'] ?>">
-                                                    Cerrar
-                                                </button>
+
+                                                <?php if ($puedeCerrar): ?>
+                                                    <button class="btn btn-warning btn-sm cerrar-caja"
+                                                        data-sesion-id="<?= $sesionActiva['id'] ?>">
+                                                        Cerrar
+                                                    </button>
+                                                <?php else: ?>
+                                                    <span class="badge badge-secondary">Solo el usuario que abrió puede cerrar</span>
+                                                <?php endif; ?>
+
                                             <?php endif; ?>
 
                                             <button class="btn btn-success btn-sm editar-caja rounded-circle"
@@ -264,9 +388,10 @@ $historialSesiones = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     </div>
                     <div class="form-group">
                         <label>Turno</label>
-                        <select class="form-control" id="turnoCaja">
-                            <option value="Mañana">Mañana</option>
-                            <option value="Tarde">Tarde</option>
+                        <select class="form-control" id="turnoCaja" required>
+                            <option value="" disabled selected>Selecciona turno...</option>
+                            <option value="mañana">Mañana</option>
+                            <option value="tarde">Tarde</option>
                         </select>
                     </div>
                 </div>
@@ -309,19 +434,27 @@ $historialSesiones = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </form>
     </div>
 </div>
-
 <script>
     $(document).ready(function() {
+
         let cerrarCajaId = null;
         let totalSistemaGlobal = 0;
         let montoInicialGlobal = 0;
+        let cajaEsperadaGlobal = 0;
+        let totalFondoGlobal = 0;
+        let ingEfGlobal = 0;
+        let egrEfGlobal = 0;
+        let egrProfGlobal = 0;
 
+        // ==========================
+        // CERRAR CAJA (CLICK)
+        // ==========================
         $(".cerrar-caja").click(function() {
 
             cerrarCajaId = $(this).data("sesion-id");
 
             $("#montoReal").val('');
-            $("#diferencia").html("");
+            $("#diferencia").html("Cargando...");
 
             $.ajax({
                 url: "ajax/obtener_total_sistema.php",
@@ -336,14 +469,16 @@ $historialSesiones = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                         totalSistemaGlobal = parseFloat(data.total_sistema);
                         montoInicialGlobal = parseFloat(data.monto_inicial);
+                        cajaEsperadaGlobal = parseFloat(data.caja_esperada);
+                        totalFondoGlobal = parseFloat(data.total_fondo ?? 0);
 
-                        const cajaEsperada = montoInicialGlobal + totalSistemaGlobal;
+                        ingEfGlobal = parseFloat(data.ingresos_efectivo ?? 0);
+                        egrEfGlobal = parseFloat(data.egresos_efectivo ?? 0);
+                        egrProfGlobal = parseFloat(data.egresos_profesionales_efectivo ?? 0);
 
-                        $("#diferencia").html(`
-                        Monto inicial: <strong>${montoInicialGlobal.toFixed(2)}</strong><br>
-                        Total sistema: <strong>${totalSistemaGlobal.toFixed(2)}</strong><br>
-                        Caja esperada: <strong>${cajaEsperada.toFixed(2)}</strong>
-                    `);
+                        renderDetalle(null);
+                    } else {
+                        $("#diferencia").html("Error al obtener datos");
                     }
                 }
             });
@@ -351,69 +486,98 @@ $historialSesiones = $stmt->fetchAll(PDO::FETCH_ASSOC);
             $("#cerrarCajaModal").modal("show");
         });
 
-        // 🔥 cálculo en vivo
-        $("#montoReal").on("input", function() {
+        // ==========================
+        // RENDER DETALLE
+        // ==========================
+        function renderDetalle(montoReal) {
 
-            const montoReal = parseFloat($(this).val());
+            let diff = 0;
+            let color = "secondary";
 
-            const cajaEsperada = montoInicialGlobal + totalSistemaGlobal;
+            if (montoReal !== null && !isNaN(montoReal)) {
+                diff = montoReal - (cajaEsperadaGlobal + totalFondoGlobal);
 
-            if (isNaN(montoReal)) {
-                $("#diferencia").html(`
-                Monto inicial: <strong>${montoInicialGlobal.toFixed(2)}</strong><br>
-                Total sistema: <strong>${totalSistemaGlobal.toFixed(2)}</strong><br>
-                Caja esperada: <strong>${cajaEsperada.toFixed(2)}</strong>
-            `);
-                return;
+                if (diff > 0) color = "success";
+                if (diff < 0) color = "danger";
             }
 
-            const diff = montoReal - cajaEsperada;
-
-            // 🔥 color automático
-            let color = "secondary";
-            if (diff > 0) color = "success";
-            if (diff < 0) color = "danger";
-
             $("#diferencia").html(`
-            Monto inicial: <strong>${montoInicialGlobal.toFixed(2)}</strong><br>
-            Total sistema: <strong>${totalSistemaGlobal.toFixed(2)}</strong><br>
-            Caja esperada: <strong>${cajaEsperada.toFixed(2)}</strong><br>
-            Diferencia: <span class="badge badge-${color}">
-                ${diff.toFixed(2)}
-            </span>
-        `);
+        <div class="mb-2">
+            <strong>Caja</strong><br>
+            Inicial: <strong>$${montoInicialGlobal.toFixed(2)}</strong><br>
+           
+            Caja: 
+            <strong class="text-primary">
+                $${cajaEsperadaGlobal.toFixed(2)}
+            </strong>
+        </div>
+
+        <div class="mb-2">
+            Fondo: 
+            <strong class="text-info">
+                $${totalFondoGlobal.toFixed(2)}
+            </strong>
+        </div>
+
+        <div class="mb-2">
+            Total:
+            <strong class="text-success">
+                $${(cajaEsperadaGlobal + totalFondoGlobal).toFixed(2)}
+            </strong><br>
+
+         
+        </div>
+
+        ${
+            montoReal !== null
+            ? `<div>
+                    <strong>Diferencia:</strong> 
+                    <span class="badge badge-${color}">
+                        $${diff.toFixed(2)}
+                    </span>
+               </div>`
+            : ""
+        }
+    `);
+        }
+
+        // ==========================
+        // INPUT MONTO REAL
+        // ==========================
+        $("#montoReal").on("input", function() {
+            const montoReal = parseFloat($(this).val());
+            renderDetalle(montoReal);
         });
-        // Abrir Caja
+
+        // ==========================
+        // ABRIR CAJA
+        // ==========================
         $(".abrir-caja").click(function() {
             $("#abrirCajaId").val($(this).data("id"));
             $("#abrirCajaNombre").val($(this).data("nombre"));
             $("#montoInicial").val('');
-            $("#turnoCaja").val("Mañana");
+            $("#turnoCaja").val("");
             $("#abrirCajaModal").modal("show");
         });
 
-
-
-
-        // Submit Abrir Caja
+        // ==========================
+        // SUBMIT ABRIR
+        // ==========================
         $("#formAbrirCaja").submit(function(e) {
             e.preventDefault();
-            let montoInicial = parseFloat($("#montoInicial").val());
 
-            // 🔥 Si viene vacío → lo convertimos en 0
-            if (isNaN(montoInicial)) {
-                montoInicial = 0;
-            }
-            const payload = {
-                caja_id: parseInt($("#abrirCajaId").val()),
-                monto_inicial: montoInicial,
-                turno: $("#turnoCaja").val()
-            };
+            let montoInicial = parseFloat($("#montoInicial").val());
+            if (isNaN(montoInicial)) montoInicial = 0;
+
             $.ajax({
                 url: "ajax/abrir_caja.php",
                 type: "POST",
                 contentType: "application/json",
-                data: JSON.stringify(payload),
+                data: JSON.stringify({
+                    caja_id: parseInt($("#abrirCajaId").val()),
+                    monto_inicial: montoInicial,
+                    turno: $("#turnoCaja").val()
+                }),
                 success: function(data) {
                     if (data.success) {
                         $("#abrirCajaModal").modal("hide");
@@ -425,13 +589,59 @@ $historialSesiones = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 }
             });
         });
+        // ==========================
+        // 🆕 NUEVA CAJA
+        // ==========================
+        $("#btnNuevaCaja").click(function() {
 
-        // Submit Cerrar Caja
+            $("#tituloCaja").text("Nueva Caja");
+
+            $("#cajaId").val('');
+            $("#nombreCaja").val('');
+
+            $("#cajaModal").modal("show");
+        });
+        // ==========================
+        // 💾 GUARDAR CAJA
+        // ==========================
+        $("#formCaja").submit(function(e) {
+            e.preventDefault();
+
+            const id = $("#cajaId").val();
+            const nombre = $("#nombreCaja").val();
+
+            if (!nombre) {
+                return Swal.fire("Error", "Ingrese un nombre", "error");
+            }
+
+            $.ajax({
+                url: "ajax/guardar_caja.php",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({
+                    id: id || null,
+                    nombre: nombre
+                }),
+                success: function(res) {
+                    if (res.success) {
+                        $("#cajaModal").modal("hide");
+
+                        Swal.fire("OK", "Caja guardada", "success")
+                            .then(() => location.reload());
+                    } else {
+                        Swal.fire("Error", res.message, "error");
+                    }
+                }
+            });
+        });
+        // ==========================
+        // SUBMIT CERRAR
+        // ==========================
         $("#formCerrarCaja").submit(function(e) {
             e.preventDefault();
+
             const montoReal = parseFloat($("#montoReal").val());
 
-            // ✅ VALIDACIONES
             if (isNaN(montoReal)) {
                 return Swal.fire("Error", "Ingrese el monto real", "error");
             }
@@ -440,83 +650,58 @@ $historialSesiones = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 return Swal.fire("Error", "El monto no puede ser negativo", "error");
             }
 
-            if (!cerrarCajaId) {
-                return Swal.fire("Error", "Caja inválida", "error");
-            }
             $.ajax({
                 url: "ajax/cerrar_caja.php",
                 type: "POST",
-                contentType: "application/json",
-                data: JSON.stringify({
+                dataType: "json",
+                xhrFields: {
+                    withCredentials: true
+                },
+                data: {
                     caja_id: cerrarCajaId,
                     monto_real: montoReal
-                }),
+                },
                 success: function(data) {
+
+                    console.log(data);
+
                     if (data.success) {
+
                         $("#cerrarCajaModal").modal("hide");
-                        Swal.fire("Éxito", `Caja cerrada. Diferencia: ${data.diferencia.toFixed(2)}`, "success")
-                            .then(() => location.reload());
+
+                        $(".modal-backdrop").remove();
+                        $("body").removeClass("modal-open");
+
+                        Swal.fire(
+                            "Éxito",
+                            `Caja cerrada. Diferencia: ${parseFloat(data.diferencia).toFixed(2)}`,
+                            "success"
+                        ).then(() => location.reload());
+
                     } else {
                         Swal.fire("Error", data.message, "error");
                     }
+                },
+                error: function(xhr) {
+                    console.log(xhr.responseText);
+                    Swal.fire("Error", "Error servidor", "error");
                 }
             });
         });
-        $('.datatable').each(function() {
-            initDataTable($(this));
-        });
-        // ==========================
-        // NUEVA CAJA
-        // ==========================
-        $("#btnNuevaCaja").click(function() {
-            $("#cajaId").val('');
-            $("#nombreCaja").val('');
-            $("#tituloCaja").text("Nueva Caja");
-            $("#cajaModal").modal("show");
-        });
+        $(document).on("click", ".editar-caja", function() {
 
-        // ==========================
-        // EDITAR CAJA
-        // ==========================
-        $(".editar-caja").click(function() {
-            $("#cajaId").val($(this).data("id"));
-            $("#nombreCaja").val($(this).data("nombre"));
             $("#tituloCaja").text("Editar Caja");
+
+            const id = $(this).data("id");
+            const nombre = $(this).data("nombre");
+
+            $("#cajaId").val(id);
+            $("#nombreCaja").val(nombre);
+
             $("#cajaModal").modal("show");
         });
+        $(document).on("click", ".eliminar-caja", function() {
 
-        // ==========================
-        // GUARDAR (INSERT / UPDATE)
-        // ==========================
-        $("#formCaja").submit(function(e) {
-            e.preventDefault();
-
-            const payload = {
-                id: $("#cajaId").val(),
-                nombre: $("#nombreCaja").val()
-            };
-
-            $.ajax({
-                url: "ajax/guardar_caja.php",
-                type: "POST",
-                contentType: "application/json",
-                data: JSON.stringify(payload),
-                success: function(data) {
-                    if (data.success) {
-                        $("#cajaModal").modal("hide");
-                        Swal.fire("Éxito", "Caja guardada correctamente", "success")
-                            .then(() => location.reload());
-                    } else {
-                        Swal.fire("Error", data.message, "error");
-                    }
-                }
-            });
-        });
-
-        // ==========================
-        // ELIMINAR
-        // ==========================
-        $(".eliminar-caja").click(function() {
             const id = $(this).data("id");
 
             Swal.fire({
@@ -524,28 +709,34 @@ $historialSesiones = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 text: "Esta acción no se puede deshacer",
                 icon: "warning",
                 showCancelButton: true,
-                confirmButtonText: "Sí, eliminar"
+                confirmButtonText: "Sí, eliminar",
+                cancelButtonText: "Cancelar"
             }).then((result) => {
+
                 if (result.isConfirmed) {
 
                     $.ajax({
                         url: "ajax/eliminar_caja.php",
                         type: "POST",
-                        contentType: "application/json",
-                        data: JSON.stringify({
+                        data: {
                             id: id
-                        }),
-                        success: function(data) {
-                            if (data.success) {
-                                Swal.fire("Eliminado", "Caja eliminada", "success")
+                        },
+                        success: function(res) {
+
+                            if (res.success) {
+                                Swal.fire("Eliminado", "Caja eliminada correctamente", "success")
                                     .then(() => location.reload());
                             } else {
-                                Swal.fire("Error", data.message, "error");
+                                Swal.fire("Error", res.message, "error");
                             }
+                        },
+                        error: function() {
+                            Swal.fire("Error", "Error del servidor", "error");
                         }
                     });
 
                 }
+
             });
         });
     });

@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/../inc/db.php';
+$rand = uniqid();
 $busqueda = trim($_GET['busqueda'] ?? '');
 $pacientes = [];
 $user_tipo = $_SESSION['user_tipo'] ?? '';
@@ -21,8 +23,10 @@ if ($busqueda !== '') {
     ];
 
     $sql = "
-       SELECT 
+     SELECT 
     p.*,
+    p.tipo_socio,
+    p.fecha_alta,
 
     pa.ultimo_pago,
 
@@ -101,15 +105,44 @@ LIMIT 25
                 <div class="card-body table-responsive">
                     <table class="table table-striped  datatable" style="width:100%">
                         <thead class="thead-dark">
+                            <?php
+                            function tipoCobro($r)
+                            {
+
+                                // 🟣 Vitalicio
+                                if ($r['tipo_socio'] == 'vitalicio') {
+                                    return 'SOCIO';
+                                }
+
+                                $hoy = new DateTime();
+                                $alta = new DateTime($r['fecha_alta']);
+                                $dias = $hoy->diff($alta)->days;
+
+                                // 🟡 Nuevo (primer mes)
+                                if ($dias <= 30) {
+                                    return 'PARTICULAR';
+                                }
+
+                                // 🔵 Normal
+                                $meses = (int)$r['meses_adeudados'];
+
+                                if ($meses <= 3) {
+                                    return 'SOCIO';
+                                }
+
+                                return 'PARTICULAR';
+                            }
+                            ?>
                             <tr>
                                 <th>Apellido</th>
                                 <th>Nombre</th>
                                 <th>Documento</th>
                                 <th>Celular</th>
                                 <th>Socio N°</th>
+                                <th>Tipo Cobro</th>
                                 <th>Al día</th>
                                 <th>Meses adeudados</th>
-                                
+
                                 <th>Acciones</th>
                             </tr>
                         </thead>
@@ -120,14 +153,42 @@ LIMIT 25
                                     <td><?= htmlspecialchars($r['nombre']) ?></td>
                                     <td><?= htmlspecialchars($r['tipo_documento']) ?>: <?= htmlspecialchars($r['documento']) ?>
                                     </td>
-                                    
+
                                     <td><?= htmlspecialchars($r['celular']) ?></td>
                                     <td>
                                         <?= htmlspecialchars($r['nro_afiliado']) ?>
-                                       
+
                                     </td>
                                     <td>
-                                        <?= $r['aldia'] === 'si' ? '<span class="text-success">Si</span>' : '<span class="text-danger">No</span>' ?>
+                                        <?php
+                                        $tipo = tipoCobro($r);
+
+                                        if ($tipo == 'SOCIO') {
+                                            echo '<span class="text-primary font-weight-bold">SOCIO</span>';
+                                        } else {
+                                            echo '<span class="text-dark font-weight-bold">PARTICULAR</span>';
+                                        }
+                                        ?>
+                                    </td>
+                                    <td>
+                                        <?php
+                                        if ($r['tipo_socio'] == 'vitalicio') {
+                                            echo '<span class="text-info">Vitalicio</span>';
+                                        } else {
+
+                                            $hoy = new DateTime();
+                                            $alta = new DateTime($r['fecha_alta']);
+                                            $dias = $hoy->diff($alta)->days;
+
+                                            if ($dias <= 30) {
+                                                echo '<span class="text-primary">En gracia</span>';
+                                            } else {
+                                                echo $r['aldia'] === 'si'
+                                                    ? '<span class="text-success">Si</span>'
+                                                    : '<span class="text-danger">No</span>';
+                                            }
+                                        }
+                                        ?>
                                     </td>
                                     <td>
                                         <?php
@@ -146,10 +207,10 @@ LIMIT 25
                                     </td>
                                     <td class="text-center">
                                         <div class="btn-group">
-                                             <a href="./?seccion=socios_historial&id=<?= $r['Id'] ?>&nc=<?= $rand ?>"
-                                            class="btn btn-info btn-sm rounded-circle" title="Historial">
-                                            <i class="fa fa-eye"></i>
-                                        </a>
+                                            <a href="./?seccion=socios_historial&id=<?= $r['Id'] ?>&nc=<?= $rand ?>"
+                                                class="btn btn-info btn-sm rounded-circle" title="Historial">
+                                                <i class="fa fa-eye"></i>
+                                            </a>
                                             <a href="./?seccion=afiliados_new&id=<?= $r['Id'] ?>&nc=<?= $rand ?>"
                                                 class="btn btn-success btn-sm rounded-circle" title="Nuevo pago">
                                                 <i class="fa fa-plus"></i>
@@ -173,8 +234,8 @@ LIMIT 25
 <?php endif; ?>
 
 <script>
-    document.addEventListener("DOMContentLoaded", function () {
-        $('.datatable').each(function () {
+    document.addEventListener("DOMContentLoaded", function() {
+        $('.datatable').each(function() {
             initDataTable($(this));
         });
     });

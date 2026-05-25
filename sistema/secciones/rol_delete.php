@@ -1,5 +1,5 @@
 <?php
-require_once "inc/db.php";
+require_once __DIR__ . '/../inc/db.php';
 
 $rand = rand();
 $id = $_GET['id'] ?? null;
@@ -12,7 +12,7 @@ if (!is_numeric($id)) {
 $rol_id = (int)$id;
 
 // Verificar empleados asociados
-$stmt = $conexion->prepare("SELECT COUNT(*) FROM empleado WHERE rol_id = :rol_id");
+$stmt = $conexion->prepare("SELECT COUNT(*) FROM empleados WHERE rol_id = :rol_id");
 $stmt->execute([':rol_id' => $rol_id]);
 $empleados_con_rol = $stmt->fetchColumn();
 ?>

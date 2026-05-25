@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once "inc/db.php"; // $pdo
+require_once __DIR__ . '/../inc/db.php';
 $mensaje = '';
 $disabled = false;
 $rand = mt_rand();

@@ -272,7 +272,7 @@ $estudios = $pdo->query("SELECT DISTINCT estudio FROM cardiologia_sur ORDER BY e
 </div>
 
 <script>
-    $(document).ready(function () {
+    $(document).ready(function() {
 
         // =========================
         // INIT DATATABLE
@@ -280,20 +280,22 @@ $estudios = $pdo->query("SELECT DISTINCT estudio FROM cardiologia_sur ORDER BY e
         let table = $('.datatable').DataTable({
             pageLength: 25,
             ordering: false,
-            language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json' }
+            language: {
+                url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json'
+            }
         });
 
         // =========================
         // FILTROS PRO (DataTables)
         // =========================
-        $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
 
             let fechaFiltro = $('#filtro_fecha').val();
             let noAvisados = $('#filtro_no_avisados').is(':checked');
 
             let row = table.row(dataIndex).node();
 
-            let fecha = $(row).data('fecha');   // YYYY-MM-DD
+            let fecha = $(row).data('fecha'); // YYYY-MM-DD
             let aviso = $(row).data('aviso');
 
             // FILTRO FECHA
@@ -310,14 +312,14 @@ $estudios = $pdo->query("SELECT DISTINCT estudio FROM cardiologia_sur ORDER BY e
         });
 
         // Ejecutar filtros
-        $('#filtro_fecha, #filtro_no_avisados').on('change', function () {
+        $('#filtro_fecha, #filtro_no_avisados').on('change', function() {
             table.draw();
         });
 
         // =========================
         // CHECK ALL
         // =========================
-        $('#check_all').on('change', function () {
+        $('#check_all').on('change', function() {
             let checked = $(this).is(':checked');
 
             $('.checkbox_cardio').prop('checked', checked);
@@ -332,7 +334,7 @@ $estudios = $pdo->query("SELECT DISTINCT estudio FROM cardiologia_sur ORDER BY e
             let total = 0;
             let totalCobrado = 0;
 
-            $('.checkbox_cardio:checked').each(function () {
+            $('.checkbox_cardio:checked').each(function() {
                 let fila = $(this).closest('tr');
 
                 let valor = parseFloat(fila.data('valor')) || 0;
@@ -355,251 +357,188 @@ $estudios = $pdo->query("SELECT DISTINCT estudio FROM cardiologia_sur ORDER BY e
         // =========================
         $('#btn_imprimir').click(function () {
 
-            let filas = [];
-            let total = 0;
+    let filas = [];
+    let total = 0;
 
-            $('.checkbox_cardio:checked').each(function () {
+    $('.checkbox_cardio:checked').each(function () {
 
-                let fila = $(this).closest('tr');
+        let fila = $(this).closest('tr');
 
-                let data = {
-                    fecha: fila.find('td:eq(1)').text(),
-                    paciente: fila.find('td:eq(2)').text(),
-                    documento: fila.find('td:eq(3)').text(),
-                    celular: fila.find('td:eq(4)').text(),
-                    estudio: fila.find('td:eq(5)').text(),
-                    valor: parseFloat(fila.data('valor')) || 0
-                };
+        let data = {
+            fecha: fila.find('td:eq(1)').text(),
+            paciente: fila.find('td:eq(2)').text(),
+            documento: fila.find('td:eq(3)').text(),
+            celular: fila.find('td:eq(4)').text(),
+            estudio: fila.find('td:eq(5)').text(),
+            valor: parseFloat(fila.data('valor')) || 0
+        };
 
-                total += data.valor;
-                filas.push(data);
-            });
+        total += data.valor;
+        filas.push(data);
+    });
 
-            if (!filas.length) {
-                Swal.fire('Atención', 'No seleccionaste registros', 'warning');
-                return;
-            }
-
-            // =========================
-            // AGRUPAR POR ESTUDIO
-            // =========================
-            let agrupado = {};
-
-            filas.forEach(f => {
-                if (!agrupado[f.estudio]) agrupado[f.estudio] = [];
-                agrupado[f.estudio].push(f);
-            });
-
-            let numero = 'LIQ-' + Date.now();
-
-            let contenido = `
-    <html>
-    <head>
-    <title>Liquidación</title>
-
-    <style>
-    body { font-family: Arial; margin:40px; color:#333; }
-
-    .header {
-        display:flex;
-        justify-content:space-between;
-        border-bottom:3px solid #007bff;
-        margin-bottom:20px;
-        padding-bottom:10px;
+    if (!filas.length) {
+        Swal.fire('Atención', 'No seleccionaste registros', 'warning');
+        return;
     }
 
-    .logo { height:60px; }
+    let numero = 'LIQ-' + Date.now();
 
-    .titulo {
-        font-size:22px;
-        font-weight:bold;
-        color:#007bff;
-    }
+    let contenido = `
+<html>
+<head>
+<title>Liquidación</title>
 
-    .box {
-        display:flex;
-        justify-content:space-between;
-        margin-bottom:20px;
-        font-size:13px;
-    }
+<style>
+body { font-family: Arial; margin:40px; color:#333; }
 
-    table {
-        width:100%;
-        border-collapse:collapse;
-        margin-top:10px;
-    }
+.header {
+    display:flex;
+    justify-content:space-between;
+    border-bottom:3px solid #007bff;
+    margin-bottom:20px;
+    padding-bottom:10px;
+}
 
-    th {
-        background:#007bff;
-        color:#fff;
-        padding:8px;
-        font-size:12px;
-        text-align: left;
-    }
+.logo { height:60px; }
 
-    td {
-        padding:6px;
-        border-bottom:1px solid #ddd;
-        font-size:12px;
-        text-align: left;
-    }
+.titulo {
+    font-size:22px;
+    font-weight:bold;
+    color:#007bff;
+}
 
-    .grupo {
-        margin-top:20px;
-        font-weight:bold;
-        background:#f1f1f1;
-        padding:6px;
-    }
+.box {
+    display:flex;
+    justify-content:space-between;
+    margin-bottom:20px;
+    font-size:13px;
+}
 
-    .total {
-        margin-top:25px;
-        padding:15px;
-        border:2px solid #007bff;
-        font-size:18px;
-        font-weight:bold;
-        display:flex;
-        justify-content:space-between;
-    }
+table {
+    width:100%;
+    border-collapse:collapse;
+    margin-top:10px;
+}
 
-    .firma {
-        margin-top:60px;
-        display:flex;
-        justify-content:space-between;
-    }
+th {
+    background:#007bff;
+    color:#fff;
+    padding:8px;
+    font-size:12px;
+    text-align:left;
+}
 
-    .firma div {
-        text-align:center;
-        width:40%;
-    }
-    </style>
+td {
+    padding:6px;
+    border-bottom:1px solid #ddd;
+    font-size:12px;
+}
 
-    </head>
+.total {
+    margin-top:25px;
+    padding:15px;
+    border:2px solid #007bff;
+    font-size:18px;
+    font-weight:bold;
+    display:flex;
+    justify-content:space-between;
+}
 
-    <body>
+.firma {
+    margin-top:60px;
+    display:flex;
+    justify-content:space-between;
+}
 
-    <div class="header">
-        <div>
-            <img src="images/logo_blanco.png" class="logo"><br>
-            <div class="titulo">Sala Bernardino Rivadavia</div>
-            <div>Liquidacion Cardiología del Sur</div>
-        </div>
-        <div style="text-align:right;">
-           
-            <strong>Fecha:</strong> ${new Date().toLocaleDateString()}
-           
-        </div>
+.firma div {
+    text-align:center;
+    width:40%;
+}
+</style>
+
+</head>
+
+<body>
+
+<div class="header">
+    <div>
+        <img src="images/logo_blanco.png" class="logo"><br>
+        <div class="titulo">Sala Bernardino Rivadavia</div>
+        <div>Liquidación Cardiología del Sur</div>
     </div>
-
-    <div class="box">
-        <div><strong>Registros:</strong>${filas.length}</div>
-        <div><strong>Periodo:</strong>__________________</div>
+    <div style="text-align:right;">
+        <strong>Fecha:</strong> ${new Date().toLocaleDateString()}
     </div>
-    `;
+</div>
 
-            // =========================
-            // TABLAS AGRUPADAS
-            // =========================
-            for (let estudio in agrupado) {
+<div class="box">
+    <div><strong>Registros:</strong> ${filas.length}</div>
+    <div><strong>Periodo:</strong> ______________</div>
+</div>
 
-                contenido += `<div class="grupo">Estudio: ${estudio}</div>`;
+<table>
+<tr>
+    <th>Fecha</th>
+    <th>Paciente</th>
+    <th>DNI</th>
+    <th>Celular</th>
+    <th>Estudio</th>
+    <th style="text-align:right;">Pago</th>
+</tr>
+`;
 
-                contenido += `
-        <table>
-        <tr>
-        <th>Fecha</th>
-        <th>Paciente</th>
-        <th>DNI</th>
-        <th>Celular</th>
-        <th style="text-align:right;">Pago</th>
-        </tr>
-        `;
+    // =========================
+    // TODO EN UNA SOLA LISTA
+    // =========================
+    filas.forEach(f => {
+        contenido += `
+<tr>
+    <td>${f.fecha}</td>
+    <td>${f.paciente}</td>
+    <td>${f.documento}</td>
+    <td>${f.celular}</td>
+    <td>${f.estudio}</td>
+    <td style="text-align:right;">$ ${f.valor.toLocaleString('es-AR')}</td>
+</tr>
+`;
+    });
 
-                agrupado[estudio].forEach(f => {
-                    contenido += `
-            <tr>
-                <td>${f.fecha}</td>
-                <td>${f.paciente}</td>
-                <td>${f.documento}</td>
-                <td>${f.celular}</td>
-                <td style="text-align:right;">$ ${f.valor.toLocaleString('es-AR')}</td>
-            </tr>
-            `;
-                });
+    contenido += `
+</table>
 
-                contenido += `</table>`;
-            }
+<div class="total">
+    <span>Total a pagar:</span>
+    <span>$ ${total.toLocaleString('es-AR')}</span>
+</div>
 
-            // =========================
-            // TOTAL + FIRMA
-            // =========================
-            contenido += `
-    <div class="total">
-        <span>Total a pagar:</span>
-        <span>$ ${total.toLocaleString('es-AR')}</span>
+<div class="firma">
+    <div>
+        ___________________________<br>
+        Firma Profesional
     </div>
-
-    <div class="firma">
-        <div>
-            ___________________________<br>
-            Firma Profesional
-        </div>
-        <div>
-            ___________________________<br>
-            Aclaración
-        </div>
+    <div>
+        ___________________________<br>
+        Aclaración
     </div>
+</div>
 
-    </body>
-    </html>
-    `;
+</body>
+</html>
+`;
 
-            let w = window.open('', '_blank');
-            w.document.write(contenido);
-            w.document.close();
+    let w = window.open('', '_blank');
+    w.document.write(contenido);
+    w.document.close();
 
-            w.onload = () => setTimeout(() => w.print(), 500);
+    w.onload = () => setTimeout(() => w.print(), 500);
 
-        });
-
-        // =========================
-        // ELIMINAR SELECCIONADOS
-        // =========================
-        $('#btn_eliminar').click(function () {
-
-            let ids = $('.checkbox_cardio:checked')
-                .map(function () {
-                    return $(this).closest('tr').data('id');
-                }).get();
-
-            if (!ids.length) {
-                Swal.fire('Atención', 'No seleccionaste registros', 'warning');
-                return;
-            }
-
-            Swal.fire({
-                title: '¿Eliminar seleccionados?',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'Sí, eliminar'
-            }).then(result => {
-
-                if (result.isConfirmed) {
-
-                    $.post('ajax/delete_cardiologia.php', { ids: ids }, function () {
-                        Swal.fire('Eliminado', 'Registros eliminados', 'success')
-                            .then(() => location.reload());
-                    });
-
-                }
-
-            });
-
-        });
+});
 
         // =========================
         // ELIMINAR FILTRADOS (PRO)
         // =========================
-        $('#btn_eliminar_filtrados').click(function () {
+        $('#btn_eliminar_filtrados').click(function() {
 
             let fechaFiltro = $('#filtro_fecha').val();
             let noAvisados = $('#filtro_no_avisados').is(':checked');
@@ -617,7 +556,9 @@ $estudios = $pdo->query("SELECT DISTINCT estudio FROM cardiologia_sur ORDER BY e
             let ids = [];
 
             // SOLO FILAS FILTRADAS
-            table.rows({ search: 'applied' }).every(function () {
+            table.rows({
+                search: 'applied'
+            }).every(function() {
                 let row = this.node();
                 ids.push($(row).data('id'));
             });
@@ -637,7 +578,9 @@ $estudios = $pdo->query("SELECT DISTINCT estudio FROM cardiologia_sur ORDER BY e
 
                 if (result.isConfirmed) {
 
-                    $.post('ajax/delete_cardiologia.php', { ids: ids }, function () {
+                    $.post('ajax/delete_cardiologia.php', {
+                        ids: ids
+                    }, function() {
                         Swal.fire('Eliminado', 'Registros eliminados', 'success')
                             .then(() => location.reload());
                     });
@@ -650,11 +593,13 @@ $estudios = $pdo->query("SELECT DISTINCT estudio FROM cardiologia_sur ORDER BY e
         // =========================
         // ABRIR MODAL Y CARGAR DATOS
         // =========================
-        $(document).on('click', '.btnEditar', function () {
+        $(document).on('click', '.btnEditar', function() {
 
             let id = $(this).data('id');
 
-            $.get('ajax/get_cardiologia.php', { id: id }, function (data) {
+            $.get('ajax/get_cardiologia.php', {
+                id: id
+            }, function(data) {
 
                 let r = JSON.parse(data);
 
@@ -682,7 +627,7 @@ $estudios = $pdo->query("SELECT DISTINCT estudio FROM cardiologia_sur ORDER BY e
         // =========================
         // GUARDAR CAMBIOS
         // =========================
-        $('#guardarEdit').click(function () {
+        $('#guardarEdit').click(function() {
 
             $.ajax({
                 url: 'ajax/update_cardiologia.php',
@@ -704,7 +649,7 @@ $estudios = $pdo->query("SELECT DISTINCT estudio FROM cardiologia_sur ORDER BY e
 
                 },
 
-                success: function () {
+                success: function() {
 
                     let fila = $('tr[data-id="' + $('#edit_id').val() + '"]');
 

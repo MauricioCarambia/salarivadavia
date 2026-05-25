@@ -2,7 +2,7 @@
 session_name("turnos"); // 🔥 ESTO FALTABA
 session_start();
 
-require_once '../inc/db.php';
+require_once __DIR__ . '/../inc/db.php';
 
 header('Content-Type: application/json');
 

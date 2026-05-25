@@ -1,5 +1,5 @@
 <?php
-require_once 'inc/db.php';
+require_once __DIR__ . '/../inc/db.php';
 
 $id = $_GET['id'] ?? 0;
 $rand = random_int(1000, 9999);
@@ -10,23 +10,23 @@ $meses = [
     'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'
 ];
 
-// // === Consulta con PDO ===
-// $sql = "SELECT 
-//             p.Id,
-//             p.paciente_id,
-//             pa.nombre,
-//             pa.apellido,
-//             p.fecha_pago,
-//             p.monto,
-//             p.fecha_correspondiente
-//         FROM pagos_afiliados p
-//         LEFT JOIN pacientes pa ON pa.Id = p.paciente_id
-//         WHERE p.afiliado_id = :id
-//         ORDER BY p.fecha_correspondiente ASC";
+// === Consulta con PDO ===
+$sql = "SELECT 
+            p.Id,
+            p.paciente_id,
+            pa.nombre,
+            pa.apellido,
+            p.fecha_pago,
+            p.monto,
+            p.fecha_correspondiente
+        FROM pagos_afiliados p
+        LEFT JOIN pacientes pa ON pa.Id = p.paciente_id
+        WHERE p.afiliado_id = :id
+        ORDER BY p.fecha_correspondiente ASC";
 
-// $stmt = $conexion->prepare($sql);
-// $stmt->execute(['id' => $id]);
-// $pagos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$stmt = $conexion->prepare($sql);
+$stmt->execute(['id' => $id]);
+$pagos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!-- Main Wrapper -->

@@ -1,18 +1,35 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
 date_default_timezone_set('America/Argentina/Buenos_Aires');
+$usuarioSesion = $_SESSION['user_id'] ?? null;
+$cajaAbierta = null;
 
+if ($usuarioSesion) {
+
+    $stmtCaja = $pdo->prepare("
+        SELECT caja_id 
+        FROM caja_sesion 
+        WHERE usuario_id = ? 
+        AND estado = 'abierta'
+        ORDER BY id DESC 
+        LIMIT 1
+    ");
+
+    $stmtCaja->execute([$usuarioSesion]);
+    $cajaAbierta = $stmtCaja->fetchColumn();
+}
 /* ==============================
    📅 FILTROS
 ============================== */
 $desde = $_GET['desde'] ?? date('Y-m-d');
 $hasta = $_GET['hasta'] ?? date('Y-m-d');
-$caja = $_GET['caja'] ?? '';
+$caja = $_GET['caja'] ?? $cajaAbierta ?? '';
 $turno = $_GET['turno'] ?? '';
-$usuario = $_GET['usuario'] ?? '';
-
+$usuario = $_GET['usuario'] ?? $usuarioSesion ?? '';
+$usuarioSesion = $_SESSION['user_id'] ?? null;
 $desdeSQL = $desde . " 00:00:00";
 $hastaSQL = $hasta . " 23:59:59";
+
 
 /* ==============================
    🧠 FILTROS DINÁMICOS
@@ -44,48 +61,124 @@ SELECT
     p.Id,
     p.nombre,
     p.apellido,
+
     COALESCE(c_sum.total_facturado, 0) AS Total_Facturado,
-    COALESCE(r.total_profesional, 0) AS Total_Profesional,
-    COALESCE(r.total_egresos, 0) AS Total_Egresos,
-    (COALESCE(c_sum.total_facturado, 0) - COALESCE(r.total_egresos, 0)) AS Ganancia_Clinica
+
+    COALESCE(r.total_clinica, 0) - COALESCE(r.total_fondo, 0) AS Ganancia_Clinica,
+
+    COALESCE(r.total_fondo, 0) AS Total_Fondo,
+
+    (
+        COALESCE(r.deberia_pagar_profesional, 0)
+        -
+        COALESCE(r.ya_transferido_profesional, 0)
+        -
+        COALESCE(deuda.deuda_clinica_profesional, 0)
+    ) AS total_profesional,
+
+    (
+        COALESCE(r.total_clinica, 0) - COALESCE(r.total_fondo, 0)
+    ) AS Ganancia_Real
 
 FROM profesionales p
 
+/* TOTAL FACTURADO */
 LEFT JOIN (
-    SELECT c.profesional_id, SUM(c.total) AS total_facturado
+    SELECT 
+        c.profesional_id, 
+        SUM(c.total) AS total_facturado
     FROM cobros c
     LEFT JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
     WHERE c.estado = 'activo'
     AND c.fecha BETWEEN ? AND ?
     $filtros
     GROUP BY c.profesional_id
-) c_sum ON c_sum.profesional_id = p.Id
+) c_sum 
+ON c_sum.profesional_id = p.Id
 
+/* 🔴 DEUDA CLÍNICA (SEPARADA CORRECTAMENTE) */
 LEFT JOIN (
     SELECT 
         c.profesional_id,
-        SUM(CASE WHEN dr.categoria = 'profesional' THEN cr.monto ELSE 0 END) AS total_profesional,
-        SUM(CASE WHEN dr.categoria IN ('profesional','fondo') THEN cr.monto ELSE 0 END) AS total_egresos
+        SUM(c.deuda_clinica) AS deuda_clinica_profesional
+    FROM cobros c
+    LEFT JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
+    WHERE c.estado = 'activo'
+    AND c.transferencia_tipo = 'profesional'
+    AND c.fecha BETWEEN ? AND ?
+    $filtros
+    GROUP BY c.profesional_id
+) deuda
+ON deuda.profesional_id = p.Id
+
+/* REPARTO */
+LEFT JOIN (
+    SELECT 
+        c.profesional_id,
+
+        SUM(
+            CASE 
+                WHEN dr.tipo = 'egreso' 
+                 AND dr.categoria = 'profesional'
+                THEN cr.monto 
+                ELSE 0 
+            END
+        ) AS deberia_pagar_profesional,
+
+        SUM(
+            CASE 
+                WHEN dr.tipo = 'egreso'
+                 AND dr.categoria = 'profesional'
+                 AND c.transferencia_tipo IN ('profesional','empleado')
+                THEN cr.monto 
+                ELSE 0 
+            END
+        ) AS ya_transferido_profesional,
+
+        SUM(
+            CASE 
+                WHEN dr.tipo = 'ingreso'
+                THEN cr.monto 
+                ELSE 0 
+            END
+        ) AS total_clinica,
+
+        SUM(
+            CASE 
+                WHEN dr.categoria = 'fondo'
+                THEN cr.monto 
+                ELSE 0 
+            END
+        ) AS total_fondo
+
     FROM cobros c
     INNER JOIN cobros_reparto cr ON cr.cobro_id = c.id
     INNER JOIN destinos_reparto dr ON dr.id = cr.destino_id
     LEFT JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
+
     WHERE c.estado = 'activo'
     AND c.fecha BETWEEN ? AND ?
     $filtros
+
     GROUP BY c.profesional_id
-) r ON r.profesional_id = p.Id
+) r 
+ON r.profesional_id = p.Id
 
 WHERE COALESCE(c_sum.total_facturado, 0) > 0
-
-ORDER BY p.apellido ASC, Total_Facturado DESC
+ORDER BY p.apellido ASC
 ";
 
-/* 🔥 PARAMETROS CORRECTOS */
+/* ==============================
+   🔥 PARAMS
+============================== */
 $paramsReporte = array_merge(
     $paramsBase,
     $paramsFiltros,
+
     $paramsBase,
+    $paramsFiltros,
+
+    $paramsBase,        // 👈 NUEVO (deuda)
     $paramsFiltros
 );
 
@@ -107,9 +200,10 @@ INNER JOIN destinos_reparto dr ON dr.id = cr.destino_id
 INNER JOIN cobros c ON c.id = cr.cobro_id
 LEFT JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
 WHERE c.estado = 'activo'
+AND c.turno_id IS NOT NULL
 AND c.fecha BETWEEN ? AND ?
 $filtros
-GROUP BY dr.id, dr.nombre, dr.tipo
+GROUP BY dr.id
 ";
 
 $paramsDestinos = array_merge($paramsBase, $paramsFiltros);
@@ -119,38 +213,36 @@ $stmtDestinos->execute($paramsDestinos);
 $destinos = $stmtDestinos->fetchAll(PDO::FETCH_ASSOC);
 
 /* ==============================
-   📊 3. TOTALES
+   📊 TOTALES
 ============================== */
-$totalEgresos = 0;
-$totalIngresosNormales = 0;
+$totalIngresos = 0;
 $totalFondos = 0;
+$totalEgresos = 0;
 
 foreach ($destinos as $d) {
 
-    $monto = (float)$d['total'];
-
-    // 🔴 EGRESOS (para control si querés usarlo después)
     if ($d['tipo'] === 'egreso') {
-        $totalEgresos += $monto;
+        $totalEgresos += $d['total'];
     }
 
-    // 🟢 INGRESOS NORMALES (GANANCIA REAL)
-    if ($d['tipo'] === 'ingreso' && $d['categoria'] === 'normal') {
-        $totalIngresosNormales += $monto;
+    if ($d['tipo'] === 'ingreso' && $d['categoria'] !== 'fondo') {
+        $totalIngresos += $d['total'];
     }
 
-    // 🔵 FONDO
     if ($d['categoria'] === 'fondo') {
-        $totalFondos += $monto;
+        $totalFondos += $d['total'];
     }
 }
 
-/* TOTAL FACTURADO */
+/* ==============================
+   💰 TOTAL FACTURADO
+============================== */
 $sqlTotal = "
 SELECT SUM(c.total) 
 FROM cobros c
 LEFT JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
 WHERE c.estado = 'activo'
+AND c.profesional_id IS NOT NULL
 AND c.fecha BETWEEN ? AND ?
 $filtros
 ";
@@ -161,11 +253,13 @@ $stmtTotal = $pdo->prepare($sqlTotal);
 $stmtTotal->execute($paramsTotal);
 $totalFacturado = (float)$stmtTotal->fetchColumn();
 
-/* BALANCE */
-$balance = $totalIngresosNormales;
+/* ==============================
+   ⚫ BALANCE
+============================== */
+$balance = $totalIngresos;
 
 /* ==============================
-   📦 DATOS PARA FILTROS
+   📦 AUX
 ============================== */
 $cajas = $pdo->query("SELECT id, nombre FROM cajas")->fetchAll(PDO::FETCH_ASSOC);
 $usuarios = $pdo->query("SELECT id, nombre FROM empleados")->fetchAll(PDO::FETCH_ASSOC);
@@ -178,13 +272,13 @@ $rand = rand(1000, 9999);
     <div class="card-body">
         <form method="GET">
             <input type="hidden" name="seccion" value="<?= $_GET['seccion'] ?? 'pagos' ?>">
-            
+
             <div class="row align-items-end">
                 <div class="col-md-2 col-sm-6 mb-2">
                     <label class="small font-weight-bold">Desde</label>
                     <input type="date" name="desde" value="<?= $desde ?>" class="form-control form-control-sm">
                 </div>
-                
+
                 <div class="col-md-2 col-sm-6 mb-2">
                     <label class="small font-weight-bold">Hasta</label>
                     <input type="date" name="hasta" value="<?= $hasta ?>" class="form-control form-control-sm">
@@ -236,8 +330,7 @@ $rand = rand(1000, 9999);
     </div>
 </div>
 
-
-<!-- KPIs -->
+<!-- 
 <div class="row mb-3">
     <div class="col-md-3">
         <div class="small-box bg-info p-2 text-center">
@@ -251,21 +344,21 @@ $rand = rand(1000, 9999);
             <p>Total Egresos</p>
         </div>
     </div>
+
     <div class="col-md-3">
-        <div class="small-box bg-success p-2 text-center">
-            <h4>$<?= number_format($balance, 2, ',', '.') ?></h4>
-            <p>Ganancia Clínica</p>
+        <div class="small-box bg-primary p-2 text-center">
+            <h4>$<?= number_format($totalFondos, 2, ',', '.') ?></h4>
+            <p>Fondo Acumulado</p>
         </div>
     </div>
     <div class="col-md-3">
-    <div class="small-box bg-primary p-2 text-center">
-        <h4>$<?= number_format($totalFondos, 2, ',', '.') ?></h4>
-        <p>Fondo Acumulado</p>
+        <div class="small-box bg-success p-2 text-center">
+            <h4>$<?= number_format($totalIngresos - $totalFondos, 2, ',', '.') ?></h4>
+            <p>Ganancia Clínica</p>
+        </div>
     </div>
 </div>
-</div>
 
-<!-- DESTINOS -->
 <div class="row mb-3 d-flex justify-content-center">
     <?php foreach ($destinos as $d): ?>
         <?php if ($d['categoria'] == 'profesional') {
@@ -285,7 +378,7 @@ $rand = rand(1000, 9999);
             </div>
         </div>
     <?php endforeach; ?>
-</div>
+</div> -->
 
 <!-- TABLA -->
 <div class="card card-outline card-primary">
@@ -300,28 +393,40 @@ $rand = rand(1000, 9999);
                     <th>Profesional</th>
                     <th>Total Facturado</th>
                     <th>Pago Profesional</th>
-                    <th>Ganancia Clínica</th>
+
+                    <th>Fondo</th>
+                    <th>Ganancia Real</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($reporte as $fila): ?>
                     <tr>
-                        <td><strong><?= htmlspecialchars($fila['apellido'] . ' ' . $fila['nombre']) ?></strong></td>
-                        <td class="text-info text-center">$<?= number_format($fila['Total_Facturado'], 2, ',', '.') ?></td>
-                        <td class="text-danger text-center">$<?= number_format($fila['Total_Profesional'], 2, ',', '.') ?></td>
-                        <td class="text-success text-center font-weight-bold">$<?= number_format($fila['Ganancia_Clinica'], 2, ',', '.') ?></td>
+                        <td>
+                            <strong><?= htmlspecialchars($fila['apellido'] . ' ' . $fila['nombre']) ?></strong>
+                        </td>
+
+                        <td class="text-info text-center">
+                            $<?= number_format($fila['Total_Facturado'], 2, ',', '.') ?>
+                        </td>
+
+                        <td class="text-danger text-center">
+                            $<?= number_format($fila['total_profesional'], 2, ',', '.') ?>
+                        </td>
+
+                        <td class="text-primary text-center">
+                            $<?= number_format($fila['Total_Fondo'], 2, ',', '.') ?>
+                        </td>
+
+                        <td class="text-success text-center font-weight-bold">
+                            $<?= number_format($fila['Ganancia_Real'], 2, ',', '.') ?>
+                        </td>
+
                         <td class="text-center">
                             <div class="btn-group">
-                                <!-- <button class="btn btn-info btn-sm rounded-circle" onclick="nuevoPago(<?= $fila['Id'] ?>)">
-                                    <i class="fas fa-plus"></i>
-                                </button> -->
                                 <button class="btn btn-primary btn-sm rounded-circle" onclick="verPagos(<?= $fila['Id'] ?>)">
                                     <i class="fas fa-eye"></i>
                                 </button>
-                                <!-- <button class="btn btn-warning btn-sm rounded-circle" onclick="verTurnos(<?= $fila['Id'] ?>)">
-                                    <i class="fas fa-calendar"></i>
-                                </button> -->
                             </div>
                         </td>
                     </tr>

@@ -7,18 +7,58 @@ $swalError = false;
 
 // Valores por defecto
 $campos = [
-    'documento' => '', 'nombre' => '', 'apellido' => '', 'domicilio' => '',
-    'provincia' => '', 'localidad' => '', 'celular' => '', 'fijo' => '',
-    'email' => '', 'tipo_documento' => '', 'nacimiento' => '', 'nro_afiliado' => '',
-    'obra_social_id' => '', 'obra_social_plan' => '', 'obra_social_numero' => '',
-    'sexo' => '', 'historia_clinica' => '', 'nota' => ''
+    'documento' => '',
+    'nombre' => '',
+    'apellido' => '',
+    'domicilio' => '',
+    'provincia' => '',
+    'localidad' => '',
+    'celular' => '',
+    'fijo' => '',
+    'email' => '',
+    'tipo_documento' => '',
+    'nacimiento' => '',
+    'nro_afiliado' => '',
+    'obra_social_id' => '',
+    'obra_social_plan' => '',
+    'obra_social_numero' => '',
+    'sexo' => '',
+    'historia_clinica' => '',
+    'nota' => '',
+    'tipo_socio' => 'normal',
+    'fecha_alta' => date('Y-m-d')
 ];
 
 // Rellenar desde POST
 foreach ($campos as $key => $val) {
     $campos[$key] = $_POST[$key] ?? '';
 }
+function normalizarCelular($numero)
+{
+    $numero = preg_replace('/\D/', '', $numero);
 
+    // Quitar +54 si viene
+    if (substr($numero, 0, 2) === '54') {
+        $numero = substr($numero, 2);
+    }
+
+    // Quitar 0 inicial (ej: 011)
+    if (substr($numero, 0, 1) === '0') {
+        $numero = substr($numero, 1);
+    }
+
+    // 🔥 Detectar y quitar 15 SOLO si está después del código de área
+    // Caso AMBA (11)
+    if (substr($numero, 0, 2) === '11' && substr($numero, 2, 2) === '15') {
+        $numero = '11' . substr($numero, 4);
+    }
+    // Otros códigos (ej: 221, 341, etc)
+    elseif (preg_match('/^(\d{3})15/', $numero, $m)) {
+        $numero = $m[1] . substr($numero, 5);
+    }
+
+    return '549' . $numero;
+}
 // Guardar paciente
 if (isset($_POST['guardar'])) {
     $stmt = $pdo->prepare("SELECT Id FROM pacientes WHERE documento = :documento");
@@ -30,15 +70,15 @@ if (isset($_POST['guardar'])) {
             celular, fijo, email, tipo_documento, documento,
             nacimiento, nro_afiliado,
             obra_social_id, obra_social_plan, obra_social_numero,
-            sexo, historia_clinica, nota
+            sexo, historia_clinica, nota, tipo_socio, fecha_alta
         ) VALUES (
             :nombre, :apellido, :domicilio, :provincia, :localidad,
             :celular, :fijo, :email, :tipo_documento, :documento,
             :nacimiento, :nro_afiliado,
             :obra_social_id, :obra_social_plan, :obra_social_numero,
-            :sexo, :historia_clinica, :nota
+            :sexo, :historia_clinica, :nota, :tipo_socio, :fecha_alta
         )";
-
+        $campos['celular'] = normalizarCelular($campos['celular']);
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
             ':nombre' => $campos['nombre'],
@@ -58,23 +98,53 @@ if (isset($_POST['guardar'])) {
             ':obra_social_numero' => $campos['obra_social_numero'],
             ':sexo' => $campos['sexo'],
             ':historia_clinica' => $campos['historia_clinica'],
-            ':nota' => $campos['nota']
+            ':nota' => $campos['nota'],
+            ':tipo_socio' => $campos['tipo_socio'],
+            ':fecha_alta' => $campos['fecha_alta']
         ]);
 
         $swalGuardado = true;
+        // Limpiamos los campos para que no se vuelvan a validar al recargar
         $campos = array_map(fn($v) => '', $campos);
 
+        // IMPORTANTE: Para evitar que se procese el resto del HTML 
+        // y salte el error de documento duplicado, podrías saltar la parte de la validación
     } else {
         $swalError = "El documento {$campos['documento']} ya se encuentra registrado.";
     }
 }
 
+// Obras sociales
+$stmt = $pdo->prepare("SELECT Id, obra_social FROM obras_sociales ORDER BY obra_social");
+$stmt->execute();
+$obras = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
 // Provincias
 $provincias = [
-    "Ciudad Autónoma de Buenos Aires", "Buenos Aires", "Catamarca", "Chaco", "Chubut", "Córdoba", 
-    "Corrientes", "Entre Ríos", "Formosa", "Jujuy", "La Pampa", "La Rioja", "Mendoza",
-    "Misiones", "Neuquén", "Río Negro", "Salta", "San Juan", "San Luis", "Santa Cruz",
-    "Santa Fe", "Santiago del Estero", "Tierra del Fuego", "Tucumán"
+    "Ciudad Autónoma de Buenos Aires",
+    "Buenos Aires",
+    "Catamarca",
+    "Chaco",
+    "Chubut",
+    "Córdoba",
+    "Corrientes",
+    "Entre Ríos",
+    "Formosa",
+    "Jujuy",
+    "La Pampa",
+    "La Rioja",
+    "Mendoza",
+    "Misiones",
+    "Neuquén",
+    "Río Negro",
+    "Salta",
+    "San Juan",
+    "San Luis",
+    "Santa Cruz",
+    "Santa Fe",
+    "Santiago del Estero",
+    "Tierra del Fuego",
+    "Tucumán"
 ];
 ?>
 
@@ -103,8 +173,8 @@ $provincias = [
                         <label>Tipo de documento <span class="text-danger">*</span></label>
                         <select class="form-control" name="tipo_documento" required>
                             <option value="">Seleccionar</option>
-                            <?php foreach (['DNI','LE','LC','CI'] as $tipo): ?>
-                                <option value="<?= $tipo ?>" <?= $campos['tipo_documento']==$tipo?'selected':'' ?>><?= $tipo ?></option>
+                            <?php foreach (['DNI', 'LE', 'LC', 'CI'] as $tipo): ?>
+                                <option value="<?= $tipo ?>" <?= $campos['tipo_documento'] == $tipo ? 'selected' : '' ?>><?= $tipo ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -112,12 +182,27 @@ $provincias = [
                         <label>Documento <span class="text-danger">*</span></label>
                         <input type="number" name="documento" class="form-control" placeholder="Solo números" value="<?= htmlspecialchars($campos['documento']) ?>" required>
                     </div>
+
+                </div>
+                <div class="form-row">
                     <div class="form-group col-md-4">
                         <label>Nro de socio</label>
                         <input type="text" name="nro_afiliado" class="form-control" value="<?= htmlspecialchars($campos['nro_afiliado']) ?>">
                     </div>
-                </div>
+                    <div class="form-group col-md-4">
+                        <label>Tipo de socio</label>
+                        <select name="tipo_socio" class="form-control">
+                            <option value="normal" <?= $campos['tipo_socio'] == 'normal' ? 'selected' : '' ?>>Normal</option>
+                            <option value="vitalicio" <?= $campos['tipo_socio'] == 'vitalicio' ? 'selected' : '' ?>>Vitalicio</option>
+                        </select>
+                    </div>
 
+                    <div class="form-group col-md-4">
+                        <label>Fecha de alta</label>
+                        <input type="date" name="fecha_alta" class="form-control"
+                            value="<?= $campos['fecha_alta'] ?>">
+                    </div>
+                </div>
                 <!-- Fecha nacimiento y sexo -->
                 <div class="form-row">
                     <div class="form-group col-md-6">
@@ -128,8 +213,8 @@ $provincias = [
                         <label>Sexo</label>
                         <select class="form-control" name="sexo">
                             <option value="">Seleccionar</option>
-                            <?php foreach(['Masculino','Femenino'] as $s): ?>
-                                <option value="<?= $s ?>" <?= $campos['sexo']==$s?'selected':'' ?>><?= $s ?></option>
+                            <?php foreach (['Masculino', 'Femenino'] as $s): ?>
+                                <option value="<?= $s ?>" <?= $campos['sexo'] == $s ? 'selected' : '' ?>><?= $s ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -158,7 +243,7 @@ $provincias = [
                         <select class="form-control" name="provincia">
                             <option value="">Seleccionar</option>
                             <?php foreach ($provincias as $prov): ?>
-                                <option value="<?= $prov ?>" <?= $campos['provincia']==$prov?'selected':'' ?>><?= $prov ?></option>
+                                <option value="<?= $prov ?>" <?= $campos['provincia'] == $prov ? 'selected' : '' ?>><?= $prov ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -179,7 +264,7 @@ $provincias = [
                         <select class="form-control" name="obra_social_id">
                             <option value="">Seleccionar</option>
                             <?php foreach ($obras as $obra): ?>
-                                <option value="<?= $obra['Id'] ?>" <?= $campos['obra_social_id']==$obra['Id']?'selected':'' ?>><?= htmlspecialchars($obra['obra_social']) ?></option>
+                                <option value="<?= $obra['Id'] ?>" <?= $campos['obra_social_id'] == $obra['Id'] ? 'selected' : '' ?>><?= htmlspecialchars($obra['obra_social']) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -203,7 +288,7 @@ $provincias = [
                     <input type="text" name="nota" class="form-control" value="<?= htmlspecialchars($campos['nota']) ?>">
                 </div>
 
-                  <div class="form-group text-right">
+                <div class="form-group text-right">
                     <a href="./?seccion=pacientes&nc=<?= $rand ?>" class="btn btn-secondary">Volver</a>
                     <button type="submit" name="guardar" class="btn btn-primary">Guardar</button>
                 </div>
@@ -213,24 +298,36 @@ $provincias = [
 </div>
 
 <?php if ($swalGuardado || $swalError): ?>
-<script>
-document.addEventListener("DOMContentLoaded", function() {
-    <?php if ($swalGuardado): ?>
-    Swal.fire({
-        icon: 'success',
-        title: '¡Paciente guardado!',
-        text: 'El paciente se registró correctamente.',
-        confirmButtonText: 'Aceptar'
-    }).then(() => {
-        window.location.href = './?seccion=turnos&nc=<?= $rand ?>';
-    });
-    <?php elseif ($swalError): ?>
-    Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: '<?= addslashes($swalError) ?>'
-    });
-    <?php endif; ?>
-});
-</script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Limpiar el reenvío de formulario de los navegadores
+            if (window.history.replaceState) {
+                window.history.replaceState(null, null, window.location.href);
+            }
+
+            <?php if ($swalGuardado): ?>
+                Swal.fire({
+                    icon: 'success',
+                    title: '¡Paciente guardado!',
+                    text: 'El paciente se registró correctamente.',
+                    confirmButtonText: 'Aceptar',
+                    allowOutsideClick: false
+                }).then((result) => {
+                    if (window.parent && window.parent.$) {
+                        window.parent.$('#modalTurno').modal('hide');
+                        window.parent.location.reload();
+                    } else {
+                        window.location.href = './?seccion=turnos&nc=<?= $rand ?>';
+                    }
+                });
+            <?php elseif ($swalError): ?>
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Atención',
+                    text: '<?= addslashes($swalError) ?>',
+                    confirmButtonText: 'Reintentar'
+                });
+            <?php endif; ?>
+        });
+    </script>
 <?php endif; ?>

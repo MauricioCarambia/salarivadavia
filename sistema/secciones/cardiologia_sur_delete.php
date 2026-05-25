@@ -3,6 +3,7 @@ require_once __DIR__ . '/../inc/db.php';
 
 $id         = $_GET['id'] ?? null;
 $confirmar  = $_GET['confirmar'] ?? '';
+$rand       = $_GET['nc'] ?? uniqid();
 $mensaje    = '';
 
 if (!$id) {

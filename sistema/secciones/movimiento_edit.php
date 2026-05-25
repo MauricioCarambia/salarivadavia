@@ -1,5 +1,5 @@
 <?php
-require_once 'inc/db.php'; // conexión PDO
+require_once __DIR__ . '/../inc/db.php';
 
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 $mensaje = '';

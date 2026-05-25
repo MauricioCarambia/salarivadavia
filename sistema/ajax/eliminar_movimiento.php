@@ -1,5 +1,5 @@
 <?php
-require_once "../inc/db.php";
+require_once __DIR__ . '/../inc/db.php';
 session_name("turnos");
 session_start();
 
@@ -7,7 +7,7 @@ header('Content-Type: application/json');
 
 try {
 
-    $id = (int)($_POST['id'] ?? 0);
+    $id = (int)($_POST['id'] ?? 0); // 🔥 ahora es COBRO ID
     $usuarioId = $_SESSION['user_id'] ?? 0;
 
     if ($id <= 0) {
@@ -20,37 +20,47 @@ try {
 
     $pdo->beginTransaction();
 
-    // 🔍 Obtener movimiento
+    /* ==============================
+       🔍 OBTENER COBRO
+    ============================== */
     $stmt = $pdo->prepare("
-        SELECT id, cobro_id
-        FROM caja_movimientos 
+        SELECT id, estado
+        FROM cobros
+        WHERE id = ?
+        LIMIT 1
+        FOR UPDATE
+    ");
+    $stmt->execute([$id]);
+    $cobro = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$cobro) {
+        throw new Exception('Cobro no encontrado');
+    }
+
+    /* ==============================
+       🚫 VALIDAR YA ANULADO
+    ============================== */
+    if ($cobro['estado'] === 'anulado') {
+        throw new Exception('El cobro ya está anulado');
+    }
+
+    /* ==============================
+       💰 ANULAR COBRO
+    ============================== */
+    $stmt = $pdo->prepare("
+        UPDATE cobros 
+        SET estado = 'anulado'
         WHERE id = ?
     ");
     $stmt->execute([$id]);
-    $mov = $stmt->fetch(PDO::FETCH_ASSOC);
 
   
-    // 💰 Si tiene cobro → anular TODO el circuito
-    if (!empty($mov['cobro_id'])) {
-
-        // Anular cobro
-        $stmt = $pdo->prepare("
-            UPDATE cobros 
-            SET estado = 'anulado'
-            WHERE id = ?
-        ");
-        $stmt->execute([$mov['cobro_id']]);
-
-      
-    }
-
-    
 
     $pdo->commit();
 
     echo json_encode([
         'success' => true,
-        'message' => 'Movimiento anulado correctamente'
+        'message' => 'Cobro anulado correctamente'
     ]);
 
 } catch (Exception $e) {

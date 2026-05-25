@@ -6,7 +6,7 @@ session_name("turnos");
 session_cache_limiter("private");
 session_start();
 
-require_once "inc/db.php";
+require_once __DIR__ . '/inc/db.php';
 
 $rand = mt_rand();
 $mensaje = '';
@@ -196,7 +196,9 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
         <a href="empleado_new.php" class="btn btn-primary btn-block">
           <i class="fas fa-user-plus"></i> Crear cuenta
         </a>
-
+<a href="../index.php" class="btn btn-secondary btn-block mt-2">
+  <i class="fas fa-home"></i> Ir a noticias
+</a>
       </div>
     </div>
 

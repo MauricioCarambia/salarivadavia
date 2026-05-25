@@ -1,7 +1,5 @@
 <?php
-require_once "../inc/db.php";
-session_name("turnos");
-session_start();
+require_once __DIR__ . '/../inc/db.php';
 
 header('Content-Type: application/json');
 
@@ -14,9 +12,7 @@ try {
         throw new Exception('ID inválido');
     }
 
-    if (!$usuarioId) {
-        throw new Exception('Usuario no autenticado');
-    }
+    
 
     $pdo->beginTransaction();
 
@@ -24,7 +20,7 @@ try {
        🔒 BLOQUEAR COBRO
     ========================= */
     $stmt = $pdo->prepare("
-        SELECT estado, caja_id, caja_sesion_id, total, numero_completo
+        SELECT estado, caja_sesion_id, total, numero_completo
         FROM cobros
         WHERE id = ?
         FOR UPDATE
@@ -70,24 +66,7 @@ try {
     ");
     $stmt->execute([$cobro_id]);
 
-    /* =========================
-       💸 MOVIMIENTO CAJA (REVERSO)
-    ========================= */
-    $stmt = $pdo->prepare("
-        INSERT INTO caja_movimientos 
-        (caja_id, caja_sesion_id, tipo, concepto, monto, fecha, cobro_id, descripcion)
-        VALUES (?,?,?,?,?,NOW(),?,?)
-    ");
-
-    $stmt->execute([
-        $cobro['caja_id'],
-        $cobro['caja_sesion_id'],
-        'EGRESO',
-        'Anulación ' . $cobro['numero_completo'],
-        (float)$cobro['total'],
-        $cobro_id,
-        'Anulación de cobro #' . $cobro_id
-    ]);
+   
 
     $pdo->commit();
 

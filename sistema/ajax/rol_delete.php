@@ -1,7 +1,7 @@
 <?php
 session_name("turnos");
 session_start();
-require_once '../inc/db.php';
+require_once __DIR__ . '/../inc/db.php';
 header('Content-Type: application/json');
 
 try {
@@ -28,7 +28,7 @@ if (!tieneAcceso('gestionar_roles')) {
 }
 
     // 🔥 VER SI EL ROL ESTÁ EN USO
-    $stmt = $conexion->prepare("SELECT COUNT(*) FROM empleado WHERE rol_id = ?");
+    $stmt = $conexion->prepare("SELECT COUNT(*) FROM empleados WHERE rol_id = ?");
     $stmt->execute([$id]);
     $enUso = $stmt->fetchColumn();
 

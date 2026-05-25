@@ -5,13 +5,38 @@ date_default_timezone_set('America/Argentina/Buenos_Aires');
 $fecha = date('Y-m-d H:i:s');
 $rand = rand(1000, 9999);
 $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-
 $swalGuardado = false;
+
+$medio_pago = $_POST['medio_pago'] ?? 'efectivo';
+$transferencia_tipo = $_POST['transferencia_tipo'] ?? 'clinica';
+$empleado_destino_id = !empty($_POST['empleado_destino_id'])
+    ? (int)$_POST['empleado_destino_id']
+    : null;
+
+$stmt = $pdo->query("
+    SELECT id, nombre
+    FROM empleados
+    ORDER BY nombre ASC
+");
+$empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 /* =============================
    ACTUALIZAR
 =============================*/
 if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    // 🔥 FIX: NO romper si no es transferencia
+    if ($medio_pago === 'transferencia') {
+
+        if ($transferencia_tipo === 'clinica' && !$empleado_destino_id) {
+            die("Debe seleccionar a quién se transfiere");
+        }
+
+        // profesional no necesita empleado, pero dejamos claro el flujo
+        if ($transferencia_tipo === 'profesional') {
+            $empleado_destino_id = null;
+        }
+    }
 
     $asistio = isset($_POST['asistio']) ? 1 : 0;
 
@@ -29,7 +54,65 @@ if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $swalGuardado = true;
 }
+function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
+{
+    $stmt = $pdo->prepare("
+        SELECT tipo_socio, fecha_alta
+        FROM pacientes
+        WHERE Id = ?
+    ");
+    $stmt->execute([$paciente_id]);
 
+    $p = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$p) {
+        return ['tipo' => 'particular', 'cobra_como' => 'particular'];
+    }
+
+    // 🔥 NUEVO (primer mes)
+    if (!empty($p['fecha_alta'])) {
+
+        $alta = new DateTime($p['fecha_alta']);
+        $actual = new DateTime();
+
+        $diff = $alta->diff($actual);
+
+        if ($diff->y == 0 && $diff->m < 1) {
+            return ['tipo' => 'nuevo', 'cobra_como' => 'particular'];
+        }
+    }
+
+    // 🔥 VITALICIO (valor específico)
+    if (!empty($p['tipo_socio']) && strtolower($p['tipo_socio']) === 'vitalicio') {
+        return ['tipo' => 'vitalicio', 'cobra_como' => 'socio'];
+    }
+
+    // 🔥 SOCIO NORMAL (validar deuda)
+    $stmt = $pdo->prepare("
+        SELECT MAX(fecha_correspondiente)
+        FROM pagos_afiliados
+        WHERE paciente_id = ?
+    ");
+    $stmt->execute([$paciente_id]);
+
+    $ultimaFecha = $stmt->fetchColumn();
+
+    if (!$ultimaFecha) {
+        return ['tipo' => 'particular', 'cobra_como' => 'particular'];
+    }
+
+    $ultimo = new DateTime(date('Y-m-01', strtotime($ultimaFecha)));
+    $actual = new DateTime(date('Y-m-01'));
+
+    $diff = $ultimo->diff($actual);
+    $meses = ($diff->y * 12) + $diff->m;
+
+    if ($meses <= 3) {
+        return ['tipo' => 'socio', 'cobra_como' => 'socio'];
+    }
+
+    return ['tipo' => 'moroso', 'cobra_como' => 'particular'];
+}
 /* =============================
    TURNO
 =============================*/
@@ -50,7 +133,7 @@ if (!$r) {
     echo '<div class="alert alert-danger">Turno no encontrado</div>';
     exit;
 }
-
+$tipoPaciente = obtenerTipoPaciente($pdo, (int)$r['pacienteId']);
 /* =============================
    PACIENTE COMPLETO
 =============================*/
@@ -69,7 +152,9 @@ $rPaciente = $stmtPaciente->fetch(PDO::FETCH_ASSOC);
 =============================*/
 $profesional = $r['profesionalApellido'] . ' ' . $r['profesionalNombre'];
 $paciente = $r['pacienteApellido'] . ' ' . $r['pacienteNombre'];
+$paciente_id = $r['Id'];
 
+$telefono = $r['pacienteCelular'];
 $fecha = date('d/m/Y', strtotime($r['fecha']));
 $hora = date('H:i', strtotime($r['fecha']));
 
@@ -78,18 +163,34 @@ Paciente: $paciente
 Profesional: $profesional
 Día: $fecha $hora");
 
-$cel = preg_replace('/[^0-9]/', '', $r['pacienteCelular']); // solo números
+function normalizarCelular($numero)
+{
+    $numero = preg_replace('/\D/', '', $numero);
 
-// 🔥 Normalización Argentina
-if (strlen($cel) == 10) {
-    // ejemplo: 1123456789 → 5491123456789
-    $cel = '549' . $cel;
-} elseif (strlen($cel) == 11 && substr($cel, 0, 2) == '15') {
-    // ejemplo: 15123456789 → 549123456789
-    $cel = '549' . substr($cel, 2);
+    // Quitar +54 si viene
+    if (substr($numero, 0, 2) === '54') {
+        $numero = substr($numero, 2);
+    }
+
+    // Quitar 0 inicial (ej: 011)
+    if (substr($numero, 0, 1) === '0') {
+        $numero = substr($numero, 1);
+    }
+
+    // 🔥 Detectar y quitar 15 SOLO si está después del código de área
+    // Caso AMBA (11)
+    if (substr($numero, 0, 2) === '11' && substr($numero, 2, 2) === '15') {
+        $numero = '11' . substr($numero, 4);
+    }
+    // Otros códigos (ej: 221, 341, etc)
+    elseif (preg_match('/^(\d{3})15/', $numero, $m)) {
+        $numero = $m[1] . substr($numero, 5);
+    }
+
+    return '549' . $numero;
 }
-$mensaje = urlencode(
-    "Recordatorio de turno
+$cel = normalizarCelular($r['pacienteCelular']);
+$mensaje = "Recordatorio de turno
 
 Paciente: $paciente
 Profesional: $profesional
@@ -101,8 +202,10 @@ Av. Eva Perón 695 - Temperley
 
 Se abona únicamente en efectivo
 
-Por favor confirmar el turno."
-);
+Por favor confirmar el turno.";
+
+$mensaje = urlencode($mensaje);
+
 ?>
 
 <div class="row mb-3">
@@ -112,12 +215,24 @@ Por favor confirmar el turno."
         <div class="card card-info card-outline">
 
             <div class="card-header">
-                <h3 class="card-title">Datos del paciente <a href="./?seccion=turnos_calendario&id=<?= $id ?>&nc=<?= $rand ?>"
-                        class="btn btn-secondary btn-sm">
-                        Volver
-                    </a></h3>
+                <h3 class="card-title">
+                    Datos del paciente
+                    <a href="https://wa.me/<?php echo $cel; ?>?text=<?php echo $mensaje; ?>"
+                        target="_blank"
+                        class="btn btn-success"
+                        onclick="setTimeout(() => window.focus(), 1000)">
+
+                        <i class="fab fa-whatsapp"></i> Enviar turno
+                    </a>
+                </h3>
 
                 <div class="card-tools">
+                    <a href="./?seccion=pacientes_edit&id=<?= $r['pacienteId'] ?>&nc=<?= $rand ?>" class="btn btn-success btn-sm">Editar paciente</a>
+                    <button type="button"
+                        class="btn btn-danger btn-sm"
+                        onclick="eliminarTurno(<?= (int)$id ?>)">
+                        <i class="fas fa-trash"></i> Eliminar turno
+                    </button>
                     <a href="./?seccion=turnos_calendario&id=<?= $r['profesionalId'] ?>&nc=<?= $rand ?>"
                         class="btn btn-secondary btn-sm">
                         Volver
@@ -143,7 +258,37 @@ Por favor confirmar el turno."
                         <div class="col-md-3"><b>Obra social:</b> <?= htmlspecialchars($rPaciente['obra_social']) ?></div>
                         <div class="col-md-3"><b>Plan:</b> <?= htmlspecialchars($rPaciente['obra_social_plan']) ?></div>
                         <div class="col-md-3"><b>Sexo:</b> <?= htmlspecialchars($rPaciente['sexo']) ?></div>
+                        <div class="col-md-3">
+                            <b>Tipo socio:</b>
+                            <?php
+                            $tipo = $tipoPaciente['tipo'];
 
+                            if ($tipo == 'vitalicio') {
+                                echo '<span class="badge badge-primary">Vitalicio</span>';
+                            } elseif ($tipo == 'nuevo') {
+                                echo '<span class="badge badge-info">Nuevo</span>';
+                            } elseif ($tipo == 'socio') {
+                                echo '<span class="badge badge-success">Socio</span>';
+                            } elseif ($tipo == 'moroso') {
+                                echo '<span class="badge badge-danger">Moroso</span>';
+                            } else {
+                                echo '<span class="badge badge-secondary">Particular</span>';
+                            }
+                            ?>
+                        </div>
+
+                        <div class="col-md-3">
+                            <b>Paga como:</b>
+                            <?php
+                            $cobra = $tipoPaciente['cobra_como'];
+
+                            if ($cobra == 'socio') {
+                                echo '<span class="text-success">Socio</span>';
+                            } else {
+                                echo '<span class="text-danger">Particular</span>';
+                            }
+                            ?>
+                        </div>
                         <div class="col-12 mt-2"><b>Comentario:</b> <?= htmlspecialchars($rPaciente['nota']) ?></div>
                     </div>
                 <?php endif; ?>
@@ -155,37 +300,93 @@ Por favor confirmar el turno."
 </div>
 <div class="row">
 
-    <!-- IZQUIERDA -->
     <div class="col-md-6">
 
-        <!-- TURNO -->
         <div class="card card-info card-outline">
+
             <div class="card-header">
                 <h3 class="card-title">Detalle del turno</h3>
             </div>
 
             <div class="card-body">
-                <p><b>Profesional:</b> <?= htmlspecialchars($profesional) ?></p>
-                <p><b>Paciente:</b> <?= htmlspecialchars($paciente) ?></p>
-                <p><b>Fecha:</b> <?= $fecha ?> <?= $hora ?></p>
-                <p><b>Sobreturno:</b> <?= $r['sobreturno'] ? 'Si' : 'No' ?></p>
 
-                <form method="post">
-                    <div class="custom-control custom-switch">
-                        <input type="checkbox" class="custom-control-input" id="asistioSwitch" name="asistio"
-                            <?= $r['asistio'] ? 'checked' : '' ?>>
+                <!-- ================= DATOS ================= -->
+                <div class="row mb-3">
 
-                        <label class="custom-control-label" for="asistioSwitch">
-                            Asistió
-                        </label>
+                    <div class="col-md-6">
+                        <b>Profesional:</b><br>
+                        <?= htmlspecialchars($profesional) ?>
                     </div>
-                </form>
 
-                <div class="card-header">
-                    <h3 class="card-title">Cobro</h3>
+                    <div class="col-md-6">
+                        <b>Paciente:</b><br>
+                        <?= htmlspecialchars($paciente) ?>
+                    </div>
+
+                    <div class="col-md-6 mt-2">
+                        <b>Fecha:</b><br>
+                        <?= $fecha ?> <?= $hora ?>
+                    </div>
+
+                    <div class="col-md-6 mt-2">
+                        <b>Sobreturno:</b><br>
+                        <?php if ($r['sobreturno']): ?>
+                            <span class="badge badge-warning">Sí</span>
+                        <?php else: ?>
+                            <span class="badge badge-secondary">No</span>
+                        <?php endif; ?>
+                    </div>
+
                 </div>
 
+                <hr>
 
+                <!-- ================= ASISTENCIA ================= -->
+                <div class="row mb-3">
+                    <div class="col-md-4">
+
+                        <div class="custom-control custom-switch">
+                            <input type="checkbox" class="custom-control-input" id="asistioSwitch" name="asistio"
+                                <?= $r['asistio'] ? 'checked' : '' ?>>
+                            <label class="custom-control-label" for="asistioSwitch">
+                                No asistió
+                            </label>
+                        </div>
+
+                    </div>
+
+
+                    <div class="col-md-4">
+                        <label>Medio de pago</label>
+                        <select name="medio_pago" id="medio_pago" class="form-control" required>
+                            <option value="efectivo">Efectivo</option>
+                            <option value="transferencia">Transferencia</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4" id="boxTipoTransferencia" style="display:none;">
+                        <label>Tipo transferencia</label>
+                        <select name="transferencia_tipo" id="transferencia_tipo" class="form-control">
+                            <option value="clinica">A clínica</option>
+                            <option value="profesional">Directo al profesional</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4" id="boxDestino" style="display:none;">
+                        <label>Destino transferencia</label>
+                        <select name="empleado_destino_id" class="form-control">
+                            <option value="">Seleccionar</option>
+
+                            <?php foreach ($empleados as $e): ?>
+                                <option value="<?= $e['id'] ?>">
+                                    <?= $e['nombre'] ?>
+                                </option>
+                            <?php endforeach; ?>
+
+                        </select>
+                    </div>
+
+                </div>
+
+                <hr>
 
                 <div class="form-group">
                     <label>Agregar práctica</label>
@@ -194,32 +395,35 @@ Por favor confirmar el turno."
                     </select>
                 </div>
 
-                <button type="button" class="btn btn-success btn-sm mb-2" id="agregarPractica">
+                <button type="button" class="btn btn-success btn-sm mb-3" id="agregarPractica">
                     <i class="fas fa-plus"></i> Agregar
                 </button>
 
-                <table class="table table-sm" id="tablaCobro">
-                    <thead>
+                <table class="table table-sm " id="tablaCobro">
+                    <thead class="thead-dark">
                         <tr>
                             <th>Práctica</th>
-                            <th>$</th>
-                            <th></th>
+                            <th width="100">$</th>
+                            <th width="50"></th>
                         </tr>
                     </thead>
                     <tbody></tbody>
                 </table>
 
                 <h4 class="text-right">
-                    Total: $<span id="total">0</span>
+                    Total: $<span id="total">0.00</span>
                 </h4>
 
-                <button type="button" class="btn btn-primary btn-block" id="btnPreview">
+                <button type="button" class="btn btn-primary btn-block mt-3" id="btnPreview">
                     <i class="fas fa-eye"></i> Ver resumen
                 </button>
+
             </div>
 
         </div>
+
     </div>
+
 
     <!-- DERECHA: HISTORIAL -->
     <div class="col-md-6">
@@ -236,13 +440,14 @@ Por favor confirmar el turno."
                         <tr>
                             <th>Fecha</th>
                             <th>Detalle</th>
+                            <th>Medio</th>
                             <th>$</th>
                             <th>Accion</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td colspan="4" class="text-center">Cargando...</td>
+                            <td colspan="5" class="text-center">Cargando...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -258,6 +463,38 @@ Por favor confirmar el turno."
 
 
 <script>
+    document.addEventListener("DOMContentLoaded", function() {
+
+        if (typeof qz === "undefined") {
+            console.error("QZ no está cargado");
+            return;
+        }
+
+        qz.security.setCertificatePromise(function(resolve, reject) {
+            fetch("certificado/certificate.pem")
+                .then(res => res.text())
+                .then(resolve)
+                .catch(reject);
+        });
+
+        qz.security.setSignaturePromise(function(toSign) {
+            return function(resolve, reject) {
+                fetch("certificado/firma.php", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            request: toSign
+                        })
+                    })
+                    .then(res => res.text())
+                    .then(resolve)
+                    .catch(reject);
+            };
+        });
+
+    });
     $(document).ready(function() {
 
         $.get('ajax/get_practicas.php', {
@@ -277,6 +514,24 @@ Por favor confirmar el turno."
 
         }, 'json');
         cargarHistorial();
+        if ($('#medio_pago').val() === 'transferencia') {
+            $('#boxDestino').show();
+        }
+
+        if ($('#medio_pago').val() === 'transferencia') {
+            $('#boxDestino').show();
+            $('#boxTipoTransferencia').show();
+        }
+
+        $('#medio_pago').change(function() {
+            if ($(this).val() === 'transferencia') {
+                $('#boxDestino').show();
+                $('#boxTipoTransferencia').show();
+            } else {
+                $('#boxDestino').hide();
+                $('#boxTipoTransferencia').hide();
+            }
+        });
     });
 
     function mostrarPreview(data) {
@@ -424,7 +679,7 @@ Por favor confirmar el turno."
 
 
     $('#agregarPractica').click(function() {
-        if (!$('input[name="asistio"]').is(':checked')) {
+        if (!$('#asistioSwitch').is(':checked')) {
             return Swal.fire('Error', 'Primero marcar que asistió', 'error');
         }
 
@@ -520,92 +775,88 @@ Por favor confirmar el turno."
 
     function cobrarTurno() {
 
-        if (!$('input[name="asistio"]').is(':checked')) {
+        // ✅ FIX: selector correcto
+        if (!$('#asistioSwitch').is(':checked')) {
             return Swal.fire('Error', 'El paciente no asistió', 'error');
         }
 
-        // 🔒 Validar caja abierta
+        let medio_pago = $('#medio_pago').val();
+        let transferencia_tipo = $('#transferencia_tipo').val();
+
+        let empleado_destino_id = $('#boxDestino').is(':visible') ?
+            $('select[name="empleado_destino_id"]').val() :
+            null;
+
+        // 🔥 VALIDACIÓN FRONT
+        if (medio_pago === 'transferencia' &&
+            transferencia_tipo === 'clinica' &&
+            !empleado_destino_id) {
+
+            return Swal.fire('Error', 'Seleccionar destino de transferencia', 'error');
+        }
+
         $.get('ajax/verificar_caja_abierta.php', function(res) {
 
-                if (!res.success) {
-                    return Swal.fire('Error', res.message || 'No hay caja abierta', 'error');
+            if (!res.success) {
+                return Swal.fire('Error', res.message || 'No hay caja abierta', 'error');
+            }
+
+            let practicas = [];
+
+            $('#tablaCobro tbody tr').each(function() {
+                practicas.push($(this).data('id'));
+            });
+
+            if (practicas.length === 0) {
+                return Swal.fire('Error', 'Agregá prácticas para cobrar', 'error');
+            }
+
+            $.post('ajax/cobrar_turno.php', {
+                turno_id: <?= $id ?>,
+                practicas: practicas,
+                medio_pago: medio_pago,
+                empleado_destino_id: empleado_destino_id,
+                transferencia_tipo: transferencia_tipo
+            }, function(res) {
+
+                console.log("RESPUESTA COBRO:", res);
+
+                if (!res || !res.success) {
+                    return Swal.fire('Error', res?.message || 'No se pudo cobrar', 'error');
                 }
 
-                // 🔹 Obtener prácticas
-                let practicas = [];
-                $('#tablaCobro tbody tr').each(function() {
-                    practicas.push($(this).data('id'));
+                const dataTicket = {
+                    paciente: "<?= $paciente ?>",
+                    profesional: "<?= $profesional ?>",
+                    total: parseFloat(res.total || 0),
+                    detalle: Array.isArray(res.detalle) ? res.detalle : []
+                };
+
+                cargarHistorial();
+
+                $('#tablaCobro tbody').empty();
+                $('#total').text('0');
+
+                $('#asistioSwitch')
+                    .prop('checked', true)
+                    .trigger('change');
+
+                try {
+                    imprimirTicket(dataTicket);
+                } catch (e) {
+                    console.error("Error impresión:", e);
+                }
+
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Cobro realizado',
+                    timer: 1500,
+                    showConfirmButton: false
                 });
 
-                if (practicas.length === 0) {
-                    return Swal.fire('Error', 'Agregá prácticas para cobrar', 'error');
-                }
+            }, 'json');
 
-                // ⚡ Cobrar
-                $.post('ajax/cobrar_turno.php', {
-                        turno_id: <?= $id ?>,
-                        practicas: practicas
-                    }, function(res) {
-
-                        console.log("RESPUESTA COBRO:", res); // 🔥 DEBUG
-
-                        if (!res || !res.success) {
-                            return Swal.fire('Error', res?.message || 'No se pudo cobrar', 'error');
-                        }
-
-                        // 🔹 Normalizar datos SIEMPRE
-                        const dataTicket = {
-                            paciente: "<?= $paciente ?>",
-                            profesional: "<?= $profesional ?>",
-                            total: parseFloat(res.total || 0),
-                            detalle: Array.isArray(res.detalle) ? res.detalle : []
-                        };
-
-                        // 🔹 Validación fuerte
-                        if (dataTicket.detalle.length === 0) {
-                            console.warn("⚠ Ticket sin detalle", dataTicket);
-                        }
-
-                        // 🔹 Actualizar historial
-                        cargarHistorial();
-
-                        // 🔹 Limpiar UI
-                        $('#tablaCobro tbody').empty();
-                        $('#total').text('0');
-
-                        // 🔹 Marcar asistió
-                        $('#asistioSwitch')
-                            .prop('checked', true)
-                            .next('label')
-                            .text('Asistió');
-
-                        // 🔹 Imprimir (con protección)
-                        try {
-                            imprimirTicket(dataTicket);
-                        } catch (e) {
-                            console.error("Error impresión:", e);
-                            Swal.fire('Error', 'Falló la impresión', 'error');
-                        }
-
-                        // 🔹 Feedback
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Cobro realizado',
-                            timer: 1500,
-                            showConfirmButton: false
-                        });
-
-                    }, 'json')
-
-                    .fail(function() {
-                        Swal.fire('Error', 'Error de conexión al cobrar', 'error');
-                    });
-
-            }, 'json')
-
-            .fail(function() {
-                Swal.fire('Error', 'Error de conexión al verificar caja', 'error');
-            });
+        }, 'json');
     }
     /*******************************************************
      * codigo para impresora
@@ -617,8 +868,8 @@ Por favor confirmar el turno."
             }
 
             // DEBUG opcional (podés dejarlo o sacarlo)
-            const printers = await qz.printers.find();
-            console.log("IMPRESORAS:", printers);
+            // const printers = await qz.printers.find();
+            // console.log("IMPRESORAS:", printers);
 
             // CONFIGURACIÓN DIRECTA (SIN find)
             const config = qz.configs.create("POS-80C", {
@@ -637,11 +888,42 @@ Por favor confirmar el turno."
                 return left + " ".repeat(spaces) + right;
             }
 
-            /* ENCABEZADO */
-            contenido.push("\x1B\x61\x01");
+            /* ENCABEZADO CON LOGO */
+            contenido.push("\x1B\x61\x01"); // Centrado
+
+            // 1. Insertar la imagen (puede ser URL o Base64)
+            contenido.push({
+                type: 'pixel',
+                format: 'png', // o 'png'
+                flavor: 'file',
+                data: 'images/logo_blanco_negro.png', // Ruta relativa, absoluta o base64
+                options: {
+                    language: "ESCPOS",
+                    dotDensity: "double"
+                }
+            });
+
+            //             const logo = {
+            //    type: 'pixel',
+            //    format: 'png',
+            //    flavor: 'file',
+            //    data: 'https://tuweb.com/logo.png',
+            //    options: { 
+            //       language: "ESCPOS", 
+            //       dotDensity: "double",
+            //       width: 200 // Ajusta el tamaño en píxeles según tu papel de 80mm
+            //    }
+            // };
+
+            // // Luego en tu función:
+            // let contenido = [logo, "\x1B\x61\x01", "SALA RIVADAVIA\n", ...];
+
+            contenido.push("\n"); // Salto de línea después del logo
+            // contenido.push("\x1B\x61\x01");
             contenido.push("SALA RIVADAVIA\n");
             contenido.push("Av. Eva Peron 695\n");
             contenido.push("Temperley\n");
+            contenido.push("Fecha: " + new Date().toLocaleString() + "\n");
             contenido.push("------------------------------------------------\n");
 
             /* DATOS */
@@ -675,97 +957,7 @@ Por favor confirmar el turno."
             alert("Error imprimiendo: " + err);
         }
     }
-    // function imprimirTicket(data) {
 
-    //     function linea(nombre, precio) {
-    //         let left = nombre.substring(0, 30);
-    //         let right = "$" + parseFloat(precio).toFixed(2);
-
-    //         let spaces = 48 - (left.length + right.length);
-    //         if (spaces < 1) spaces = 1;
-
-    //         return left + " ".repeat(spaces) + right;
-    //     }
-
-    //     function escapeHtml(text) {
-    //         return text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    //     }
-
-    //     let html = `
-    //     <html>
-    //     <head>
-    //         <title>Vista Ticket</title>
-    //         <style>
-    //             body{
-    //                 font-family: monospace;
-    //                 width: 380px;
-    //                 margin: auto;
-    //                 font-size: 12px;
-    //             }
-    //             .center{text-align:center;}
-    //             .right{text-align:right;}
-    //             pre{white-space: pre;}
-    //         </style>
-    //     </head>
-    //     <body>
-
-    //     <div class="center">
-    //         <b>SALA RIVADAVIA</b><br>
-    //         Av. Eva Peron 695<br>
-    //         Temperley
-    //     </div>
-
-    //     <pre>------------------------------------------------</pre>
-
-    //     <div>Paciente: ${escapeHtml(data.paciente)}</div>
-    //     <div>Profesional: ${escapeHtml(data.profesional)}</div>
-
-    //     <pre>------------------------------------------------</pre>
-    //     `;
-
-    //     data.detalle.forEach(d => {
-    //         html += `<pre>${escapeHtml(linea(d.nombre, d.precio))}</pre>`;
-    //     });
-
-    //     html += `
-    //     <pre>------------------------------------------------</pre>
-
-    //     <div class="right">
-    //         <b>TOTAL: $${parseFloat(data.total).toFixed(2)}</b>
-    //     </div>
-
-    //     <div class="center">
-    //         <br>Gracias por su visita
-    //     </div>
-
-    //     <br><br>
-
-    //     <div class="center">
-    //         ---- COPIA CLINICA ----
-    //     </div>
-
-    //     <pre>------------------------------------------------</pre>
-    //     `;
-
-    //     data.detalle.forEach(d => {
-    //         html += `<pre>${escapeHtml(linea(d.nombre, d.precio))}</pre>`;
-    //     });
-
-    //     html += `
-    //     <pre>------------------------------------------------</pre>
-
-    //     <div class="right">
-    //         <b>TOTAL: $${parseFloat(data.total).toFixed(2)}</b>
-    //     </div>
-
-    //     </body>
-    //     </html>
-    //     `;
-
-    //     let win = window.open('', '_blank', 'width=420,height=700');
-    //     win.document.write(html);
-    //     win.document.close();
-    // }
 
     function cargarHistorial() {
 
@@ -777,24 +969,45 @@ Por favor confirmar el turno."
             let html = '';
 
             if (!res.success || !res.data || res.data.length === 0) {
-                html = `<tr><td colspan="4" class="text-center">Sin cobros en este turno</td></tr>`;
+                html = `<tr><td colspan="5" class="text-center">Sin cobros en este turno</td></tr>`;
             } else {
 
                 res.data.forEach(m => {
+
+                    let medioTexto = m.medio_pago.toLowerCase();
+
+                    let medio = medioTexto.includes('transferencia') ?
+                        `<span class="badge badge-info">${m.medio_pago}</span>` :
+                        `<span class="badge badge-success">${m.medio_pago}</span>`;
+                    let estadoBadge = m.estado === 'anulado' ?
+                        '<span class="badge badge-danger">ANULADO</span>' :
+                        '';
+                    let filaClass = m.estado === 'anulado' ? 'table-danger' : '';
+
                     html += `
-    <tr>
-        <td>${m.fecha}</td>
-        <td>${m.detalle}</td>
-        <td>$${parseFloat(m.total).toFixed(2)}</td>
-        <td>
+<tr class="${filaClass}">
+    <td>${m.fecha}</td>
+    <td>${m.detalle}</td>
+    <td>${medio}</td>
+    <td>
+        $${parseFloat(m.total).toFixed(2)}
+        ${estadoBadge}
+    </td>
+    <td>
+        ${
+            m.estado !== 'anulado' 
+            ? `
             <button class="btn btn-sm btn-primary reimprimir" data-id="${m.id}">
                 <i class="fas fa-print"></i>
             </button>
             <button class="btn btn-sm btn-danger anular" data-id="${m.id}">
                 <i class="fas fa-times"></i>
             </button>
-        </td>
-    </tr>`;
+            `
+            : '<span class="text-danger">Sin acciones</span>'
+        }
+    </td>
+</tr>`;
                 });
 
             }
@@ -828,7 +1041,7 @@ Por favor confirmar el turno."
 
         Swal.fire({
             title: '¿Anular cobro?',
-            text: 'Esta acción revierte el movimiento de caja',
+            text: 'Esta acción anula el cobro y su impacto en caja',
             icon: 'warning',
             showCancelButton: true,
             confirmButtonText: 'Sí, anular',
@@ -866,5 +1079,15 @@ Por favor confirmar el turno."
         } else {
             $(this).next('label').text('No asistió');
         }
+    });
+    $('#transferencia_tipo').change(function() {
+
+        if ($(this).val() === 'profesional') {
+            $('#boxDestino').hide();
+            $('select[name="empleado_destino_id"]').val('');
+        } else {
+            $('#boxDestino').show();
+        }
+
     });
 </script>

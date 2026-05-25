@@ -1,8 +1,6 @@
 <?php
-session_name("turnos");
-session_start();
-
-require_once "inc/db.php";
+require_once __DIR__ . '/inc/session.php';
+require_once __DIR__ . '/inc/db.php';
 $cajas = [];
 $stmt = $pdo->query("SELECT * FROM cajas ORDER BY nombre");
 if ($stmt) {
@@ -34,7 +32,6 @@ if (!isset($_SESSION["login"]) || $_SESSION["login"] !== 'si') {
     header("Location: login.php");
     exit;
 }
-$usuarioId = $_SESSION['user_id'] ?? null;
 $tipoUsuario = $_SESSION['tipo'] ?? null;
 
 $seccion = $_GET['seccion'] ?? '';
@@ -65,19 +62,7 @@ $meses = [
     "Noviembre",
     "Diciembre"
 ];
-$totalSistema = 0;
-if (isset($cajaAbierta['id'])) {
-    $stmt = $pdo->prepare("
-        SELECT 
-            COALESCE(SUM(CASE WHEN tipo='INGRESO' THEN monto ELSE 0 END),0) -
-            COALESCE(SUM(CASE WHEN tipo='EGRESO' THEN monto ELSE 0 END),0) as total
-        FROM caja_movimientos
-        WHERE caja_id = ?
-        AND fecha >= ?
-    ");
-    $stmt->execute([$cajaAbierta['id'], $cajaAbierta['fecha_apertura']]);
-    $totalSistema = (float) $stmt->fetchColumn();
-}
+
 
 ?>
 <!DOCTYPE html>
@@ -102,7 +87,7 @@ if (isset($cajaAbierta['id'])) {
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <link rel="stylesheet" href="adminlte/plugins/select2/css/select2.min.css">
-<link rel="stylesheet" href="adminlte/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css">
+    <link rel="stylesheet" href="adminlte/plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css">
     <link rel="stylesheet" href="styles/style.css">
 
 </head>
@@ -132,7 +117,7 @@ if (isset($cajaAbierta['id'])) {
             <!-- En la navbar, junto al botón de abrir caja -->
             <ul class="navbar-nav ml-auto align-items-center">
 
-                
+
 
                 <li class="nav-item">
                     <span id="userNombre" class="nav-link mb-0">
@@ -179,7 +164,7 @@ if (isset($cajaAbierta['id'])) {
                 // Obtenemos la caja abierta si hay
                 $cajaAbierta = obtenerCajaAbierta($pdo, $_SESSION['user_id']);
                 if ($cajaAbierta):
-                    ?>
+                ?>
                     <small><i class="fas fa-cash-register"></i> <?= htmlspecialchars($cajaAbierta['nombre']) ?> |
                         Turno: <?= htmlspecialchars($cajaAbierta['turno']) ?></small>
                 <?php else: ?>
@@ -201,11 +186,10 @@ if (isset($cajaAbierta['id'])) {
                     if ($tipoUsuario === 'profesional') {
 
                         include "secciones/menu_profesional.php";
-
                     } else {
 
                         include "secciones/menu.php"; // empleados/admin
-                    
+
                     }
                     ?>
 
@@ -255,8 +239,14 @@ if (isset($cajaAbierta['id'])) {
 
         <!-- FOOTER -->
 
-        <footer class="main-footer text-center">
-            <strong>Sistema de Turnos - Desarrollado por Carambia Mauricio</strong>
+        <footer class="main-footer text-center footer-fixed py-2 border-top bg-light">
+            <strong>Sistema de Turnos &copy; <?= date('Y') ?></strong> |
+            Desarrollado por
+            <a href="https://wa.me/5491156410025?text=Hola%20Mauricio,%20quiero%20consultarte%20por%20el%20sistema%20de%20turnos"
+                target="_blank"
+                class="bg-light">
+                <i class="fab fa-whatsapp"></i> Carambia Mauricio
+            </a>
         </footer>
 
     </div>
@@ -356,9 +346,9 @@ if (isset($cajaAbierta['id'])) {
 
             if (!sidebar || !user) return;
 
-            user.style.color = sidebar.classList.contains('sidebar-dark-info')
-                ? '#ffffff'
-                : '#000000';
+            user.style.color = sidebar.classList.contains('sidebar-dark-info') ?
+                '#ffffff' :
+                '#000000';
         }
 
         function updateNavbar() {
@@ -406,14 +396,12 @@ if (isset($cajaAbierta['id'])) {
                         previous: "←"
                     }
                 },
-                dom:
-                    "<'row mb-2'<'col-md-6 d-flex align-items-center'l><'col-md-6 d-flex justify-content-end'f>>" + // cantidad + buscador misma línea
+                dom: "<'row mb-2'<'col-md-6 d-flex align-items-center'l><'col-md-6 d-flex justify-content-end'f>>" + // cantidad + buscador misma línea
                     "<'row mb-2'<'col-md-6 d-flex align-items-center'i><'col-md-6 d-flex justify-content-end'B>>" + // info + botones
-                    "<'row'<'col-md-12'tr>>" +                                                                       // tabla
-                    "<'row mt-2'<'col-md-12 d-flex justify-content-end'p>>",                                          // paginación derecha
+                    "<'row'<'col-md-12'tr>>" + // tabla
+                    "<'row mt-2'<'col-md-12 d-flex justify-content-end'p>>", // paginación derecha
 
-                buttons: [
-                    {
+                buttons: [{
                         extend: 'excelHtml5',
                         text: '<i class="fas fa-file-excel"></i> Excel',
                         className: 'btn btn-success btn-sm mr-1 rounded'
@@ -435,12 +423,13 @@ if (isset($cajaAbierta['id'])) {
 
             return $(selector).DataTable(config);
         }
-        document.addEventListener("DOMContentLoaded", function () {
+        document.addEventListener("DOMContentLoaded", function() {
 
             const savedTheme = localStorage.getItem("theme") || "dark";
 
             applyTheme(savedTheme);
         });
+
         function actualizarSidebar(caja) {
             const sidebar = document.querySelector("#sidebarCaja");
             if (!sidebar) return;
@@ -464,7 +453,6 @@ if (isset($cajaAbierta['id'])) {
                     }
                 });
         }
-
     </script>
 
 </body>

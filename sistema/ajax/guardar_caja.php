@@ -1,5 +1,5 @@
 <?php
-require_once "../inc/db.php";
+require_once __DIR__ . '/../inc/db.php';
 header('Content-Type: application/json');
 
 $data = json_decode(file_get_contents("php://input"), true);

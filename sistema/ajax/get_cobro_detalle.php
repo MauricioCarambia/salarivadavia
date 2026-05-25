@@ -1,5 +1,5 @@
 <?php
-require_once "../inc/db.php";
+require_once __DIR__ . '/../inc/db.php';
 header('Content-Type: application/json');
 
 try {
@@ -15,8 +15,8 @@ try {
     ========================= */
     $stmt = $pdo->prepare("
         SELECT c.*, 
-               CONCAT(p.apellido,' ',p.nombre) AS paciente,
-               CONCAT(pr.apellido,' ',pr.nombre) AS profesional
+               CONCAT(COALESCE(p.apellido,''),' ',COALESCE(p.nombre,'')) AS paciente,
+               CONCAT(COALESCE(pr.apellido,''),' ',COALESCE(pr.nombre,'')) AS profesional
         FROM cobros c
         LEFT JOIN pacientes p ON p.Id = c.paciente_id
         LEFT JOIN profesionales pr ON pr.Id = c.profesional_id
@@ -43,11 +43,12 @@ try {
 
     foreach ($detalle as &$d) {
         $d['precio'] = (float)$d['precio'];
+        $d['nombre'] = trim($d['nombre']);
     }
     unset($d);
 
     /* =========================
-       🔀 REPARTO DINÁMICO
+       🔀 REPARTO
     ========================= */
     $stmt = $pdo->prepare("
         SELECT dr.nombre AS destino, cr.monto
@@ -57,28 +58,39 @@ try {
     ");
     $stmt->execute([$cobro_id]);
 
-    $repartoTmp = [];
+    $repartoMap = [];
 
     while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
 
-        $destino = strtolower(trim($r['destino']));
+        $destino = trim($r['destino']);
 
-        if (!isset($repartoTmp[$destino])) {
-            $repartoTmp[$destino] = 0;
+        if ($destino === '') continue;
+
+        if (!isset($repartoMap[$destino])) {
+            $repartoMap[$destino] = 0;
         }
 
-        $repartoTmp[$destino] += (float)$r['monto'];
+        $repartoMap[$destino] += (float)$r['monto'];
     }
 
-    // 🔥 Formato final compatible con frontend
     $reparto = [];
 
-    foreach ($repartoTmp as $dest => $monto) {
+    foreach ($repartoMap as $destino => $monto) {
         $reparto[] = [
-            'destino' => $dest,
+            'destino' => $destino,
             'valor'   => (float)$monto
         ];
     }
+
+    /* =========================
+       🧾 FORMATEOS
+    ========================= */
+    $fecha = !empty($c['fecha'])
+        ? date('d/m/Y H:i', strtotime($c['fecha']))
+        : null;
+
+    $paciente = trim($c['paciente']) ?: null;
+    $profesional = trim($c['profesional']) ?: null;
 
     /* =========================
        RESPUESTA
@@ -86,13 +98,14 @@ try {
     echo json_encode([
         'success' => true,
         'data' => [
-            'paciente'     => $c['paciente'],
-            'profesional'  => $c['profesional'],
-            'numero'       => $c['numero_completo'],
-            'fecha'        => date('d/m/Y H:i', strtotime($c['fecha'])),
-            'total'        => (float)$c['total'],
-            'detalle'      => $detalle,
-            'reparto'      => $reparto
+            'paciente'        => $paciente,
+            'profesional'     => $profesional,
+            'numero_completo' => $c['numero_completo'],
+            'fecha'           => $fecha,
+            'total'           => (float)$c['total'],
+            'detalle'         => $detalle,
+            'reparto'         => $reparto,
+            'tipo'            => $c['tipo'] ?? 'ingreso'
         ]
     ]);
 
@@ -102,5 +115,4 @@ try {
         'success' => false,
         'message' => $e->getMessage()
     ]);
-
 }

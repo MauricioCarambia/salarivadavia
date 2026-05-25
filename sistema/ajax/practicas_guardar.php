@@ -1,7 +1,7 @@
 <?php
 session_start();
 header('Content-Type: application/json');
-require_once "../inc/db.php";
+require_once __DIR__ . '/../inc/db.php';
 
 $id = $_POST['id'] ?? null;
 $nombre = trim($_POST['nombre'] ?? '');

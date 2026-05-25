@@ -16,12 +16,12 @@ if (isset($_POST['guardar'])) {
                 apellido = :apellido,
                 documento = :documento,
                 especialidad = :especialidad,
-                disponibilidad = :disponibilidad,
+                derivacion = :derivacion,
                 horario = :horario,
                 celular = :celular,
                 edad = :edad,
-                estudio = :estudio,
                 profesional = :profesional,
+                nota = :nota,
                 asignado = :asignado
             WHERE Id = :id";
 
@@ -32,13 +32,13 @@ if (isset($_POST['guardar'])) {
         ':apellido' => $_POST['apellido'],
         ':documento' => $_POST['documento'],
         ':especialidad' => $_POST['especialidad'],
-        ':disponibilidad' => $_POST['disponibilidad'],
+        ':derivacion' => $_POST['derivacion'],
         ':horario' => $_POST['horario'],
         ':celular' => $_POST['celular'],
         ':edad' => $_POST['edad'],
-        ':estudio' => $_POST['estudio'],
         ':profesional' => $_POST['profesional'],
         ':asignado' => $_POST['asignado'],
+        ':nota' => $_POST['nota'],
         ':id' => $id
     ]);
 
@@ -72,8 +72,8 @@ $rArray = $stmt->fetch(PDO::FETCH_ASSOC);
                 <div class="hpanel">
                     <div class="panel-body">
                         <form class="form-horizontal"
-                                    action="./?seccion=lista_espera_edit&id=<?= $id ?>&v=<?= htmlspecialchars($v) ?>&nc=<?= $rand ?>"
-                                    method="POST">
+                            action="./?seccion=lista_espera_edit&id=<?= $id ?>&v=<?= htmlspecialchars($v) ?>&nc=<?= $rand ?>"
+                            method="POST">
                             <div class="form-group">
                                 <label class="col-sm-2 control-label">Nombre</label>
                                 <div class="col-sm-10">
@@ -102,52 +102,52 @@ $rArray = $stmt->fetch(PDO::FETCH_ASSOC);
                             <div class="form-group">
                                 <label class="col-sm-2 control-label">Especialidad</label>
                                 <div class="col-sm-10">
-                                   <select class="form-control" name="especialidad">
+                                    <select class="form-control" name="especialidad">
 
-<option value="Psicologia Adulto"
-<?= ($rArray['especialidad']=='Psicologia Adulto')?'selected':'' ?>>
-Psicologia Adulto
-</option>
+                                        <option value="Psicologia Adulto"
+                                            <?= ($rArray['especialidad'] == 'Psicologia Adulto') ? 'selected' : '' ?>>
+                                            Psicologia Adulto
+                                        </option>
 
-<option value="Psicologia Menores"
-<?= ($rArray['especialidad']=='Psicologia Menores')?'selected':'' ?>>
-Psicologia Menores
-</option>
+                                        <option value="Psicologia Menores"
+                                            <?= ($rArray['especialidad'] == 'Psicologia Menores') ? 'selected' : '' ?>>
+                                            Psicologia Menores
+                                        </option>
 
-<option value="Psicopedagogia"
-<?= ($rArray['especialidad']=='Psicopedagogia')?'selected':'' ?>>
-Psicopedagogia
-</option>
+                                        <option value="Psicopedagogia"
+                                            <?= ($rArray['especialidad'] == 'Psicopedagogia') ? 'selected' : '' ?>>
+                                            Psicopedagogia
+                                        </option>
 
-<option value="Fonoaudiologia"
-<?= ($rArray['especialidad']=='Fonoaudiologia')?'selected':'' ?>>
-Fonoaudiologia
-</option>
+                                        <option value="Fonoaudiologia"
+                                            <?= ($rArray['especialidad'] == 'Fonoaudiologia') ? 'selected' : '' ?>>
+                                            Fonoaudiologia
+                                        </option>
 
-<option value="Kinesiologia"
-<?= ($rArray['especialidad']=='Kinesiologia')?'selected':'' ?>>
-Kinesiologia
-</option>
+                                        <option value="Kinesiologia"
+                                            <?= ($rArray['especialidad'] == 'Kinesiologia') ? 'selected' : '' ?>>
+                                            Kinesiologia
+                                        </option>
 
-</select>
+                                    </select>
                                 </div>
                             </div>
                             <div class="form-group">
-                                <label class="col-sm-2 control-label">Disponibilidad Horaria</label>
+                                <label class="col-sm-2 control-label">Preferencia Horaria</label>
                                 <div class="col-sm-10">
-                                   <select class="form-control" name="disponibilidad">
+                                    <select class="form-control" name="derivacion">
 
-<option value="Mañana"
-<?= ($rArray['disponibilidad']=='Mañana')?'selected':'' ?>>
-Mañana
-</option>
+                                        <option value="Mañana"
+                                            <?= ($rArray['derivacion'] == 'Mañana') ? 'selected' : '' ?>>
+                                            Mañana
+                                        </option>
 
-<option value="Tarde"
-<?= ($rArray['disponibilidad']=='Tarde')?'selected':'' ?>>
-Tarde
-</option>
+                                        <option value="Tarde"
+                                            <?= ($rArray['derivacion'] == 'Tarde') ? 'selected' : '' ?>>
+                                            Tarde
+                                        </option>
 
-</select>
+                                    </select>
                                 </div>
                             </div>
                             <div class="form-group">
@@ -172,10 +172,17 @@ Tarde
                                 </div>
                             </div>
                             <div class="form-group">
-                                <label class="col-sm-2 control-label">Estudio</label>
+                                <label class="col-sm-2 control-label">Derivacion</label>
                                 <div class="col-sm-10">
-                                    <input type="text" class="form-control" name="estudio"
-                                        value="<?php echo $rArray['estudio']; ?>">
+                                    <input type="text" class="form-control" name="derivacion"
+                                        value="<?php echo $rArray['derivacion']; ?>">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="col-sm-2 control-label">Nota</label>
+                                <div class="col-sm-10">
+                                    <input type="text" class="form-control" name="nota"
+                                        value="<?php echo $rArray['nota']; ?>">
                                 </div>
                             </div>
                             <div class="form-group">
@@ -188,40 +195,40 @@ Tarde
                             <div class="form-group">
                                 <label class="col-sm-2 control-label">Asignado</label>
                                 <div class="col-sm-10">
-                                   <select class="form-control" name="asignado">
-                                    <option value=""
-<?= empty($rArray['asignado']) ? 'selected' : '' ?>>
--- Seleccionar estado --
-</option>
+                                    <select class="form-control" name="asignado">
+                                        <option value=""
+                                            <?= empty($rArray['asignado']) ? 'selected' : '' ?>>
+                                            -- Seleccionar estado --
+                                        </option>
 
-<option value="Confirmo"
-<?= ($rArray['asignado']=='Confirmo')?'selected':'' ?>>
-Confirmo
-</option>
+                                        <option value="Confirmo"
+                                            <?= ($rArray['asignado'] == 'Confirmo') ? 'selected' : '' ?>>
+                                            Confirmo
+                                        </option>
 
-<option value="No Confirmo"
-<?= ($rArray['asignado']=='No Confirmo')?'selected':'' ?>>
-No Confirmo
-</option>
+                                        <option value="No Confirmo"
+                                            <?= ($rArray['asignado'] == 'No Confirmo') ? 'selected' : '' ?>>
+                                            No Confirmo
+                                        </option>
 
-<option value="Pendiente Confirmacion"
-<?= ($rArray['asignado']=='Pendiente Confirmacion')?'selected':'' ?>>
-Pendiente Confirmacion
-</option>
+                                        <option value="Pendiente Confirmacion"
+                                            <?= ($rArray['asignado'] == 'Pendiente Confirmacion') ? 'selected' : '' ?>>
+                                            Pendiente Confirmacion
+                                        </option>
 
-</select>
+                                    </select>
                                 </div>
                             </div>
                             <div class="form-group">
                                 <div class="col-sm-12">
                                     <div class="pull-right">
-                                      <?php
-if ($v != '') {
-    echo '<a href="./?seccion=lista_espera&id='.$v.'&nc='.$rand.'" class="btn btn-info">Volver</a>';
-} else {
-    echo '<a href="./?seccion=lista_espera&nc='.$rand.'" class="btn btn-info">Volver</a>';
-}
-?>
+                                        <?php
+                                        if ($v != '') {
+                                            echo '<a href="./?seccion=lista_espera&id=' . $v . '&nc=' . $rand . '" class="btn btn-info">Volver</a>';
+                                        } else {
+                                            echo '<a href="./?seccion=lista_espera&nc=' . $rand . '" class="btn btn-info">Volver</a>';
+                                        }
+                                        ?>
                                         <input type="submit" class="btn btn-info" name="guardar" value="Guardar">
                         </form>
                     </div>

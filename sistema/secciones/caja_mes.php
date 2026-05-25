@@ -1,5 +1,5 @@
 <?php
-require_once 'inc/db.php';
+require_once __DIR__ . '/../inc/db.php';
 $rand = rand(1000, 9999);
 $mesSeleccionado = isset($_POST['mes']) ? $_POST['mes'] : date('Y-m');
 $anio = date('Y', strtotime($mesSeleccionado));

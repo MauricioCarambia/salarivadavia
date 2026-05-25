@@ -1,9 +1,26 @@
 <?php
-session_set_cookie_params(0, '/');
-session_name ("turnos"); 
-session_cache_limiter ("private");
-session_start();
+require_once __DIR__ . '/../inc/session.php';
+
+// Vaciar sesión
+$_SESSION = [];
+
+// Borrar cookie
+if (ini_get("session.use_cookies")) {
+    $params = session_get_cookie_params();
+    setcookie(
+        session_name(),
+        '',
+        time() - 42000,
+        $params["path"],
+        $params["domain"],
+        $params["secure"],
+        $params["httponly"]
+    );
+}
+
+// Destruir sesión
 session_destroy();
-$rand = mt_rand();
-header ("location: ../login.php");
-?>
+
+// Redirigir
+header("Location: ../login.php");
+exit;

@@ -1,7 +1,8 @@
 <?php
-
+require_once __DIR__ . '/../inc/db.php';
 $id  = $_GET['id']  ?? 0;
 $pid = $_GET['pid'] ?? 0;
+$rand = bin2hex(random_bytes(8));
 
 $mensaje = "";
 
@@ -36,6 +37,8 @@ if(isset($_POST['monto'])){
 /* =====================================
    ULTIMO MES PAGADO
 ===================================== */
+
+$meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 $stmt = $conexion->prepare("
     SELECT 

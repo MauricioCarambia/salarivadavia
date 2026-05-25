@@ -1,10 +1,39 @@
 <?php
 session_start();
-require_once "../inc/db.php";
+require_once __DIR__ . '/../inc/db.php';
 
-$id = $_POST['id'];
+header('Content-Type: application/json');
 
-$stmt = $pdo->prepare("DELETE FROM practicas_precios WHERE id=?");
-$stmt->execute([$id]);
 
-echo json_encode(['success'=>true]);
+
+// 📥 Validar ID
+$id = $_POST['id'] ?? null;
+
+if (!$id) {
+    echo json_encode([
+        'success' => false,
+        'message' => 'ID requerido'
+    ]);
+    exit;
+}
+
+try {
+
+    $stmt = $pdo->prepare("
+        DELETE FROM practicas_precios 
+        WHERE id = ?
+    ");
+
+    $stmt->execute([$id]);
+
+    echo json_encode([
+        'success' => true
+    ]);
+
+} catch (Exception $e) {
+
+    echo json_encode([
+        'success' => false,
+        'message' => $e->getMessage()
+    ]);
+}

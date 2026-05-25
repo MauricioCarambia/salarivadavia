@@ -15,6 +15,7 @@ if (!$profesional)
 $dt = new DateTime($fecha);
 $fechaHora = $dt->format('Y-m-d H:i:00');
 $horaSeleccionada = $dt->format('H:i');
+$rand = rand();
 
 // ============================== PROFESIONAL ==============================
 $stmt = $conexion->prepare("
@@ -69,7 +70,8 @@ $fechaCompleta = $dt->format('d/m/Y');
             <h3 class="card-title">
                 <i class="fas fa-user-md"></i>
                 <?= $nombreProfesional ?>
-                
+                <a href="index_clean.php?seccion=pacientes_new&v=1&nc=<?php echo $rand; ?>"
+                    class="btn btn-info pull-right"><i class="fa fa-plus"></i> Paciente nuevo</a>
             </h3>
             <div class="card-tools">
                 <button class="btn btn-danger btn-sm" onclick="cerrar()">
@@ -177,39 +179,31 @@ $fechaCompleta = $dt->format('d/m/Y');
 </div>
 
 <script>
-    // 🔍 BUSQUEDA (MISMA LOGICA PERO MÁS LIMPIA)
+    // 🔍 BUSQUEDA
     $("#form-busqueda").on('submit', function(e) {
         e.preventDefault();
-
         const data = $(this).serialize();
 
         $("#resultados").html(`
-        <div class="text-center p-3">
-            <i class="fas fa-spinner fa-spin"></i> Buscando...
-        </div>
-    `);
+            <div class="text-center p-3">
+                <i class="fas fa-spinner fa-spin"></i> Buscando...
+            </div>
+        `);
 
         $.get("index_clean.php", {
             seccion: 'turnos_asignar',
             ...Object.fromEntries(new URLSearchParams(data))
         }, function(res) {
-
-            // 🔥 extraer SOLO el contenido interno
             const html = $(res).find('#wrapper').html();
             $("#wrapper").html(html);
-
         });
     });
 
-
-    // ✅ ASIGNAR TURNO CON SWEETALERT
+    // ✅ ASIGNAR TURNO
     function asignarTurno(pacienteId, btn) {
-
         const fila = $(btn).closest("tr");
-
         const nombre = fila.find("td:eq(0)").text() + " " + fila.find("td:eq(1)").text();
         const documento = fila.find("td:eq(2)").text();
-
         const hora = $("#select-hora-turnos").val();
         const fechaBase = $("#fecha-completa").val();
         const fecha = fechaBase + " " + hora + ":00";
@@ -217,16 +211,11 @@ $fechaCompleta = $dt->format('d/m/Y');
         parent.Swal.fire({
             icon: 'question',
             title: 'Confirmar turno',
-            html: `
-            <b>Paciente:</b> ${nombre}<br>
-            <b>Documento:</b> ${documento}<br>
-            <b>Hora:</b> ${hora}
-        `,
+            html: `<b>Paciente:</b> ${nombre}<br><b>Documento:</b> ${documento}<br><b>Hora:</b> ${hora}`,
             showCancelButton: true,
             confirmButtonText: 'Asignar',
             confirmButtonColor: '#28a745'
         }).then(result => {
-
             if (!result.isConfirmed) return;
 
             parent.Swal.fire({
@@ -240,42 +229,41 @@ $fechaCompleta = $dt->format('d/m/Y');
                 paciente: pacienteId,
                 fecha: fecha
             }, function(res) {
-
                 if (res.success) {
-
+                    // --- AQUÍ CIERRA EL MODAL ---
                     parent.$('#modalTurno').modal('hide');
-
                     parent.Swal.fire({
                         icon: 'success',
                         title: 'Turno asignado',
                         timer: 1500,
                         showConfirmButton: false
                     }).then(() => parent.location.reload());
-
                 } else {
                     parent.Swal.fire('Error', res.error, 'error');
                 }
-
             }).fail(() => {
                 parent.Swal.fire('Error', 'Error de conexión', 'error');
             });
-
         });
     }
 
-
-    // ❌ CERRAR
+    // ❌ CERRAR MANUAL
     function cerrar() {
         parent.$('#modalTurno').modal('hide');
     }
 
+    // 🔥 ESCUCHAR CIERRE DESDE OTRAS SECCIONES (NUEVO)
+    // Si registras un paciente nuevo y quieres que esa sección ordene cerrar el modal
+    window.addEventListener('message', function(event) {
+        if (event.data === 'pacienteGuardado') {
+            parent.$('#modalTurno').modal('hide');
+            parent.location.reload();
+        }
+    });
 
-    // 🔥 ENTER BUSCAR
     $("#busqueda").on("keypress", function(e) {
         if (e.which === 13) {
             $("#form-busqueda").submit();
         }
     });
-
- 
 </script>

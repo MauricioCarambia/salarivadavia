@@ -8,11 +8,30 @@ $swalError = false;
 
 // Provincias
 $provincias = [
-    "Ciudad Autónoma de Buenos Aires","Buenos Aires","Catamarca","Chaco",
-    "Chubut","Córdoba","Corrientes","Entre Ríos","Formosa","Jujuy",
-    "La Pampa","La Rioja","Mendoza","Misiones","Neuquén","Río Negro",
-    "Salta","San Juan","San Luis","Santa Cruz","Santa Fe",
-    "Santiago del Estero","Tierra del Fuego","Tucumán"
+    "Ciudad Autónoma de Buenos Aires",
+    "Buenos Aires",
+    "Catamarca",
+    "Chaco",
+    "Chubut",
+    "Córdoba",
+    "Corrientes",
+    "Entre Ríos",
+    "Formosa",
+    "Jujuy",
+    "La Pampa",
+    "La Rioja",
+    "Mendoza",
+    "Misiones",
+    "Neuquén",
+    "Río Negro",
+    "Salta",
+    "San Juan",
+    "San Luis",
+    "Santa Cruz",
+    "Santa Fe",
+    "Santiago del Estero",
+    "Tierra del Fuego",
+    "Tucumán"
 ];
 
 // Obtenemos los datos del paciente
@@ -46,7 +65,11 @@ if ($id && isset($_POST['guardar'])) {
         'obra_social_numero' => $_POST['obra_social_numero'] ?? '',
         'sexo' => $_POST['sexo'] ?? '',
         'historia_clinica' => $_POST['historia_clinica'] ?? '',
-        'nota' => $_POST['nota'] ?? ''
+        'nota' => $_POST['nota'] ?? '',
+
+        // 🔥 NUEVOS
+        'tipo_socio' => $_POST['tipo_socio'] ?? 'normal',
+        'fecha_alta' => $_POST['fecha_alta'] ?? date('Y-m-d')
     ];
 
     // Verificar si el documento ya existe en otro paciente
@@ -56,25 +79,30 @@ if ($id && isset($_POST['guardar'])) {
 
     if ($cant == 0) {
         $sql = "UPDATE pacientes SET
-                    nombre = :nombre,
-                    apellido = :apellido,
-                    domicilio = :domicilio,
-                    provincia = :provincia,
-                    localidad = :localidad,
-                    celular = :celular,
-                    fijo = :fijo,
-                    email = :email,
-                    tipo_documento = :tipo_documento,
-                    documento = :documento,
-                    nacimiento = :nacimiento,
-                    nro_afiliado = :nro_afiliado,
-                    obra_social_id = :obra_social_id,
-                    obra_social_plan = :obra_social_plan,
-                    obra_social_numero = :obra_social_numero,
-                    sexo = :sexo,
-                    historia_clinica = :historia_clinica,
-                    nota = :nota
-                WHERE Id = :id";
+    nombre = :nombre,
+    apellido = :apellido,
+    domicilio = :domicilio,
+    provincia = :provincia,
+    localidad = :localidad,
+    celular = :celular,
+    fijo = :fijo,
+    email = :email,
+    tipo_documento = :tipo_documento,
+    documento = :documento,
+    nacimiento = :nacimiento,
+    nro_afiliado = :nro_afiliado,
+    obra_social_id = :obra_social_id,
+    obra_social_plan = :obra_social_plan,
+    obra_social_numero = :obra_social_numero,
+    sexo = :sexo,
+    historia_clinica = :historia_clinica,
+    nota = :nota,
+
+    -- 🔥 NUEVOS
+    tipo_socio = :tipo_socio,
+    fecha_alta = :fecha_alta
+
+WHERE Id = :id";
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute(array_merge($campos, [':id' => $id]));
@@ -99,12 +127,12 @@ if ($id && isset($_POST['guardar'])) {
                     <div class="form-group col-md-6">
                         <label>Nombre <span class="text-danger">*</span></label>
                         <input type="text" name="nombre" class="form-control" placeholder="Nombre"
-                               value="<?= htmlspecialchars($rArray['nombre']) ?>" required>
+                            value="<?= htmlspecialchars($rArray['nombre']) ?>" required>
                     </div>
                     <div class="form-group col-md-6">
                         <label>Apellido <span class="text-danger">*</span></label>
                         <input type="text" name="apellido" class="form-control" placeholder="Apellido"
-                               value="<?= htmlspecialchars($rArray['apellido']) ?>" required>
+                            value="<?= htmlspecialchars($rArray['apellido']) ?>" required>
                     </div>
                 </div>
 
@@ -114,23 +142,38 @@ if ($id && isset($_POST['guardar'])) {
                         <label>Tipo de documento <span class="text-danger">*</span></label>
                         <select class="form-control" name="tipo_documento" required>
                             <option value="">Seleccionar</option>
-                            <?php foreach(['DNI','LE','LC','CI'] as $tipo): ?>
-                                <option value="<?= $tipo ?>" <?= $rArray['tipo_documento']==$tipo?'selected':'' ?>><?= $tipo ?></option>
+                            <?php foreach (['DNI', 'LE', 'LC', 'CI'] as $tipo): ?>
+                                <option value="<?= $tipo ?>" <?= $rArray['tipo_documento'] == $tipo ? 'selected' : '' ?>><?= $tipo ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="form-group col-md-4">
                         <label>Documento <span class="text-danger">*</span></label>
                         <input type="number" min="0" step="1" name="documento" class="form-control"
-                               value="<?= htmlspecialchars($rArray['documento']) ?>" required>
+                            value="<?= htmlspecialchars($rArray['documento']) ?>" required>
                     </div>
-                    <div class="form-group col-md-4">
+                   
+                </div>
+                <div class="form-row">
+                     <div class="form-group col-md-4">
                         <label>Nro de socio</label>
                         <input type="text" name="nro_afiliado" class="form-control"
-                               value="<?= htmlspecialchars($rArray['nro_afiliado']) ?>">
+                            value="<?= htmlspecialchars($rArray['nro_afiliado']) ?>">
+                    </div>
+                    <div class="form-group col-md-4">
+                        <label>Tipo de socio</label>
+                        <select name="tipo_socio" class="form-control">
+                            <option value="normal" <?= $rArray['tipo_socio'] == 'normal' ? 'selected' : '' ?>>Normal</option>
+                            <option value="vitalicio" <?= $rArray['tipo_socio'] == 'vitalicio' ? 'selected' : '' ?>>Vitalicio</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group col-md-4">
+                        <label>Fecha de alta</label>
+                        <input type="date" name="fecha_alta" class="form-control"
+                            value="<?= htmlspecialchars($rArray['fecha_alta'] ?? date('Y-m-d')) ?>">
                     </div>
                 </div>
-
                 <!-- Fecha nacimiento y sexo -->
                 <div class="form-row">
                     <div class="form-group col-md-6">
@@ -141,8 +184,8 @@ if ($id && isset($_POST['guardar'])) {
                         <label>Sexo</label>
                         <select class="form-control" name="sexo">
                             <option value="">Seleccionar</option>
-                            <?php foreach(['Masculino','Femenino'] as $s): ?>
-                                <option value="<?= $s ?>" <?= $rArray['sexo']==$s?'selected':'' ?>><?= $s ?></option>
+                            <?php foreach (['Masculino', 'Femenino'] as $s): ?>
+                                <option value="<?= $s ?>" <?= $rArray['sexo'] == $s ? 'selected' : '' ?>><?= $s ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -170,8 +213,8 @@ if ($id && isset($_POST['guardar'])) {
                         <label>Provincia</label>
                         <select class="form-control" name="provincia">
                             <option value="">Seleccionar</option>
-                            <?php foreach($provincias as $prov): ?>
-                                <option value="<?= htmlspecialchars($prov) ?>" <?= $rArray['provincia']==$prov?'selected':'' ?>><?= htmlspecialchars($prov) ?></option>
+                            <?php foreach ($provincias as $prov): ?>
+                                <option value="<?= htmlspecialchars($prov) ?>" <?= $rArray['provincia'] == $prov ? 'selected' : '' ?>><?= htmlspecialchars($prov) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -193,8 +236,8 @@ if ($id && isset($_POST['guardar'])) {
                             <option value="">Seleccionar</option>
                             <?php
                             $stmt = $pdo->query("SELECT * FROM obras_sociales");
-                            while($rOS = $stmt->fetch(PDO::FETCH_ASSOC)):
-                                $selected = ($rOS['Id']==$rArray['obra_social_id'])?'selected':'';
+                            while ($rOS = $stmt->fetch(PDO::FETCH_ASSOC)):
+                                $selected = ($rOS['Id'] == $rArray['obra_social_id']) ? 'selected' : '';
                             ?>
                                 <option value="<?= htmlspecialchars($rOS['Id']) ?>" <?= $selected ?>><?= htmlspecialchars($rOS['obra_social']) ?></option>
                             <?php endwhile; ?>
@@ -230,24 +273,24 @@ if ($id && isset($_POST['guardar'])) {
 </div>
 
 <?php if ($swalGuardado || $swalError): ?>
-<script>
-document.addEventListener("DOMContentLoaded", function() {
-    <?php if ($swalGuardado): ?>
-        Swal.fire({
-            icon: 'success',
-            title: '¡Paciente actualizado!',
-            text: 'Los cambios se guardaron correctamente.',
-            confirmButtonText: 'Aceptar'
-        }).then(() => {
-            window.location.href = './?seccion=pacientes&nc=<?= $rand ?>';
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            <?php if ($swalGuardado): ?>
+                Swal.fire({
+                    icon: 'success',
+                    title: '¡Paciente actualizado!',
+                    text: 'Los cambios se guardaron correctamente.',
+                    confirmButtonText: 'Aceptar'
+                }).then(() => {
+                    window.location.href = './?seccion=pacientes&nc=<?= $rand ?>';
+                });
+            <?php elseif ($swalError): ?>
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: '<?= addslashes($swalError) ?>'
+                });
+            <?php endif; ?>
         });
-    <?php elseif ($swalError): ?>
-        Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: '<?= addslashes($swalError) ?>'
-        });
-    <?php endif; ?>
-});
-</script>
+    </script>
 <?php endif; ?>

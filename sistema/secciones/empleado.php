@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../inc/db.php';
 $mensaje = '';
 
 if (!isset($_SESSION['login'])) {
@@ -13,6 +14,7 @@ if (empty($_SESSION['es_admin']) && !in_array('gestionar_roles', $_SESSION['acce
 
 $user_id = $_SESSION['user_id'] ?? 0;
 $es_admin = !empty($_SESSION['es_admin']);
+$rand = mt_rand(1000, 9999);
 
 // =============================
 // EMPLEADOS

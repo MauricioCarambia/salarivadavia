@@ -1,6 +1,8 @@
 <?php
+require_once __DIR__ . '/../inc/db.php';
 $user_tipo = $_SESSION['tipo'] ?? null;
 $id = $_GET['id'] ?? 0;
+$rand = uniqid();
 
 /* ===============================
    PACIENTE
@@ -57,6 +59,8 @@ $stmtPagos = $conexion->prepare("
 ");
 $stmtPagos->execute([':id' => $id]);
 $pagos = $stmtPagos->fetchAll(PDO::FETCH_ASSOC);
+
+$meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 ?>
 
 <div class="row mb-3">

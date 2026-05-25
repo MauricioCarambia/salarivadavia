@@ -1,12 +1,12 @@
 <?php
-require_once 'inc/db.php';
+require_once __DIR__ . '/../inc/db.php';
 
 $mensaje = '';
 $tipoMensaje = '';
 
 $nombre = $apellido = $documento = $especialidad = '';
-$disponibilidad = $horario = $celular = $edad = '';
-$estudio = $profesional = $asignado = '';
+$derivacion = $horario = $celular = $edad = '';
+$nota = $profesional = $asignado = '';
 
 /* =========================
    ESPECIALIDADES (DB)
@@ -23,45 +23,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $apellido = trim($_POST['apellido']);
     $documento = trim($_POST['documento']);
     $especialidad = $_POST['especialidad'];
-    $disponibilidad = $_POST['disponibilidad'];
+    $derivacion = $_POST['derivacion'];
     $horario = $_POST['horario'];
     $celular = $_POST['celular'];
     $edad = $_POST['edad'];
-    $estudio = $_POST['estudio'];
     $profesional = $_POST['profesional'];
     $asignado = $_POST['asignado'];
+    $nota = $_POST['nota'];
 
     if ($nombre && $apellido && $documento && $especialidad) {
 
         $stmt = $conexion->prepare("
-            INSERT INTO lista_espera
-            (nombre, apellido, documento, especialidad, disponibilidad, horario, celular, edad, estudio, profesional, asignado)
-            VALUES
-            (:nombre, :apellido, :documento, :especialidad, :disponibilidad, :horario, :celular, :edad, :estudio, :profesional, :asignado)
-        ");
+    INSERT INTO lista_espera
+    (nombre, apellido, documento, especialidad, derivacion, horario, celular, edad, profesional, asignado, nota, created_date)
+    VALUES
+    (:nombre, :apellido, :documento, :especialidad, :derivacion, :horario, :celular, :edad, :profesional, :asignado, :nota, NOW())
+");
 
         $stmt->execute([
-            ':nombre' => $nombre,
-            ':apellido' => $apellido,
-            ':documento' => $documento,
+            ':nombre'      => $nombre,
+            ':apellido'    => $apellido,
+            ':documento'   => $documento,
             ':especialidad' => $especialidad,
-            ':disponibilidad' => $disponibilidad,
-            ':horario' => $horario,
-            ':celular' => $celular,
-            ':edad' => $edad,
-            ':estudio' => $estudio,
+            ':derivacion'  => $derivacion,
+            ':horario'     => $horario,
+            ':celular'     => $celular,
+            ':edad'        => $edad,
             ':profesional' => $profesional,
-            ':asignado' => $asignado
+            ':asignado'    => $asignado,
+            ':nota'        => $nota
+            // Ya no pasamos :created_date porque NOW() lo maneja la DB
         ]);
-
         $tipoMensaje = 'success';
         $mensaje = 'Paciente agregado correctamente';
 
         // limpiar
         $nombre = $apellido = $documento = $especialidad = '';
-        $disponibilidad = $horario = $celular = $edad = '';
-        $estudio = $profesional = $asignado = '';
-
+        $derivacion = $horario = $celular = $edad = '';
+        $profesional = $asignado = '';
     } else {
         $tipoMensaje = 'error';
         $mensaje = 'Complete los campos obligatorios';
@@ -80,27 +79,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     <div class="row">
 
-                        <div class="col-md-6">
+                        <!-- DNI -->
+                        <div class="col-md-4">
                             <label>DNI</label>
                             <input type="number" name="documento" id="dni" class="form-control"
                                 value="<?= $documento ?>" required>
                         </div>
 
-                        <div class="col-md-6">
-                            <label>Nombre</label>
-                            <input type="text" name="nombre" id="nombre" class="form-control" value="<?= $nombre ?>"
-                                required>
+                        <!-- Nombre -->
+                        <div class="col-md-4">
+                            <label>Nombre<span class="required-asterisk">*</span></label>
+                            <input type="text" name="nombre" id="nombre" class="form-control"
+                                value="<?= $nombre ?>" required>
                         </div>
 
-                        <div class="col-md-6">
-                            <label>Apellido</label>
+                        <!-- Apellido -->
+                        <div class="col-md-4">
+                            <label>Apellido<span class="required-asterisk">*</span></label>
                             <input type="text" name="apellido" id="apellido" class="form-control"
                                 value="<?= $apellido ?>" required>
                         </div>
 
-                        <div class="col-md-6">
-                            <label>Especialidad</label>
-                            <select name="especialidad" class="form-control" required>
+                        <!-- Especialidad -->
+                        <div class="col-md-4">
+                            <label>Especialidad<span class="required-asterisk">*</span></label>
+                            <select name="especialidad" class="form-control select2" required>
                                 <option value="">Seleccionar</option>
                                 <?php foreach ($especialidades as $esp): ?>
                                     <option value="<?= $esp ?>" <?= ($especialidad == $esp ? 'selected' : '') ?>>
@@ -110,51 +113,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             </select>
                         </div>
 
+                        <!-- Derivación -->
                         <div class="col-md-4">
-                            <label>Disponibilidad</label>
-                            <select name="disponibilidad" class="form-control">
-                                <option value="">Seleccionar</option>
-                                <option <?= $disponibilidad == 'Mañana' ? 'selected' : '' ?>>Mañana</option>
-                                <option <?= $disponibilidad == 'Tarde' ? 'selected' : '' ?>>Tarde</option>
-                            </select>
+                            <label>Derivación</label>
+                            <input type="text" name="derivacion" class="form-control" value="<?= $derivacion ?>">
                         </div>
 
+                        <!-- Horario -->
                         <div class="col-md-4">
-                            <label>Preferencia horario</label>
-                            <input type="text" name="horario" class="form-control" value="<?= $horario ?>">
+                            <label>Preferencia horario<span class="required-asterisk">*</span></label>
+                            <input type="text" name="horario" class="form-control" value="<?= $horario ?>" required>
                         </div>
 
+                        <!-- Edad -->
                         <div class="col-md-4">
-                            <label>Edad</label>
-                            <input type="number" name="edad" class="form-control" value="<?= $edad ?>">
+                            <label>Edad<span class="required-asterisk">*</span></label>
+                            <input type="number" name="edad" class="form-control" value="<?= $edad ?>" required>
                         </div>
 
-                        <div class="col-md-6">
-                            <label>Celular</label>
-                            <input type="text" name="celular" id="celular" class="form-control" value="<?= $celular ?>">
+                        <!-- Celular -->
+                        <div class="col-md-4">
+                            <label>Celular<span class="required-asterisk">*</span></label>
+                            <input type="text" name="celular" id="celular" class="form-control"
+                                value="<?= $celular ?>" required>
                         </div>
 
-                        <div class="col-md-6">
+                        <!-- Profesional -->
+                        <div class="col-md-4">
                             <label>Profesional</label>
-                            <input type="text" name="profesional" class="form-control" value="<?= $profesional ?>">
+                            <input type="text" name="profesional" class="form-control"
+                                value="<?= $profesional ?>">
                         </div>
 
-                       
-                        <div class="col-md-6 mt-2">
+                        <!-- Estado -->
+                        <div class="col-md-6">
                             <label>Estado</label>
                             <select name="asignado" class="form-control">
                                 <option value="">Seleccionar</option>
-                                <option <?= $asignado == 'Confirmo' ? 'selected' : '' ?>>Confirmo</option>
-                                <option <?= $asignado == 'No Confirmo' ? 'selected' : '' ?>>No Confirmo</option>
-                                <option <?= $asignado == 'Pendiente Confirmacion' ? 'selected' : '' ?>>Pendiente
-                                    Confirmacion
+                                <option value="Confirmo" <?= $asignado == 'Confirmo' ? 'selected' : '' ?>>Confirmo</option>
+                                <option value="No Confirmo" <?= $asignado == 'No Confirmo' ? 'selected' : '' ?>>No Confirmo</option>
+                                <option value="Pendiente Confirmacion" <?= $asignado == 'Pendiente Confirmacion' ? 'selected' : '' ?>>
+                                    Pendiente Confirmacion
                                 </option>
+                                <option value="Agendado" <?= $asignado == 'Agendado' ? 'selected' : '' ?>>Agendado</option>
+                            </select>
+                        </div>
 
+                        <!-- Notas -->
+                        <div class="col-md-6">
+                            <label>Notas</label>
+                            <input type="text" name="nota" class="form-control" value="<?= $nota ?>">
                         </div>
 
                     </div>
 
-                    <button class="btn btn-success mt-3 float-right">
+                    <button type="submit" class="btn btn-success mt-3 float-right">
                         <i class="fa fa-save"></i> Guardar
                     </button>
 
@@ -166,13 +179,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 </div>
 <script>
-    $('#dni').on('blur', function () {
+    $('#dni').on('blur', function() {
 
         let dni = $(this).val();
 
         if (dni.length < 6) return;
 
-        $.post('ajax/lista_buscar_paciente.php', { dni: dni }, function (resp) {
+        $.post('ajax/lista_buscar_paciente.php', {
+            dni: dni
+        }, function(resp) {
 
             if (resp.encontrado) {
                 $('#nombre').val(resp.nombre);
@@ -190,14 +205,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }, 'json');
 
     });
-</script>
-<?php if ($mensaje): ?>
-    <script>
-        Swal.fire({
-            icon: '<?= $tipoMensaje ?>',
-            title: '<?= $mensaje ?>',
-            timer: 1500,
-            showConfirmButton: false
+    $('#formPaciente').submit(function(e) {
+        e.preventDefault();
+
+        let formData = $(this).serialize();
+
+        $.post('', formData, function(resp) {
+
+            Swal.fire({
+                icon: 'success',
+                title: 'Paciente agregado correctamente',
+                timer: 1500,
+                showConfirmButton: false
+            }).then(() => {
+                window.location.href = './?seccion=turnos';
+            });
+
+        }).fail(function() {
+            Swal.fire('Error', 'Ocurrió un error al guardar', 'error');
         });
-    </script>
-<?php endif; ?>
+    });
+    $(function() {
+        // Inicializar Select2
+        $('.select2').select2({
+            placeholder: "Buscar especialidad...",
+            allowClear: true,
+            width: '100%' // Para que ocupe todo el ancho de la columna
+        });
+
+    });
+</script>

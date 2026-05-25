@@ -1,5 +1,5 @@
 <?php
-require_once '../inc/db.php';
+require_once __DIR__ . '/../inc/db.php';
 
 $id = $_POST['id'] ?? 0;
 $monto = $_POST['monto'] ?? 0;

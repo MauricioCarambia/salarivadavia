@@ -3,8 +3,7 @@ date_default_timezone_set('America/Argentina/Buenos_Aires');
 require_once 'inc/db.php';
 
 $id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
-$rand = random_int(1000, 9999);
-$fecha = $_POST['fecha'] ?? date('Y-m-d');
+
 $desde = $_GET['desde'] ?? date('Y-m-d');
 $hasta = $_GET['hasta'] ?? date('Y-m-d');
 $caja_id = $_GET['caja_id'] ?? '';
@@ -13,11 +12,14 @@ $empleado_id = $_GET['empleado_id'] ?? '';
 
 $desdeSQL = $desde . " 00:00:00";
 $hastaSQL = $hasta . " 23:59:59";
-// 1. Info del profesional
+
+/* ==============================
+    👨‍⚕️ PROFESIONAL
+============================== */
 $stmt = $pdo->prepare("
     SELECT *, CONCAT(apellido,' ',nombre) AS nombre_completo
     FROM profesionales
-    WHERE Id = :id
+    WHERE id = :id
 ");
 $stmt->execute([':id' => $id]);
 $prof = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -26,16 +28,12 @@ if (!$prof) {
     die('<div class="alert alert-danger">Profesional no encontrado</div>');
 }
 
-// Rango de fecha para el filtro
-$inicioDia = $fecha . ' 00:00:00';
-$finDia = $fecha . ' 23:59:59';
-
 /* ==============================
-    📊 CONSULTA SQL OPTIMIZADA (Por IDs)
+    🔎 WHERE
 ============================== */
 $where = "
 WHERE c.profesional_id = :id
-  AND c.fecha BETWEEN :inicio AND :fin
+AND c.fecha BETWEEN :inicio AND :fin
 ";
 
 $params = [
@@ -44,7 +42,6 @@ $params = [
     ':fin' => $hastaSQL
 ];
 
-// 🔥 FILTROS DINÁMICOS
 if (!empty($caja_id)) {
     $where .= " AND cs.caja_id = :caja_id";
     $params[':caja_id'] = $caja_id;
@@ -60,48 +57,70 @@ if (!empty($empleado_id)) {
     $params[':empleado_id'] = $empleado_id;
 }
 
+/* ==============================
+    📊 QUERY PRINCIPAL
+============================== */
 $sql = "
 SELECT 
     c.id AS cobro_id,
     c.fecha,
     c.numero_completo,
     c.estado,
+    c.medio_pago,
+    c.transferencia_tipo,
+
     pa.nombre AS paciente_nom,
     pa.apellido AS paciente_ape,
+
     d.nombre AS destino_nombre,
     d.categoria,
     d.tipo AS tipo_destino,
+
     cr.monto
+
 FROM cobros c
 JOIN cobros_reparto cr ON c.id = cr.cobro_id
 JOIN destinos_reparto d ON d.id = cr.destino_id
 LEFT JOIN pacientes pa ON c.paciente_id = pa.id
 LEFT JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
+
 $where
+ORDER BY c.fecha DESC
 ";
 
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+/* ==============================
+    📦 PROCESAMIENTO
+============================== */
+$pagos = [];
+$totalesDestinos = [];
+$tiposDestinos = [];
+$categoriasDestinos = [];
 
-$stmtPagos = $pdo->prepare($sql);
-$stmtPagos->execute($params);
-$rows = $stmtPagos->fetchAll(PDO::FETCH_ASSOC);
-
-$totalesDestinos = []; // Sumas globales por nombre de destino
-$pagos = [];           // Agrupado por ID de cobro para la tabla
-$tiposDestinos = [];   // Diccionario para saber si un destino es ingreso o egreso
+$totalEfectivo = 0;
+$totalTransferencia = 0;
 
 foreach ($rows as $r) {
+
     $idCobro = $r['cobro_id'];
     $destino = $r['destino_nombre'];
     $monto   = (float)$r['monto'];
     $tipo    = $r['tipo_destino'];
+
     $categoriasDestinos[$destino] = $r['categoria'];
+    $tiposDestinos[$destino] = $tipo;
+
     if (!isset($pagos[$idCobro])) {
         $pagos[$idCobro] = [
-            'fecha'    => $r['fecha'],
+            'fecha' => $r['fecha'],
             'numero_completo' => $r['numero_completo'],
             'paciente' => $r['paciente_ape'] . ' ' . $r['paciente_nom'],
-            'estado'   => $r['estado'], // 🔥 ACA
+            'estado' => $r['estado'],
+            'medio_pago' => $r['medio_pago'],
+            'transferencia_tipo' => $r['transferencia_tipo'],
             'destinos' => [],
             'total_cobro' => 0
         ];
@@ -112,50 +131,53 @@ foreach ($rows as $r) {
         'tipo'  => $tipo
     ];
 
-    // 🔥 SOLO SUMAR SI NO ESTÁ ANULADO
     if ($r['estado'] !== 'anulado') {
 
-        // Total del cobro
         $pagos[$idCobro]['total_cobro'] += $monto;
 
-        // Totales globales
         if (!isset($totalesDestinos[$destino])) {
             $totalesDestinos[$destino] = 0;
         }
 
         $totalesDestinos[$destino] += $monto;
-    }
 
-    // Este sí siempre (porque define tipo del destino)
-    $tiposDestinos[$destino] = $tipo;
-}
-foreach ($pagos as &$p) {
-    if ($p['estado'] === 'anulado') {
-        $p['total_cobro'] = 0;
+        if (strtolower($r['medio_pago']) === 'efectivo') {
+            $totalEfectivo += $monto;
+        } else {
+            $totalTransferencia += $monto;
+        }
     }
 }
-unset($p);
-ksort($totalesDestinos);
+// convertir a array indexado
+$pagos = array_values($pagos);
 
-// Cálculos para los Widgets
+// ordenar por fecha y hora DESC
+usort($pagos, function ($a, $b) {
+    return strtotime($b['fecha']) <=> strtotime($a['fecha']);
+});
+/* ==============================
+    📊 TOTALES
+============================== */
 $totalFacturado = array_sum(array_column($pagos, 'total_cobro'));
+
 $totalPagoProfesional = 0;
-$totalGananciasClinica = 0;
+$totalGananciaClinica = 0;
 
 foreach ($totalesDestinos as $dest => $monto) {
-    // Si el destino está marcado como profesional (según tu lógica previa o nombre)
-    if (strtolower($dest) == 'profesional') {
-        $totalPagoProfesional += $monto;
-    }
-    // Sumamos a ganancia todo lo que sea tipo 'ingreso' (ej: Clinica, Materiales, etc)
+
     $tipo = $tiposDestinos[$dest] ?? '';
     $categoria = $categoriasDestinos[$dest] ?? '';
 
-    // 🔥 SOLO INGRESOS Y QUE NO SEAN FONDO
+    if ($tipo === 'egreso') {
+        $totalPagoProfesional += $monto;
+    }
+
     if ($tipo === 'ingreso' && $categoria !== 'fondo') {
-        $totalGananciasClinica += $monto;
+        $totalGananciaClinica += $monto;
     }
 }
+
+ksort($totalesDestinos);
 ?>
 
 <div class="content">
@@ -221,62 +243,38 @@ foreach ($totalesDestinos as $dest => $monto) {
                         </div>
                     </form>
                 </div>
-                <div class="card card-info">
-                    <div class="card-header">
-                        <h3 class="card-title"><i class="fas fa-user-md"></i> Reporte Diario: <?= htmlspecialchars($prof['nombre_completo']) ?></h3>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-lg-4 col-6">
-                                <div class="small-box bg-info">
-                                    <div class="inner">
-                                        <h3>$<?= number_format($totalFacturado, 0, ',', '.') ?></h3>
-                                        <p>Total Facturado</p>
-                                    </div>
-                                    <div class="icon"><i class="fas fa-dollar-sign"></i></div>
-                                </div>
-                            </div>
-                            <div class="col-lg-4 col-6">
-                                <div class="small-box bg-primary">
-                                    <div class="inner">
-                                        <h3>$<?= number_format($totalPagoProfesional, 0, ',', '.') ?></h3>
-                                        <p>Pago Profesional</p>
-                                    </div>
-                                    <div class="icon"><i class="fas fa-user-md"></i></div>
-                                </div>
-                            </div>
-                            <div class="col-lg-4 col-12">
-                                <div class="small-box bg-success">
-                                    <div class="inner">
-                                        <h3>$<?= number_format($totalGananciasClinica, 0, ',', '.') ?></h3>
-                                        <p>Ganancia Clínica (Total Ingresos)</p>
-                                    </div>
-                                    <div class="icon"><i class="fas fa-hospital"></i></div>
-                                </div>
-                            </div>
-                        </div>
+                <!-- ==============================
+    📊 CARDS
+============================== -->
+                <div class="row mb-3">
 
-                        <h5 class="mb-3 mt-2"><i class="fas fa-chart-pie"></i> Resumen por Destino</h5>
-                        <div class="row">
-                            <?php foreach ($totalesDestinos as $destNom => $montoTotal):
-                                // Asignamos un color según el tipo de destino
-                                $esEgreso = (strtolower($destNom) == 'profesional' || $tiposDestinos[$destNom] === 'egreso');
-                                $colorBadge = $esEgreso ? 'danger' : 'success';
-                            ?>
-                                <div class="col-md-3 col-sm-6 col-12">
-                                    <div class="info-box shadow-sm">
-                                        <span class="info-box-icon bg-<?= $colorBadge ?>"><i class="fas fa-tag"></i></span>
-                                        <div class="info-box-content">
-                                            <span class="info-box-text"><?= ucfirst($destNom) ?></span>
-                                            <span class="info-box-number">
-                                                $<?= number_format($montoTotal, 2, ',', '.') ?>
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
+                    <div class="col-md-4">
+                        <div class="small-box bg-info">
+                            <div class="inner">
+                                <h3>$<?= number_format($totalFacturado, 0, ',', '.') ?></h3>
+                                <p>Total Facturado</p>
+                            </div>
                         </div>
                     </div>
+
+                    <div class="col-md-4">
+                        <div class="small-box bg-success">
+                            <div class="inner">
+                                <h3>$<?= number_format($totalEfectivo, 0, ',', '.') ?></h3>
+                                <p>Efectivo</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="small-box bg-primary">
+                            <div class="inner">
+                                <h3>$<?= number_format($totalTransferencia, 0, ',', '.') ?></h3>
+                                <p>Transferencias</p>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
 
 
@@ -288,65 +286,51 @@ foreach ($totalesDestinos as $dest => $monto) {
                 <h3 class="card-title"><i class="fas fa-list"></i> Detalle de Cobros del Día</h3>
             </div>
             <div class="card-body table-responsive">
-                <table class="table text-center table-striped datatable">
+                <table class="table table-striped datatable text-center">
                     <thead>
-                        <tr class="text-center">
-                            <th>Fecha/Hora</th>
+                        <tr>
+                            <th>Fecha</th>
                             <th>Comprobante</th>
                             <th>Paciente</th>
+                            <th>Medio</th>
                             <th>Total</th>
+
                             <?php foreach ($totalesDestinos as $dest => $v): ?>
                                 <th><?= ucfirst($dest) ?></th>
                             <?php endforeach; ?>
-                            <th>Ganancia Fila</th>
-                            <th>Acciones</th>
+
                         </tr>
                     </thead>
+
                     <tbody>
-                        <?php foreach ($pagos as $idCobro => $p):
-                            $gananciaFila = 0;
-                            foreach ($p['destinos'] as $destNom => $destInfo) {
-                                $categoria = $categoriasDestinos[$destNom] ?? '';
-
-                                if ($destInfo['tipo'] === 'ingreso' && $categoria !== 'fondo') {
-                                    $gananciaFila += $destInfo['monto'];
-                                }
-                            }
-                        ?>
+                        <?php foreach ($pagos as $p): ?>
                             <tr class="<?= ($p['estado'] === 'anulado') ? 'table-danger' : '' ?>">
-                                <td class="text-center"><?= date('d/m/Y H:i', strtotime($p['fecha'])) ?></td>
-                                <td class="text-center"><?= htmlspecialchars($p['numero_completo']) ?></td>
-                                <td class="text-center"><?= htmlspecialchars($p['paciente']) ?></td>
-                                <td class="text-center font-weight-bold 
-    <?= ($p['estado'] === 'anulado') ? 'text-danger' : '' ?>">
 
-                                    <?= ($p['estado'] === 'anulado') ? '-' : '' ?>
-                                    $ <?= number_format($p['total_cobro'], 2, ',', '.') ?>
+                                <td><?= date('d/m/Y H:i', strtotime($p['fecha'])) ?></td>
+                                <td><?= $p['numero_completo'] ?></td>
+                                <td><?= $p['paciente'] ?></td>
 
-                                    <?php if ($p['estado'] === 'anulado'): ?>
-                                        <span class="badge badge-danger ml-1">ANULADO</span>
+                                <td>
+                                    <?php if ($p['medio_pago'] === 'efectivo'): ?>
+                                        <span class="badge badge-success">Efectivo</span>
+                                    <?php else: ?>
+                                        <span class="badge badge-primary">
+                                            Transferencia → <?= ucfirst($p['transferencia_tipo'] ?? 'N/A') ?>
+                                        </span>
                                     <?php endif; ?>
                                 </td>
 
-                                <?php foreach ($totalesDestinos as $destNom => $v):
-                                    $montoCelda = $p['destinos'][$destNom]['monto'] ?? 0;
-                                ?>
-                                    <td class="text-center <?= strtolower($destNom) == 'profesional' ? 'text-primary' : '' ?>">
-                                        $ <?= number_format($montoCelda, 2, ',', '.') ?>
+                                <td>
+                                    <?= ($p['estado'] === 'anulado') ? '-' : '' ?>
+                                    $<?= number_format($p['total_cobro'], 2, ',', '.') ?>
+                                </td>
+
+                                <?php foreach ($totalesDestinos as $dest => $v): ?>
+                                    <td>
+                                        $<?= number_format($p['destinos'][$dest]['monto'] ?? 0, 2, ',', '.') ?>
                                     </td>
                                 <?php endforeach; ?>
 
-                                <td class="text-center text-success font-weight-bold">
-                                    $ <?= number_format($gananciaFila, 2, ',', '.') ?>
-                                </td>
-
-                                <td class="text-center">
-                                    <div class="btn-group">
-                                        <button class="btn btn-danger btn-sm rounded-circle" onclick="eliminarCobro(<?= $idCobro ?>)">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
-                                </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -360,7 +344,12 @@ foreach ($totalesDestinos as $dest => $monto) {
     $(document).ready(function() {
 
         $('.datatable').each(function() {
-            initDataTable($(this));
+            initDataTable($(this), {
+                order: [
+                    [0, "desc"]
+                ], // 👈 AHORA SÍ FUNCIONA
+                pageLength: 10
+            });
         });
 
     });

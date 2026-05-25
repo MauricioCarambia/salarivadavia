@@ -15,7 +15,7 @@
                 <div class="hpanel">
                     <div class="panel-body">
                         <?php
-                        require_once "inc/db.php";// Asegurate de tener una conexión PDO en esta variable: $pdo
+                       require_once __DIR__ . '/../inc/db.php';
                         
                         $confirmar = $_GET['confirmar'] ?? '';
                         $id = $_GET['id'] ?? '';

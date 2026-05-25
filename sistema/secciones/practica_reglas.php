@@ -1,5 +1,5 @@
 <?php
-require_once "inc/db.php";
+require_once __DIR__ . '/../inc/db.php';
 
 $practicas = $pdo->query("SELECT id,nombre FROM practicas WHERE activo=1")->fetchAll(PDO::FETCH_ASSOC);
 $profesionales = $pdo->query("SELECT id,nombre FROM profesionales")->fetchAll(PDO::FETCH_ASSOC);

@@ -1,12 +1,12 @@
 <?php
-require_once __DIR__.'/../inc/db.php';
+require_once __DIR__ . '/../inc/db.php';
 
 $id = $_GET['id'] ?? 0;
 $id = (int)$id;
 $swalGuardado = false;
 $swalError = false;
 
-// Obtener profesional existente
+// 1. Obtener profesional existente
 $stmt = $pdo->prepare("SELECT * FROM profesionales WHERE Id=?");
 $stmt->execute([$id]);
 $rArray = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -16,7 +16,7 @@ if (!$rArray) {
     return;
 }
 
-// Valores por defecto del formulario
+// 2. Procesar valores del formulario (Prioriza POST, si no usa DB)
 $campos = [
     'documento' => $_POST['documento'] ?? $rArray['documento'],
     'nombre' => $_POST['nombre'] ?? $rArray['nombre'],
@@ -41,117 +41,98 @@ $campos = [
     'comentario' => $_POST['comentario'] ?? $rArray['comentario'],
 ];
 
-// Horarios existentes
+// 3. Cargar datos para la vista
 $stmt = $pdo->prepare("SELECT * FROM profesionales_horarios WHERE profesional_id=?");
 $stmt->execute([$id]);
 $horarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$dia   = isset($_POST['dia']) ? (array)$_POST['dia'] : array_column($horarios,'dia');
-$desde = isset($_POST['desde']) ? (array)$_POST['desde'] : array_column($horarios,'hora_inicio');
-$hasta = isset($_POST['hasta']) ? (array)$_POST['hasta'] : array_column($horarios,'hora_fin');
+$dia   = isset($_POST['dia']) ? (array)$_POST['dia'] : array_column($horarios, 'dia');
+$desde = isset($_POST['desde']) ? (array)$_POST['desde'] : array_column($horarios, 'hora_inicio');
+$hasta = isset($_POST['hasta']) ? (array)$_POST['hasta'] : array_column($horarios, 'hora_fin');
 
 $stmt = $pdo->prepare("SELECT fecha FROM dias_anulados WHERE profesional_id=? ORDER BY fecha ASC");
 $stmt->execute([$id]);
-$dias_anulados = $stmt->fetchAll(PDO::FETCH_COLUMN);
+$dias_anulados_db = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
 $firma = $_FILES['firma'] ?? null;
-
-// Especialidades
 $especialidades = $pdo->query("SELECT * FROM especialidades")->fetchAll(PDO::FETCH_ASSOC);
-
-$nombresDias = ['0'=>'Domingo','1'=>'Lunes','2'=>'Martes','3'=>'Miércoles','4'=>'Jueves','5'=>'Viernes','6'=>'Sábado'];
+$nombresDias = ['0' => 'Domingo', '1' => 'Lunes', '2' => 'Martes', '3' => 'Miércoles', '4' => 'Jueves', '5' => 'Viernes', '6' => 'Sábado'];
 $contador = 1000;
 
-// Guardar cambios
+// 4. Lógica de Guardado Unificada
 if (isset($_POST['guardar'])) {
     try {
         $pdo->beginTransaction();
 
-
-        // Validar documento único
+        // Validar documento duplicado
         $stmt = $pdo->prepare("SELECT COUNT(*) FROM profesionales WHERE documento=? AND Id<>?");
         $stmt->execute([$campos['documento'], $id]);
         if ($stmt->fetchColumn() > 0) {
             throw new Exception("El documento {$campos['documento']} ya se encuentra registrado.");
         }
 
-        // ========================
-        // ACTUALIZAR PROFESIONAL
-        // ========================
+        // Procesar Firma
         $rutaImagen = $rArray['firma'];
         if (!empty($firma['name'])) {
             $directorio = 'imagenes/';
             if (!is_dir($directorio)) mkdir($directorio, 0777, true);
-
-            $nombreArchivo = uniqid().'_'.basename($firma['name']);
-            $rutaImagen = $directorio.$nombreArchivo;
-
+            $nombreArchivo = uniqid() . '_' . basename($firma['name']);
+            $rutaImagen = $directorio . $nombreArchivo;
             if (!move_uploaded_file($firma['tmp_name'], $rutaImagen)) {
                 throw new Exception("Error al subir la firma.");
             }
         }
 
-        $sql = "UPDATE profesionales SET
-            nombre=?, apellido=?, provincia=?, localidad=?, celular=?, fijo=?, email=?,
-            tipo_documento=?, documento=?, nacimiento=?, especialidad_id=?, matricula_nacional=?,
-            matricula_provincial=?, porcentaje=?, duracion_turnos=?, usuario=?, contrasenia=?,
-            sexo=?, vacaciones_desde=?, vacaciones_hasta=?, comentario=?, firma=?
-            WHERE Id=?";
-
+        // Update Profesional
+        $sql = "UPDATE profesionales SET nombre=?, apellido=?, provincia=?, localidad=?, celular=?, fijo=?, email=?, tipo_documento=?, documento=?, nacimiento=?, especialidad_id=?, matricula_nacional=?, matricula_provincial=?, porcentaje=?, duracion_turnos=?, usuario=?, contrasenia=?, sexo=?, vacaciones_desde=?, vacaciones_hasta=?, comentario=?, firma=? WHERE Id=?";
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            $campos['nombre'],$campos['apellido'],$campos['provincia'],$campos['localidad'],
-            $campos['celular'],$campos['fijo'],$campos['email'],
-            $campos['tipo_documento'],$campos['documento'],$campos['nacimiento'],
-            $campos['especialidad_id'],$campos['matricula_nacional'],
-            $campos['matricula_provincial'],$campos['porcentaje'],$campos['duracion_turnos'],
-            $campos['usuario'],$campos['contrasenia'],$campos['sexo'],
-            $campos['vacaciones_desde'],$campos['vacaciones_hasta'],
-            $campos['comentario'],$rutaImagen,$id
-        ]);
+        $stmt->execute([$campos['nombre'], $campos['apellido'], $campos['provincia'], $campos['localidad'], $campos['celular'], $campos['fijo'], $campos['email'], $campos['tipo_documento'], $campos['documento'], $campos['nacimiento'], $campos['especialidad_id'], $campos['matricula_nacional'], $campos['matricula_provincial'], $campos['porcentaje'], $campos['duracion_turnos'], $campos['usuario'], $campos['contrasenia'], $campos['sexo'], $campos['vacaciones_desde'], $campos['vacaciones_hasta'], $campos['comentario'], $rutaImagen, $id]);
 
-        // ========================
-        // HORARIOS
-        // ========================
+        // Update Horarios (Borrar e insertar de nuevo)
         $pdo->prepare("DELETE FROM profesionales_horarios WHERE profesional_id=?")->execute([$id]);
-
-        $stmtHorario = $pdo->prepare("
-            INSERT INTO profesionales_horarios (profesional_id,dia,hora_inicio,hora_fin)
-            VALUES (?,?,?,?)
-        ");
-
+        $stmtHorario = $pdo->prepare("INSERT INTO profesionales_horarios (profesional_id,dia,hora_inicio,hora_fin) VALUES (?,?,?,?)");
         foreach ($dia as $k => $d) {
-            if (!empty($d) && isset($desde[$k], $hasta[$k])) {
+            if ($d !== "" && isset($desde[$k], $hasta[$k])) {
                 $stmtHorario->execute([$id, $d, $desde[$k], $hasta[$k]]);
             }
         }
 
-        // ========================
-        // DÍAS ANULADOS
-        // ========================
+        // Update Días Anulados (Solo si hubo cambios en el cliente)
+        if (isset($_POST['confirmar_cambio_anulados']) && $_POST['confirmar_cambio_anulados'] == '1') {
+            $fechas_a_mantener = isset($_POST['fechas_finales']) ? $_POST['fechas_finales'] : [];
+            $pdo->prepare("DELETE FROM dias_anulados WHERE profesional_id=?")->execute([$id]);
 
-       // 🔥 SIEMPRE DESDE POST
-$dias_anulados = isset($_POST['dias_anulados']) ? (array)$_POST['dias_anulados'] : [];
+            $stmtAnulado = $pdo->prepare("INSERT INTO dias_anulados (profesional_id, fecha) VALUES (?,?)");
 
-// 🔥 BORRAR TODOS LOS EXISTENTES
-$pdo->prepare("DELETE FROM dias_anulados WHERE profesional_id=?")->execute([$id]);
+            // Reinsertar sobrevivientes
+            foreach ($fechas_a_mantener as $f) {
+                $stmtAnulado->execute([$id, $f]);
+            }
 
-// 🔥 INSERTAR LOS NUEVOS
-$stmtAnulado = $pdo->prepare("
-    INSERT INTO dias_anulados (profesional_id, fecha)
-    VALUES (?,?)
-");
+            // Procesar nuevos rangos
+            if (isset($_POST['rangos_anulados'])) {
+                $diasAtencion = array_unique(array_filter($dia, 'strlen'));
+                foreach ($_POST['rangos_anulados'] as $rango) {
+                    list($fInicio, $fFin) = explode('|', $rango);
+                    $begin = new DateTime($fInicio);
+                    $end = (new DateTime($fFin))->modify('+1 day');
+                    $period = new DatePeriod($begin, new DateInterval('P1D'), $end);
 
-foreach ($dias_anulados as $fecha) {
-    if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $fecha, $matches)) {
-        $stmtAnulado->execute([$id, $matches[1]]);
-    }
-}
+                    foreach ($period as $dt) {
+                        $fecha_formato = $dt->format("Y-m-d");
+                        if (in_array($dt->format("w"), $diasAtencion) && !in_array($fecha_formato, $fechas_a_mantener)) {
+                            $stmtAnulado->execute([$id, $fecha_formato]);
+                            $fechas_a_mantener[] = $fecha_formato;
+                        }
+                    }
+                }
+            }
+        }
 
         $pdo->commit();
         $swalGuardado = true;
-
-    } catch(Exception $e) {
-        $pdo->rollBack();
+    } catch (Exception $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
         $swalError = $e->getMessage();
     }
 }
@@ -163,9 +144,8 @@ foreach ($dias_anulados as $fecha) {
             <h3 class="card-title">Editar profesional</h3>
         </div>
         <div class="card-body">
-            <form method="POST" enctype="multipart/form-data">
-
-                <!-- Nombre y Apellido -->
+            <form method="POST" enctype="multipart/form-data" id="formProfesional">
+                <!-- Inputs de datos personales -->
                 <div class="form-row">
                     <div class="form-group col-md-6">
                         <label>Nombre <span class="text-danger">*</span></label>
@@ -183,8 +163,8 @@ foreach ($dias_anulados as $fecha) {
                         <label>Tipo de documento</label>
                         <select class="form-control" name="tipo_documento">
                             <option value="">Seleccionar</option>
-                            <?php foreach(['DNI','LE','LC','CI'] as $tipo): ?>
-                                <option value="<?= $tipo ?>" <?= $campos['tipo_documento']==$tipo?'selected':'' ?>><?= $tipo ?></option>
+                            <?php foreach (['DNI', 'LE', 'LC', 'CI'] as $tipo): ?>
+                                <option value="<?= $tipo ?>" <?= $campos['tipo_documento'] == $tipo ? 'selected' : '' ?>><?= $tipo ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -194,7 +174,7 @@ foreach ($dias_anulados as $fecha) {
                     </div>
                 </div>
 
-                <!-- Provincia y Localidad -->
+                <!-- Provincia / Localidad -->
                 <div class="form-row">
                     <div class="form-group col-md-6">
                         <label>Provincia</label>
@@ -206,7 +186,7 @@ foreach ($dias_anulados as $fecha) {
                     </div>
                 </div>
 
-                <!-- Celular, Fijo, Email -->
+                <!-- Contacto -->
                 <div class="form-row">
                     <div class="form-group col-md-4">
                         <label>Celular</label>
@@ -222,51 +202,50 @@ foreach ($dias_anulados as $fecha) {
                     </div>
                 </div>
 
-                <!-- Fecha de nacimiento -->
-                <div class="form-group col-md-4">
-                    <label>Fecha de nacimiento</label>
-                    <input type="date" name="nacimiento" class="form-control" value="<?= htmlspecialchars($campos['nacimiento']) ?>">
-                </div>
-
-                <!-- Especialidad y duración turnos -->
+                <!-- Otros datos (Especialidad, Matrícula, etc) -->
                 <div class="form-row">
-                    <div class="form-group col-md-6">
+                    <div class="form-group col-md-4">
+                        <label>Fecha de nacimiento</label>
+                        <input type="date" name="nacimiento" class="form-control" value="<?= htmlspecialchars($campos['nacimiento']) ?>">
+                    </div>
+                    <div class="form-group col-md-4">
+                        <label>Sexo</label>
+                        <select class="form-control" name="sexo">
+                            <option value="">Seleccionar</option>
+                            <option value="Masculino" <?= $campos['sexo'] == 'Masculino' ? 'selected' : '' ?>>Masculino</option>
+                            <option value="Femenino" <?= $campos['sexo'] == 'Femenino' ? 'selected' : '' ?>>Femenino</option>
+                        </select>
+                    </div>
+                    <div class="form-group col-md-4">
                         <label>Especialidad <span class="text-danger">*</span></label>
                         <select class="form-control" name="especialidad_id" required>
                             <option value="">Seleccionar</option>
-                            <?php foreach($especialidades as $esp): ?>
-                                <option value="<?= $esp['Id'] ?>" <?= $campos['especialidad_id']==$esp['Id']?'selected':'' ?>><?= htmlspecialchars($esp['especialidad']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="form-group col-md-6">
-                        <label>Duración de los turnos <span class="text-danger">*</span></label>
-                        <select class="form-control" name="duracion_turnos" required>
-                            <option value="">Seleccionar</option>
-                            <?php foreach([5,10,15,20,30,40,45,50,60] as $min): ?>
-                                <option value="<?= $min ?>" <?= $campos['duracion_turnos']==$min?'selected':'' ?>><?= $min ?> minutos</option>
+                            <?php foreach ($especialidades as $esp): ?>
+                                <option value="<?= $esp['Id'] ?>" <?= $campos['especialidad_id'] == $esp['Id'] ? 'selected' : '' ?>><?= htmlspecialchars($esp['especialidad']) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                 </div>
 
-                <!-- Matrículas y porcentaje -->
                 <div class="form-row">
                     <div class="form-group col-md-4">
-                        <label>Matrícula nacional</label>
+                        <label>Matrícula Nacional</label>
                         <input type="text" name="matricula_nacional" class="form-control" value="<?= htmlspecialchars($campos['matricula_nacional']) ?>">
                     </div>
                     <div class="form-group col-md-4">
-                        <label>Matrícula provincial</label>
+                        <label>Matrícula Provincial</label>
                         <input type="text" name="matricula_provincial" class="form-control" value="<?= htmlspecialchars($campos['matricula_provincial']) ?>">
                     </div>
                     <div class="form-group col-md-4">
-                        <label>Porcentaje %</label>
-                        <input type="number" min="0" step="0.01" name="porcentaje" class="form-control" value="<?= htmlspecialchars($campos['porcentaje']) ?>">
+                        <label>Duración turnos <span class="text-danger">*</span></label>
+                        <select class="form-control" name="duracion_turnos" required>
+                            <?php foreach ([5, 10, 15, 20, 30, 45, 60] as $min): ?>
+                                <option value="<?= $min ?>" <?= $campos['duracion_turnos'] == $min ? 'selected' : '' ?>><?= $min ?> min</option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                 </div>
 
-                <!-- Usuario / Contraseña -->
                 <div class="form-row">
                     <div class="form-group col-md-6">
                         <label>Usuario</label>
@@ -278,93 +257,86 @@ foreach ($dias_anulados as $fecha) {
                     </div>
                 </div>
 
-                <!-- Sexo -->
-                <div class="form-group col-md-6">
-                    <label>Sexo</label>
-                    <select class="form-control" name="sexo">
-                        <option value="">Seleccionar</option>
-                        <option value="Masculino" <?= $campos['sexo']=='Masculino'?'selected':'' ?>>Masculino</option>
-                        <option value="Femenino" <?= $campos['sexo']=='Femenino'?'selected':'' ?>>Femenino</option>
-                    </select>
-                </div>
-
                 <!-- Horarios -->
                 <div class="form-group">
-                    <label>Horarios de atención
-                        <button id="addDia" class="btn btn-info btn-sm" type="button"><i class="fa fa-plus"></i></button>
-                    </label>
+                    <label>Horarios de atención <button id="addDia" class="btn btn-info btn-sm" type="button"><i class="fa fa-plus"></i></button></label>
                     <div id="dias">
-                        <?php foreach((array)$dia as $k=>$v): ?>
-                        <div class="dia<?= $contador ?> d-flex align-items-center mb-2 flex-wrap">
-                            <select class="form-control mr-2 col-md-4" name="dia[]" required>
-                                <option value="">Seleccionar</option>
-                                <?php foreach($nombresDias as $num=>$nombre): ?>
-                                    <option value="<?= $num ?>" <?= $v==$num?'selected':'' ?>><?= $nombre ?></option>
+                        <?php foreach ((array)$dia as $k => $v): ?>
+                            <div class="dia<?= $contador ?> d-flex align-items-center mb-2 flex-wrap">
+                                <select class="form-control mr-2 col-md-4 sel-dia" name="dia[]" required>
+                                    <option value="">Seleccionar</option>
+                                    <?php foreach ($nombresDias as $num => $nombre): ?>
+                                        <option value="<?= $num ?>" <?= $v == (string)$num ? 'selected' : '' ?>><?= $nombre ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <input type="time" class="form-control mr-2 col-md-2" name="desde[]" value="<?= $desde[$k] ?? '' ?>" required>
+                                <input type="time" class="form-control mr-2 col-md-2" name="hasta[]" value="<?= $hasta[$k] ?? '' ?>" required>
+                                <button type="button" class="btn btn-danger" onclick="remover(<?= $contador ?>)"><i class="fa fa-times"></i></button>
+                            </div>
+                        <?php $contador++;
+                        endforeach; ?>
+                    </div>
+                </div>
+
+                <div class="form-group border p-3">
+                    <label><i class="fa fa-calendar-times"></i> Días Vacaciones / Anulados</label>
+                    <p class="small text-muted">Estos días el profesional no aparecerá disponible en la agenda.</p>
+
+                    <input type="hidden" name="confirmar_cambio_anulados" id="confirmar_cambio_anulados" value="0">
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <small>Desde:</small>
+                            <input type="text" id="anular_desde" class="form-control form-control-sm" placeholder="Fecha inicio">
+                        </div>
+                        <div class="col-md-4">
+                            <small>Hasta:</small>
+                            <input type="text" id="anular_hasta" class="form-control form-control-sm" placeholder="Fecha fin">
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button type="button" id="addAnulado" class="btn btn-info btn-sm btn-block"><i class="fa fa-plus"></i> Bloquear Rango</button>
+                        </div>
+                    </div>
+
+                    <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 5px; background: #fff;">
+                        <ul id="listaAnulados" class="list-group list-group-flush">
+                            <?php if (!empty($dias_anulados_db)): ?>
+                                <?php foreach ($dias_anulados_db as $f_anulada):
+                                    $fecha_f = date("d/m/Y", strtotime($f_anulada));
+                                    $dia_nombre = $nombresDias[date("w", strtotime($f_anulada))];
+                                ?>
+                                    <li class="list-group-item d-flex justify-content-between align-items-center py-1">
+                                        <span class="small"><strong><?= $dia_nombre ?></strong> <?= $fecha_f ?></span>
+                                        <input type="hidden" name="fechas_finales[]" value="<?= $f_anulada ?>">
+                                        <button type="button" class="btn btn-link text-danger btn-sm p-0" onclick="borrarFecha(this)"><i class="fa fa-trash"></i></button>
+                                    </li>
                                 <?php endforeach; ?>
-                            </select>
-                            <input type="time" class="form-control mr-2 col-md-2" name="desde[]" value="<?= $desde[$k] ?? '' ?>" required>
-                            <input type="time" class="form-control mr-2 col-md-2" name="hasta[]" value="<?= $hasta[$k] ?? '' ?>" required>
-                            <button type="button" class="btn btn-danger" onclick="remover(<?= $contador ?>)"><i class="fa fa-times"></i></button>
-                        </div>
-                        <?php $contador++; endforeach; ?>
+                            <?php else: ?>
+                                <li class="list-group-item text-muted small text-center" id="sin-bloqueos">No hay días bloqueados.</li>
+                            <?php endif; ?>
+                        </ul>
                     </div>
-                </div>
 
-                <!-- Días anulados -->
-                <div class="form-group">
-                    <label>Días/horas anulados</label>
-                    <div class="row mb-2">
-                        <div class="col-md-4">
-                            <input type="text" id="anular_desde" class="form-control" placeholder="Fecha desde">
-                        </div>
-                        <div class="col-md-4">
-                            <input type="text" id="anular_hasta" class="form-control" placeholder="Fecha hasta">
-                        </div>
-                       
-                    </div>
-                    <button type="button" id="addAnulado" class="btn btn-info btn-sm mb-2"><i class="fa fa-plus"></i> Agregar anulación</button>
-
-                    <ul id="listaAnulados" class="list-group">
-                        <?php foreach($dias_anulados as $d): ?>
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                <?= htmlspecialchars($d) ?>
-                                <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">X</button>
-                                <input type="hidden" name="dias_anulados[]" value="<?= htmlspecialchars($d) ?>">
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
-                </div>
-
-                <!-- Vacaciones -->
-                <div class="form-row">
-                    <div class="form-group col-md-6">
-                        <label>Vacaciones desde</label>
-                        <input type="date" name="vacaciones_desde" class="form-control" value="<?= htmlspecialchars($campos['vacaciones_desde']) ?>">
-                    </div>
-                    <div class="form-group col-md-6">
-                        <label>Vacaciones hasta</label>
-                        <input type="date" name="vacaciones_hasta" class="form-control" value="<?= htmlspecialchars($campos['vacaciones_hasta']) ?>">
-                    </div>
-                </div>
-
-                <!-- Comentario -->
-                <div class="form-group">
-                    <label>Comentario</label>
-                    <input type="text" name="comentario" class="form-control" value="<?= htmlspecialchars($campos['comentario']) ?>">
-                </div>
-
-                <!-- Firma -->
-                <div class="form-group col-md-6">
-                    <label>Firma</label>
-                    <input type="file" class="form-control" accept="image/*" name="firma">
-                    <?php if($rArray['firma']): ?>
-                        <img src="<?= $rArray['firma'] ?>" class="img-fluid mt-2" style="max-height:100px;">
+                    <?php if (!empty($dias_anulados_db)): ?>
+                        <button type="button" class="btn btn-outline-danger btn-xs mt-2" id="btnLimpiarAnulados">Limpiar toda la lista</button>
                     <?php endif; ?>
                 </div>
 
+                <!-- Firma y Guardar -->
+                <div class="form-group mt-3">
+                    <label>Comentario</label>
+                    <textarea name="comentario" class="form-control" rows="2"><?= htmlspecialchars($campos['comentario']) ?></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Firma</label>
+                    <input type="file" class="form-control" name="firma" accept="image/*">
+                    <?php if ($rArray['firma']): ?>
+                        <img src="<?= $rArray['firma'] ?>" class="img-fluid mt-2 border" style="max-height:80px;">
+                    <?php endif; ?>
+                </div>
                 <div class="form-group text-right">
                     <a href="./?seccion=profesionales" class="btn btn-secondary">Volver</a>
-                    <button type="submit" name="guardar" class="btn btn-primary">Guardar</button>
+                    <button type="submit" name="guardar" class="btn btn-primary px-4">Guardar Cambios</button>
                 </div>
             </form>
         </div>
@@ -372,93 +344,112 @@ foreach ($dias_anulados as $fecha) {
 </div>
 
 <script>
-$(document).ready(function(){
+    $(document).ready(function() {
+        var contador = <?= $contador ?>;
 
-    var contador = <?= $contador ?>;
-
-    $('#addDia').click(function(){
-        var html = `
-        <div class="dia${contador} d-flex align-items-center mb-2">
-            <select class="form-control mr-2 col-md-4" name="dia[]" required>
+        $('#addDia').click(function() {
+            var html = `<div class="dia${contador} d-flex align-items-center mb-2">
+            <select class="form-control mr-2 col-md-4 sel-dia" name="dia[]" required>
                 <option value="">Seleccionar</option>
-                <option value="1">Lunes</option>
-                <option value="2">Martes</option>
-                <option value="3">Miércoles</option>
-                <option value="4">Jueves</option>
-                <option value="5">Viernes</option>
-                <option value="6">Sábado</option>
+                <option value="1">Lunes</option><option value="2">Martes</option>
+                <option value="3">Miércoles</option><option value="4">Jueves</option>
+                <option value="5">Viernes</option><option value="6">Sábado</option>
                 <option value="0">Domingo</option>
             </select>
             <input type="time" class="form-control mr-2 col-md-2" name="desde[]" required>
             <input type="time" class="form-control mr-2 col-md-2" name="hasta[]" required>
             <button type="button" class="btn btn-danger" onclick="remover(${contador})"><i class="fa fa-times"></i></button>
         </div>`;
-        $('#dias').append(html);
-        contador++;
-    });
-
-    window.remover = function(id){ 
-        $('.dia'+id).remove(); 
-    }
-
-    <?php if($swalGuardado): ?>
-        Swal.fire({
-            icon: 'success',
-            title: 'Profesional Actualizado',
-            text: 'Profesional actualizado correctamente.',
-            confirmButtonText: 'OK'
-        }).then(() => {
-            window.location.href = './?seccion=profesionales';
+            $('#dias').append(html);
+            contador++;
         });
-    <?php endif; ?>
 
-    <?php if($swalError): ?>
-        Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: '<?= addslashes($swalError) ?>',
-            confirmButtonText: 'OK'
-        });
-    <?php endif; ?>
-
-    flatpickr("#anular_desde", { dateFormat: "Y-m-d" });
-    flatpickr("#anular_hasta", { dateFormat: "Y-m-d" });
-
-    $('#addAnulado').click(function(){
-        var desde = $('#anular_desde').val();
-        var hasta = $('#anular_hasta').val();
-        var hora_inicio = $('#hora_inicio').val();
-        var hora_fin = $('#hora_fin').val();
-
-        if(!desde || !hasta){
-            Swal.fire({ icon:'warning', title:'Error', text:'Debes seleccionar fechas' });
-            return;
+        window.remover = function(id) {
+            $('.dia' + id).remove();
         }
 
-        var dDesde = new Date(desde);
-        var dHasta = new Date(hasta);
+        flatpickr("#anular_desde", {
+            dateFormat: "Y-m-d"
+        });
+        flatpickr("#anular_hasta", {
+            dateFormat: "Y-m-d"
+        });
 
-        if(dHasta < dDesde){
-            Swal.fire({ icon:'warning', title:'Error', text:'La fecha hasta no puede ser menor que la fecha desde' });
-            return;
-        }
+        window.borrarFecha = function(btn) {
+            $(btn).closest('li').remove();
+            $('#confirmar_cambio_anulados').val('1'); // Avisamos que hubo cambios
+            if ($('#listaAnulados li').length === 0) {
+                $('#listaAnulados').append('<li class="list-group-item text-muted small text-center" id="sin-bloqueos">No hay días bloqueados.</li>');
+            }
+        };
 
-        for(var d = new Date(dDesde); d <= dHasta; d.setDate(d.getDate()+1)){
-            var fechaStr = d.toISOString().slice(0,10);
-            var text = fechaStr;
-            if(hora_inicio && hora_fin){
-                text += ' ('+hora_inicio+'-'+hora_fin+')';
+        // Agregar rango nuevo
+        $('#addAnulado').click(function() {
+            var desde = $('#anular_desde').val();
+            var hasta = $('#anular_hasta').val();
+
+            if (!desde || !hasta) {
+                return Swal.fire('Atención', 'Debes seleccionar fecha de inicio y fin', 'warning');
             }
 
-            var li = `<li class="list-group-item d-flex justify-content-between align-items-center">
-                        ${text}
-                        <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">X</button>
-                        <input type="hidden" name="dias_anulados[]" value="${text}">
-                      </li>`;
-            $('#listaAnulados').append(li);
-        }
+            $('#confirmar_cambio_anulados').val('1');
+            $('#sin-bloqueos').remove();
 
-        $('#anular_desde, #anular_hasta, #hora_inicio, #hora_fin').val('');
+            var item = `<li class="list-group-item d-flex justify-content-between align-items-center py-1 list-group-item-warning">
+            <span class="small"><strong>Nuevo Bloqueo:</strong> ${desde} al ${hasta}</span>
+            <input type="hidden" name="rangos_anulados[]" value="${desde}|${hasta}">
+            <button type="button" class="btn btn-link text-danger btn-sm p-0" onclick="this.parentElement.remove()"><i class="fa fa-times"></i></button>
+        </li>`;
+
+            $('#listaAnulados').prepend(item);
+            $('#anular_desde, #anular_hasta').val('');
+        });
+
+        $('#btnLimpiarAnulados').click(function() {
+            Swal.fire({
+                title: '¿Limpiar lista?',
+                text: "Se eliminarán todos los bloqueos actuales al guardar los cambios.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Sí, limpiar todo',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // 1. Activamos la bandera de cambio para el backend PHP
+                    $('#confirmar_cambio_anulados').val('1');
+
+                    // 2. Vaciamos la lista visualmente
+                    $('#listaAnulados').empty().append(
+                        '<li class="list-group-item text-muted small text-center" id="sin-bloqueos">' +
+                        'La lista se vaciará definitivamente al hacer clic en "Guardar Cambios".' +
+                        '</li>'
+                    );
+
+                    // 3. Ocultamos el botón rojo (como se ve en la imagen image_f3cf32.png)
+                    $(this).fadeOut();
+                }
+            });
+        });
+        <?php if ($swalGuardado): ?>
+            Swal.fire({
+                icon: 'success',
+                title: '¡Guardado!',
+                text: 'Los datos del profesional se actualizaron correctamente.',
+                confirmButtonText: 'Aceptar'
+            }).then(() => {
+                window.location.href = './?seccion=profesionales';
+            });
+        <?php endif; ?>
+
+        <?php if ($swalError): ?>
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: '<?= addslashes($swalError) ?>',
+                confirmButtonText: 'Cerrar'
+            });
+        <?php endif; ?>
     });
-});
 </script>

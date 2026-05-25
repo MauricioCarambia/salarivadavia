@@ -1,5 +1,5 @@
 <?php
-require_once 'inc/db.php';
+require_once __DIR__ . '/../inc/db.php';
 
 $especialidad = 'Psicologia Adulto';
 $titulo = 'Lista de Espera - Psicología Adulto';

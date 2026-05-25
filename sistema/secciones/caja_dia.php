@@ -1,5 +1,5 @@
 <?php
-require_once 'inc/db.php';
+require_once __DIR__ . '/../inc/db.php';
 $rand = rand(1000, 9999);
 $fechaSeleccionada = isset($_POST['fecha']) ? $_POST['fecha'] : date('Y-m-d');
 // ---------------------- INGRESOS ----------------------

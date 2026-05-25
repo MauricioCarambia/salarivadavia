@@ -90,25 +90,28 @@ $precios = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <div class="modal-content">
 
                 <div class="modal-header bg-success">
-                    <h5>Nueva práctica</h5>
+                    <h5>Nuevo precio de práctica</h5>
                     <button type="button" class="close" data-dismiss="modal">&times;</button>
                 </div>
 
                 <div class="modal-body">
 
-                    <select name="practica_id" class="form-control mb-2" required>
+                    <select name="practica_id" class="form-control mb-3" required>
                         <option value="">Seleccionar práctica</option>
                         <?php foreach ($practicas as $pr): ?>
                             <option value="<?= $pr['id'] ?>"><?= $pr['nombre'] ?></option>
                         <?php endforeach; ?>
                     </select>
 
-                    <select name="tipo_paciente" class="form-control mb-2">
-                        <option value="particular">Particular</option>
-                        <option value="socio">Socio</option>
-                    </select>
+                    <div class="form-group">
+                        <label>Precio Particular</label>
+                        <input type="number" step="0.01" name="precio_particular" class="form-control">
+                    </div>
 
-                    <input type="number" step="0.01" name="precio" class="form-control" placeholder="Precio">
+                    <div class="form-group">
+                        <label>Precio Socio</label>
+                        <input type="number" step="0.01" name="precio_socio" class="form-control">
+                    </div>
 
                 </div>
 
@@ -175,19 +178,19 @@ $precios = $stmt->fetchAll(PDO::FETCH_ASSOC);
     });
 
     /* CREAR */
-    $('#formCrear').submit(function (e) {
-        e.preventDefault();
+  $('#formCrear').submit(function (e) {
+    e.preventDefault();
 
-        $.post('ajax/practicas_precios_guardar.php', $(this).serialize(), function (res) {
+    $.post('ajax/practicas_precios_guardar.php', $(this).serialize(), function (res) {
 
-            if (res.success) {
-                location.reload();
-            } else {
-                Swal.fire('Error', res.message, 'error');
-            }
+        if (res.success) {
+            location.reload();
+        } else {
+            Swal.fire('Error', res.message, 'error');
+        }
 
-        }, 'json');
-    });
+    }, 'json');
+});
 
     /* EDITAR */
     $(document).on('click', '.editar', function () {
@@ -216,31 +219,38 @@ $precios = $stmt->fetchAll(PDO::FETCH_ASSOC);
     });
 
     /* ELIMINAR */
-    $(document).on('click', '.eliminar', function () {
+   $(document).on('click', '.eliminar', function () {
 
-        let id = $(this).data('id');
+    let boton = $(this);
+    let id = boton.data('id');
+    let fila = boton.closest('tr');
 
-        Swal.fire({
-            title: '¿Eliminar?',
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#d33'
-        }).then((r) => {
+    Swal.fire({
+        title: '¿Eliminar?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33'
+    }).then((r) => {
 
-            if (r.isConfirmed) {
+        if (r.isConfirmed) {
 
-                $.post('ajax/practicas_precios_eliminar.php', { id: id }, function (res) {
+            $.post('ajax/practica_precio_eliminar.php', { id: id }, function (res) {
 
-                    if (res.success) {
-                       tabla.row($('#fila_'+id)).remove().draw();
-                        Swal.fire('Eliminado', '', 'success');
-                    }
+                if (res.success) {
 
-                }, 'json');
+                    tabla.row(fila).remove().draw();
 
-            }
+                    Swal.fire('Eliminado', '', 'success');
 
-        });
+                } else {
+                    Swal.fire('Error', res.message || 'No se pudo eliminar', 'error');
+                }
+
+            }, 'json');
+
+        }
 
     });
+
+});
 </script>

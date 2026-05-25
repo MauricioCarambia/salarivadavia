@@ -1,8 +1,8 @@
 <?php
-require_once "../inc/db.php";
+require_once __DIR__ . '/../inc/session.php';
+require_once __DIR__ . '/../inc/db.php';
 
-session_name("turnos");
-session_start();
+
 
 header('Content-Type: application/json');
 
@@ -13,20 +13,83 @@ try {
     /* ==============================
        📥 DATOS
     ============================== */
-    $tipo           = $_POST['tipo'] ?? '';
+    $tipo           = strtolower(trim($_POST['tipo'] ?? ''));
     $concepto       = trim($_POST['concepto'] ?? '');
-    $monto_input    = $_POST['monto'] ?? null;
+    $monto_input    = (float)($_POST['monto'] ?? 0);
     $practica_id    = (int)($_POST['practica_id'] ?? 0);
     $profesional_id = (int)($_POST['profesional_id'] ?? 0);
     $paciente_id    = (int)($_POST['paciente_id'] ?? 0);
     $usuario_id     = $_SESSION['user_id'] ?? 0;
+    $destino_id     = (int)($_POST['destino_id'] ?? 0);
+
+    $medio_pago = $_POST['medio_pago'] ?? 'efectivo';
+    $empleado_destino_id = !empty($_POST['empleado_destino_id'])
+        ? (int)$_POST['empleado_destino_id']
+        : null;
 
     /* ==============================
        🧠 VALIDACIONES
     ============================== */
-    if (!$tipo) throw new Exception("Debe seleccionar tipo de movimiento");
-    if (!$concepto) throw new Exception("Debe ingresar un concepto");
-    if (!$usuario_id) throw new Exception("Sesión expirada");
+    if (!in_array($tipo, ['ingreso', 'egreso'], true)) {
+        throw new Exception("Tipo inválido");
+    }
+
+    if ($concepto === '') {
+        throw new Exception("Debe ingresar un concepto");
+    }
+
+    if (!$usuario_id) {
+        throw new Exception("Sesión expirada");
+    }
+
+    if ($medio_pago === 'transferencia' && !$empleado_destino_id) {
+        throw new Exception("Debe seleccionar empleado destino");
+    }
+
+    /* ==============================
+       🧠 FUNCION TIPO PACIENTE (CLAVE)
+    ============================== */
+    function obtenerTipoPaciente(PDO $pdo, int $paciente_id): string
+    {
+        if ($paciente_id <= 0) return 'particular';
+
+        $stmt = $pdo->prepare("
+            SELECT tipo_socio, fecha_alta
+            FROM pacientes
+            WHERE Id = :id
+        ");
+        $stmt->execute([':id' => $paciente_id]);
+        $p = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$p) return 'particular';
+
+        if ($p['tipo_socio'] === 'vitalicio') return 'socio';
+
+        if (!empty($p['fecha_alta'])) {
+            $hoy = new DateTime();
+            $alta = new DateTime($p['fecha_alta']);
+            if ($hoy->diff($alta)->days <= 30) return 'particular';
+        }
+
+        $stmt = $pdo->prepare("
+            SELECT MAX(fecha_correspondiente)
+            FROM pagos_afiliados
+            WHERE paciente_id = :id
+        ");
+        $stmt->execute([':id' => $paciente_id]);
+
+        $ultima = $stmt->fetchColumn();
+        if (!$ultima) return 'particular';
+
+        $ultimo = new DateTime(date('Y-m-01', strtotime($ultima)));
+        $actual = new DateTime(date('Y-m-01'));
+
+        $meses = ($ultimo->diff($actual)->y * 12) + $ultimo->diff($actual)->m;
+
+        return ($meses <= 3) ? 'socio' : 'particular';
+    }
+
+    $tipoPaciente = strtolower(obtenerTipoPaciente($pdo, $paciente_id));
 
     /* ==============================
        🏦 CAJA ABIERTA
@@ -40,7 +103,9 @@ try {
     $stmt->execute([$usuario_id]);
     $caja = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$caja) throw new Exception("No hay caja abierta");
+    if (!$caja) {
+        throw new Exception("No hay caja abierta");
+    }
 
     $caja_id = (int)$caja['caja_id'];
     $caja_sesion_id = (int)$caja['id'];
@@ -48,85 +113,69 @@ try {
     /* ==============================
        🔢 NUMERACIÓN
     ============================== */
-    $stmt = $pdo->prepare("
-        SELECT MAX(numero) 
-        FROM cobros 
-        WHERE punto_venta = ? 
-        FOR UPDATE
-    ");
+    $stmt = $pdo->prepare("SELECT MAX(numero) FROM cobros WHERE punto_venta = ? FOR UPDATE");
     $stmt->execute([$caja_id]);
 
-    $ultimoNumero = (int)$stmt->fetchColumn();
-    $nuevoNumero = $ultimoNumero ? $ultimoNumero + 1 : 1;
+    $ultimo = (int)$stmt->fetchColumn();
+    $nuevo  = $ultimo ? $ultimo + 1 : 1;
 
     $numeroCompleto = str_pad($caja_id, 4, '0', STR_PAD_LEFT) . '-' .
-                      str_pad($nuevoNumero, 8, '0', STR_PAD_LEFT);
+                      str_pad($nuevo, 8, '0', STR_PAD_LEFT);
 
     /* ==============================
-       💰 MONTO
+       💰 PRECIO REAL (CLAVE)
     ============================== */
-    $monto = (float)$monto_input;
+    $monto = $monto_input;
 
-    if ((!$monto || $monto <= 0) && $practica_id > 0) {
-
-        $tipo_paciente = 'particular';
-
-        if ($paciente_id > 0) {
-            $stmt = $pdo->prepare("
-                SELECT MAX(fecha_correspondiente)
-                FROM pagos_afiliados
-                WHERE paciente_id = ?
-            ");
-            $stmt->execute([$paciente_id]);
-            $ultima = $stmt->fetchColumn();
-
-            if ($ultima) {
-                $ultimo = new DateTime(date('Y-m-01', strtotime($ultima)));
-                $actual = new DateTime(date('Y-m-01'));
-                $diff = $ultimo->diff($actual);
-                $meses = ($diff->y * 12) + $diff->m;
-
-                if ($meses <= 3) {
-                    $tipo_paciente = 'socio';
-                }
-            }
-        }
+    if ($practica_id > 0) {
 
         $stmt = $pdo->prepare("
-            SELECT precio
+            SELECT precio 
             FROM practicas_precios
-            WHERE practica_id = ?
+            WHERE practica_id = ? 
               AND tipo_paciente = ?
               AND activo = 1
-            ORDER BY fecha_desde DESC
             LIMIT 1
         ");
-        $stmt->execute([$practica_id, $tipo_paciente]);
-        $monto = (float)$stmt->fetchColumn();
+        $stmt->execute([$practica_id, $tipoPaciente]);
+
+        $precio = (float)$stmt->fetchColumn();
+
+        if (!$precio) {
+            throw new Exception("No hay precio configurado para esta práctica");
+        }
+
+        // 🔥 USAMOS EL PRECIO REAL
+        $monto = $precio;
     }
 
     if ($monto <= 0) {
-        throw new Exception("Debe ingresar un monto válido o seleccionar una práctica");
+        throw new Exception("Monto inválido");
     }
 
     /* ==============================
-       📄 CREAR COBRO
+       📄 INSERT COBRO
     ============================== */
     $stmt = $pdo->prepare("
         INSERT INTO cobros 
-        (fecha, total, usuario_id, caja_id, caja_sesion_id, estado, paciente_id, profesional_id, punto_venta, numero, numero_completo)
-        VALUES (NOW(), ?, ?, ?, ?, 'activo', ?, ?, ?, ?, ?)
+        (fecha, tipo, total, concepto, usuario_id, caja_id, caja_sesion_id, estado, paciente_id, profesional_id, punto_venta, numero, numero_completo, medio_pago, empleado_destino_id, transferencia_tipo)
+        VALUES (NOW(), ?, ?, ?, ?, ?, ?, 'activo', ?, ?, ?, ?, ?, ?, ?, 'clinica')
     ");
+
     $stmt->execute([
+        $tipo,
         $monto,
+        $concepto,
         $usuario_id,
         $caja_id,
         $caja_sesion_id,
         $paciente_id ?: null,
         $profesional_id ?: null,
         $caja_id,
-        $nuevoNumero,
-        $numeroCompleto
+        $nuevo,
+        $numeroCompleto,
+        $medio_pago,
+        $empleado_destino_id
     ]);
 
     $cobro_id = $pdo->lastInsertId();
@@ -138,99 +187,99 @@ try {
 
         $stmt = $pdo->prepare("SELECT nombre FROM practicas WHERE id = ?");
         $stmt->execute([$practica_id]);
-        $practica = $stmt->fetch(PDO::FETCH_ASSOC);
+        $nombrePractica = $stmt->fetchColumn() ?: 'Práctica';
 
         $stmt = $pdo->prepare("
             INSERT INTO cobros_detalle
             (cobro_id, practica_id, nombre, precio)
             VALUES (?, ?, ?, ?)
         ");
+
         $stmt->execute([
             $cobro_id,
             $practica_id,
-            $practica['nombre'] ?? 'Práctica',
+            $nombrePractica,
             $monto
         ]);
     }
 
     /* ==============================
-       💰 MOVIMIENTO CAJA
+       🔥 REPARTO (MISMO QUE TURNOS)
     ============================== */
-    $stmt = $pdo->prepare("
-        INSERT INTO caja_movimientos 
-        (caja_id, caja_sesion_id, tipo, concepto, monto, fecha, cobro_id, descripcion)
-        VALUES (?, ?, ?, ?, ?, NOW(), ?, ?)
+    $stmtInsert = $pdo->prepare("
+        INSERT INTO cobros_reparto (cobro_id, destino_id, monto)
+        VALUES (?, ?, ?)
     ");
 
-    $descripcion = ($practica_id > 0) ? "Movimiento con practica" : "Movimiento manual";
-
-    $stmt->execute([
-        $caja_id,
-        $caja_sesion_id,
-        strtolower($tipo), // 🔥 importante (ingreso/egreso en minúscula)
-        $concepto,
-        $monto,
-        $cobro_id,
-        $descripcion
-    ]);
-
-    /* ==============================
-       🔥 REPARTO
-    ============================== */
     if ($practica_id > 0) {
 
         $stmt = $pdo->prepare("
-            SELECT id
+            SELECT id 
             FROM practicas_reparto
-            WHERE practica_id = ?
-            AND (profesional_id = ? OR profesional_id IS NULL)
+            WHERE practica_id = ? 
+              AND (profesional_id = ? OR profesional_id IS NULL)
+              AND tipo_paciente = ?
             ORDER BY profesional_id DESC
             LIMIT 1
         ");
-        $stmt->execute([$practica_id, $profesional_id ?: null]);
-        $reparto_id = $stmt->fetchColumn();
+        $stmt->execute([$practica_id, $profesional_id, $tipoPaciente]);
 
-        if ($reparto_id) {
+        $rep_id = $stmt->fetchColumn();
 
-            $stmt = $pdo->prepare("
-                SELECT destino_id, tipo_id, valor, orden
-                FROM practicas_reparto_detalle
-                WHERE reparto_id = ?
-                ORDER BY orden ASC
-            ");
-            $stmt->execute([$reparto_id]);
-            $reglas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (!$rep_id) {
+            throw new Exception("No hay reparto configurado");
+        }
 
-            if (!empty($reglas)) {
+        $stmt = $pdo->prepare("
+            SELECT destino_id, tipo_id, valor
+            FROM practicas_reparto_detalle
+            WHERE reparto_id = ?
+        ");
+        $stmt->execute([$rep_id]);
+        $reglas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-                $stmtInsert = $pdo->prepare("
-                    INSERT INTO cobros_reparto 
-                    (cobro_id, destino_id, monto)
-                    VALUES (?, ?, ?)
-                ");
+        $fijos = 0;
+        $porc = [];
+        $repartoFinal = [];
 
-                $resto = $monto;
+        foreach ($reglas as $r) {
 
-                // 💰 FIJOS
-                foreach ($reglas as $r) {
-                    if ((int)$r['tipo_id'] === 2) {
-                        $montoFijo = (float)$r['valor'];
-                        $stmtInsert->execute([$cobro_id, $r['destino_id'], $montoFijo]);
-                        $resto -= $montoFijo;
-                    }
-                }
+            $dest = (int)$r['destino_id'];
 
-                if ($resto < 0) $resto = 0;
+            if (!isset($repartoFinal[$dest])) {
+                $repartoFinal[$dest] = 0;
+            }
 
-                // 📊 PORCENTAJES
-                foreach ($reglas as $r) {
-                    if ((int)$r['tipo_id'] === 1) {
-                        $montoPorcentaje = ($resto * (float)$r['valor']) / 100;
-                        $stmtInsert->execute([$cobro_id, $r['destino_id'], $montoPorcentaje]);
-                    }
-                }
+            if ((int)$r['tipo_id'] === 2) {
+                $fijos += $r['valor'];
+                $repartoFinal[$dest] += $r['valor'];
+            } else {
+                $porc[] = $r;
             }
         }
+
+        if ($fijos > $monto) {
+            throw new Exception("Error de reparto: fijos ($fijos) > total ($monto)");
+        }
+
+        $base = $monto - $fijos;
+
+        foreach ($porc as $r) {
+            $dest = (int)$r['destino_id'];
+            $repartoFinal[$dest] += ($base * $r['valor']) / 100;
+        }
+
+        foreach ($repartoFinal as $dest => $m) {
+            $stmtInsert->execute([$cobro_id, $dest, round($m, 2)]);
+        }
+
+    } else {
+
+        if ($destino_id <= 0) {
+            throw new Exception("Debe seleccionar un destino");
+        }
+
+        $stmtInsert->execute([$cobro_id, $destino_id, $monto]);
     }
 
     $pdo->commit();
@@ -238,7 +287,7 @@ try {
     echo json_encode([
         'success' => true,
         'cobro_id' => $cobro_id,
-        'numero' => $numeroCompleto
+        'numero'   => $numeroCompleto
     ]);
 
 } catch (Exception $e) {

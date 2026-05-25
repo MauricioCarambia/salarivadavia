@@ -101,68 +101,68 @@ if (isset($_POST['guardar'])) {
 
                         <!-- APELLIDO -->
                         <div class="col-md-6 form-group">
-                            <label>Apellido</label>
+                            <label>Apellido<span class="required-asterisk">*</span></label>
                             <input type="text" name="apellido" class="form-control"
                                 value="<?= htmlspecialchars($campos['apellido']) ?>" required>
                         </div>
 
                         <!-- NOMBRE -->
                         <div class="col-md-6 form-group">
-                            <label>Nombre</label>
+                            <label>Nombre<span class="required-asterisk">*</span></label>
                             <input type="text" name="nombre" class="form-control"
                                 value="<?= htmlspecialchars($campos['nombre']) ?>" required>
                         </div>
 
                         <!-- DOCUMENTO -->
                         <div class="col-md-6 form-group">
-                            <label>DNI</label>
+                            <label>DNI<span class="required-asterisk">*</span></label>
                             <input type="text" name="documento" id="dni" class="form-control"
                                 value="<?= htmlspecialchars($campos['documento']) ?>" required>
                         </div>
 
                         <!-- CELULAR -->
                         <div class="col-md-6 form-group">
-                            <label>Celular</label>
+                            <label>Celular<span class="required-asterisk">*</span></label>
                             <input type="text" name="celular" class="form-control"
                                 value="<?= htmlspecialchars($campos['celular']) ?>" required>
                         </div>
                         <!-- FECHA NACIMIENTO -->
                         <div class="col-md-4 form-group">
-                            <label>Fecha de Nacimiento</label>
+                            <label>Fecha de Nacimiento<span class="required-asterisk">*</span></label>
                             <input type="date" name="nacimiento" class="form-control"
-                                value="<?= htmlspecialchars($campos['nacimiento']) ?>">
+                                value="<?= htmlspecialchars($campos['nacimiento']) ?>"required>
                         </div>
 
                         <!-- domicilio -->
                         <div class="col-md-4 form-group">
-                            <label>Dirección</label>
+                            <label>Dirección<span class="required-asterisk">*</span></label>
                             <input type="text" name="domicilio" class="form-control"
-                                value="<?= htmlspecialchars($campos['domicilio']) ?>">
+                                value="<?= htmlspecialchars($campos['domicilio']) ?>"required>
                         </div>
 
                         <!-- OBRA SOCIAL -->
                         <div class="col-md-4 form-group">
-                            <label>Obra Social</label>
+                            <label>Obra Social<span class="required-asterisk">*</span></label>
                             <input type="text" name="obra_social" class="form-control"
-                                value="<?= htmlspecialchars($campos['obra_social']) ?>">
+                                value="<?= htmlspecialchars($campos['obra_social']) ?>"required>
                         </div>
                         <!-- ESTUDIO -->
                         <div class="col-md-4 form-group">
-                            <label>Estudio</label>
+                            <label>Estudio<span class="required-asterisk">*</span></label>
                             <input type="text" name="estudio" class="form-control"
                                 value="<?= htmlspecialchars($campos['estudio']) ?>" required>
                         </div>
 
                         <!-- VALOR -->
                         <div class="col-md-4 form-group">
-                            <label>Valor Médico</label>
+                            <label>Valor Médico<span class="required-asterisk">*</span></label>
                             <input type="number" step="0.01" name="valor" class="form-control"
                                 value="<?= htmlspecialchars($campos['valor']) ?>" required>
                         </div>
 
                         <!-- COBRADO -->
                         <div class="col-md-4 form-group">
-                            <label>Cobrado Paciente</label>
+                            <label>Cobrado Paciente<span class="required-asterisk">*</span></label>
                             <input type="number" step="0.01" name="cobrado" class="form-control"
                                 value="<?= htmlspecialchars($campos['cobrado']) ?>" required>
                         </div>
