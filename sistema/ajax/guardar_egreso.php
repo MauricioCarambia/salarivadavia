@@ -1,6 +1,5 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
-session_start();
 
 header('Content-Type: application/json');
 

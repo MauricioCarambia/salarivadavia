@@ -122,6 +122,20 @@ if (!function_exists('obtenerCajaAbierta')) {
 
 $cajas = $pdo->query("SELECT * FROM cajas ORDER BY nombre")->fetchAll(PDO::FETCH_ASSOC);
 $cajaAbierta = obtenerCajaAbierta($pdo, $usuarioId);
+/* =================================
+    🔓 CAJAS ABIERTAS (SIN FILTRO FECHA)
+================================= */
+$stmt = $pdo->query("
+    SELECT *
+    FROM caja_sesion
+    WHERE estado = 'abierta'
+");
+
+$cajasAbiertas = [];
+
+while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+    $cajasAbiertas[$row['caja_id']] = $row;
+}
 function obtenerCajaSesionActiva($pdo, $usuarioId)
 {
     $stmt = $pdo->prepare("
@@ -202,69 +216,102 @@ function obtenerCajaSesionActiva($pdo, $usuarioId)
                             </tr>
                         </thead>
                         <tbody>
+
                             <?php foreach ($cajas as $c):
 
-                                $sesionActiva = null;
+                                $sesionActiva = $cajasAbiertas[$c['id']] ?? null;
 
-                                foreach ($historialSesiones as $h) {
-                                    if ($h['caja_id'] == $c['id'] && $h['estado'] === 'abierta') {
-                                        $sesionActiva = $h;
-                                        break;
-                                    }
-                                }
                             ?>
+
                                 <tr>
-                                    <td class="text-center"><?= htmlspecialchars($c['nombre']) ?></td>
 
                                     <td class="text-center">
+                                        <?= htmlspecialchars($c['nombre']) ?>
+                                    </td>
+
+                                    <td class="text-center">
+
                                         <?= $sesionActiva
                                             ? '<span class="badge badge-success">Abierta</span>'
                                             : '<span class="badge badge-secondary">Cerrada</span>' ?>
+
                                     </td>
 
-                                    <td class="text-center"><?= $sesionActiva['turno'] ?? '-' ?></td>
-                                    <td class="text-center"><?= $sesionActiva['fecha_apertura'] ?? '-' ?></td>
-                                    <td class="text-center"><?= $sesionActiva['fecha_cierre'] ?? '-' ?></td>
+                                    <td class="text-center">
+                                        <?= $sesionActiva['turno'] ?? '-' ?>
+                                    </td>
 
                                     <td class="text-center">
+                                        <?= $sesionActiva['fecha_apertura'] ?? '-' ?>
+                                    </td>
+
+                                    <td class="text-center">
+                                        <?= $sesionActiva['fecha_cierre'] ?? '-' ?>
+                                    </td>
+
+                                    <td class="text-center">
+
                                         <div class="btn-group">
+
                                             <?php
-                                            $puedeCerrar = $sesionActiva && $sesionActiva['usuario_id'] == $usuarioId;
+                                            $puedeCerrar = $sesionActiva
+                                                && $sesionActiva['usuario_id'] == $usuarioId;
                                             ?>
 
                                             <?php if (!$sesionActiva): ?>
+
                                                 <button class="btn btn-info btn-sm abrir-caja"
                                                     data-id="<?= $c['id'] ?>"
                                                     data-nombre="<?= htmlspecialchars($c['nombre']) ?>">
+
                                                     Abrir
+
                                                 </button>
+
                                             <?php else: ?>
 
                                                 <?php if ($puedeCerrar): ?>
+
                                                     <button class="btn btn-warning btn-sm cerrar-caja"
                                                         data-sesion-id="<?= $sesionActiva['id'] ?>">
+
                                                         Cerrar
+
                                                     </button>
+
                                                 <?php else: ?>
-                                                    <span class="badge badge-secondary">Solo el usuario que abrió puede cerrar</span>
+
+                                                    <span class="badge badge-secondary">
+                                                        Solo el usuario que abrió puede cerrar
+                                                    </span>
+
                                                 <?php endif; ?>
 
                                             <?php endif; ?>
 
                                             <button class="btn btn-success btn-sm editar-caja rounded-circle"
                                                 data-id="<?= $c['id'] ?>"
-                                                data-nombre="<?= htmlspecialchars($c['nombre']) ?>"><i
-                                                    class="fas fa-pencil-alt"></i>
+                                                data-nombre="<?= htmlspecialchars($c['nombre']) ?>">
+
+                                                <i class="fas fa-pencil-alt"></i>
+
                                             </button>
 
                                             <button class="btn btn-danger btn-sm eliminar-caja rounded-circle"
-                                                data-id="<?= $c['id'] ?>"><i
-                                                    class="fas fa-trash"></i>
+                                                data-id="<?= $c['id'] ?>">
+
+                                                <i class="fas fa-trash"></i>
+
                                             </button>
+
                                         </div>
+
                                     </td>
+
                                 </tr>
+
                             <?php endforeach; ?>
+
                         </tbody>
                     </table>
                 </div>

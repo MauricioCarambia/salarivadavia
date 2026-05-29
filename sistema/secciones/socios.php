@@ -4,6 +4,7 @@ $rand = uniqid();
 $busqueda = trim($_GET['busqueda'] ?? '');
 $pacientes = [];
 $user_tipo = $_SESSION['user_tipo'] ?? '';
+
 if ($busqueda !== '') {
 
     $params = [];
@@ -31,14 +32,22 @@ if ($busqueda !== '') {
     pa.ultimo_pago,
 
     CASE 
-        WHEN pa.ultimo_pago IS NULL THEN 999
-        ELSE TIMESTAMPDIFF(MONTH, pa.ultimo_pago, CURDATE())
-    END AS meses_adeudados,
+    WHEN pa.ultimo_pago IS NULL THEN 999
+    ELSE GREATEST(0, PERIOD_DIFF(
+        DATE_FORMAT(CURDATE(), '%Y%m'),
+        DATE_FORMAT(pa.ultimo_pago, '%Y%m')
+    ))
+END AS meses_adeudados,
 
-    CASE 
-        WHEN pa.ultimo_pago >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 2 MONTH),'%Y-%m-01') 
-        THEN 'si' ELSE 'no' 
-    END AS aldia
+CASE 
+    WHEN pa.ultimo_pago IS NULL THEN 'no'
+    WHEN GREATEST(0, PERIOD_DIFF(
+        DATE_FORMAT(CURDATE(), '%Y%m'),
+        DATE_FORMAT(pa.ultimo_pago, '%Y%m')
+    )) <= 1
+    THEN 'si'
+    ELSE 'no'
+END AS aldia
 
 FROM pacientes p
 
@@ -107,31 +116,43 @@ LIMIT 25
                         <thead class="thead-dark">
                             <?php
                             function tipoCobro($r)
-                            {
+{
+    // 🟣 Vitalicio
+    if ($r['tipo_socio'] == 'vitalicio') {
+        return 'SOCIO';
+    }
 
-                                // 🟣 Vitalicio
-                                if ($r['tipo_socio'] == 'vitalicio') {
-                                    return 'SOCIO';
-                                }
+    // ✅ Está al día → SOCIO (cubre pacientes viejos sin fecha_alta)
+    if ($r['aldia'] == 'si') {
+        return 'SOCIO';
+    }
 
-                                $hoy = new DateTime();
-                                $alta = new DateTime($r['fecha_alta']);
-                                $dias = $hoy->diff($alta)->days;
+    // Sin fecha alta → particular (nunca pagó y no tiene fecha de ingreso)
+    if (empty($r['fecha_alta']) || $r['fecha_alta'] == '0000-00-00') {
+        return 'PARTICULAR';
+    }
 
-                                // 🟡 Nuevo (primer mes)
-                                if ($dias <= 30) {
-                                    return 'PARTICULAR';
-                                }
+    $hoy  = new DateTime();
+    $alta = new DateTime($r['fecha_alta']);
+    $dias = $hoy->diff($alta)->days;
 
-                                // 🔵 Normal
-                                $meses = (int)$r['meses_adeudados'];
+    // 🟡 Primeros 3 meses
+    if ($dias <= 90) {
+        return 'EN_GRACIA';
+    }
 
-                                if ($meses <= 3) {
-                                    return 'SOCIO';
-                                }
+    // 🔴 Nunca pagó
+    if ((int)$r['meses_adeudados'] === 999) {
+        return 'PARTICULAR';
+    }
 
-                                return 'PARTICULAR';
-                            }
+    // 🔴 Debe más de 1 mes
+    if ((int)$r['meses_adeudados'] > 1) {
+        return 'PARTICULAR';
+    }
+
+    return 'SOCIO';
+}
                             ?>
                             <tr>
                                 <th>Apellido</th>
@@ -161,10 +182,14 @@ LIMIT 25
                                     </td>
                                     <td>
                                         <?php
+                                        // Columna "Tipo Cobro"
                                         $tipo = tipoCobro($r);
 
                                         if ($tipo == 'SOCIO') {
                                             echo '<span class="text-primary font-weight-bold">SOCIO</span>';
+                                        } elseif ($tipo == 'EN_GRACIA') {
+                                            // Durante gracia cobra como particular, pero lo diferenciamos visualmente
+                                            echo '<span class="text-dark font-weight-bold">PARTICULAR</span>';
                                         } else {
                                             echo '<span class="text-dark font-weight-bold">PARTICULAR</span>';
                                         }
@@ -172,20 +197,31 @@ LIMIT 25
                                     </td>
                                     <td>
                                         <?php
+
                                         if ($r['tipo_socio'] == 'vitalicio') {
-                                            echo '<span class="text-info">Vitalicio</span>';
+
+                                            echo '<span class="text-info font-weight-bold">
+                Vitalicio
+              </span>';
                                         } else {
 
-                                            $hoy = new DateTime();
-                                            $alta = new DateTime($r['fecha_alta']);
-                                            $dias = $hoy->diff($alta)->days;
+                                            $tipo = tipoCobro($r);
 
-                                            if ($dias <= 30) {
-                                                echo '<span class="text-primary">En gracia</span>';
+                                            if ($tipo == 'EN_GRACIA') {
+
+                                                echo '<span class="text-primary font-weight-bold">
+                    En gracia
+                  </span>';
+                                            } elseif ($tipo == 'PARTICULAR') {
+
+                                                echo '<span class="text-danger font-weight-bold">
+                    No
+                  </span>';
                                             } else {
-                                                echo $r['aldia'] === 'si'
-                                                    ? '<span class="text-success">Si</span>'
-                                                    : '<span class="text-danger">No</span>';
+
+                                                echo '<span class="text-success font-weight-bold">
+                    Sí
+                  </span>';
                                             }
                                         }
                                         ?>
@@ -222,6 +258,7 @@ LIMIT 25
                                         </div>
                                     </td>
                                 </tr>
+                                
                             <?php endforeach; ?>
                         </tbody>
                     </table>

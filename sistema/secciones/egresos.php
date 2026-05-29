@@ -147,44 +147,98 @@ $egresos = $pdo->query("
     /* =========================
        GUARDAR EGRESO
     ========================= */
- $("#formEgreso").submit(function(e) {
-    e.preventDefault();
+    $("#formEgreso").submit(function(e) {
 
-    Swal.fire({
-        title: "¿Confirmar egreso?",
-       text: `Concepto: ${$("#concepto").val()} - Monto: $${$("#monto").val()}`,
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#6c757d",
-        confirmButtonText: "Sí, registrar",
-        cancelButtonText: "Cancelar"
-    }).then((result) => {
+        e.preventDefault();
 
-        if (result.isConfirmed) {
+        Swal.fire({
+            title: "¿Confirmar egreso?",
+            text: `Concepto: ${$("#concepto").val()} - Monto: $${$("#monto").val()}`,
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#d33",
+            cancelButtonColor: "#6c757d",
+            confirmButtonText: "Sí, registrar",
+            cancelButtonText: "Cancelar"
 
-            $.ajax({
-                url: "ajax/guardar_egreso.php",
-                type: "POST",
-                contentType: "application/json",
-                data: JSON.stringify({
-                    tipo: $("#tipo").val(),
-                    concepto: $("#concepto").val(),
-                    monto: $("#monto").val(),
-                    profesional_id: $("#profesional").val()
-                }),
-                success: function(res) {
-                    if (res.success) {
-                        Swal.fire("OK", "Egreso registrado", "success")
-                            .then(() => location.reload());
-                    } else {
-                        Swal.fire("Error", res.message, "error");
+        }).then((result) => {
+
+            if (result.isConfirmed) {
+
+                $.ajax({
+
+                    url: "ajax/guardar_egreso.php",
+
+                    type: "POST",
+
+                    dataType: "json",
+
+                    contentType: "application/json",
+
+                    data: JSON.stringify({
+                        tipo: $("#tipo").val(),
+                        concepto: $("#concepto").val(),
+                        monto: $("#monto").val(),
+                        profesional_id: $("#profesional").val()
+                    }),
+
+                    beforeSend: function() {
+
+                        Swal.fire({
+                            title: "Guardando...",
+                            allowOutsideClick: false,
+                            didOpen: () => {
+                                Swal.showLoading();
+                            }
+                        });
+
+                    },
+
+                    success: function(res) {
+
+                        console.log(res);
+
+                        if (res.success) {
+
+                            Swal.fire({
+                                icon: "success",
+                                title: "OK",
+                                text: "Egreso registrado"
+                            }).then(() => {
+
+                                location.reload();
+
+                            });
+
+                        } else {
+
+                            Swal.fire({
+                                icon: "error",
+                                title: "Error",
+                                text: res.message || "Error desconocido"
+                            });
+
+                        }
+
+                    },
+
+                    error: function(xhr) {
+
+                        console.log(xhr.responseText);
+
+                        Swal.fire({
+                            icon: "error",
+                            title: "Error servidor",
+                            text: xhr.responseText
+                        });
+
                     }
-                }
-            });
 
-        }
+                });
+
+            }
+
+        });
 
     });
-});
 </script>

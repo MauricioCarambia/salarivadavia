@@ -46,7 +46,7 @@
     <div class="col-md-4">
         <div class="card card-info card-outline">
             <div class="card-body text-center">
-                <h6>Fondos Disponibles</h6>
+                <h6>Fondo Disponible</h6>
                 <h3 id="kpiFondos">$0.00</h3>
             </div>
         </div>

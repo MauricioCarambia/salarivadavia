@@ -152,10 +152,10 @@ WHERE Id = :id";
                         <input type="number" min="0" step="1" name="documento" class="form-control"
                             value="<?= htmlspecialchars($rArray['documento']) ?>" required>
                     </div>
-                   
+
                 </div>
                 <div class="form-row">
-                     <div class="form-group col-md-4">
+                    <div class="form-group col-md-4">
                         <label>Nro de socio</label>
                         <input type="text" name="nro_afiliado" class="form-control"
                             value="<?= htmlspecialchars($rArray['nro_afiliado']) ?>">
@@ -171,7 +171,7 @@ WHERE Id = :id";
                     <div class="form-group col-md-4">
                         <label>Fecha de alta</label>
                         <input type="date" name="fecha_alta" class="form-control"
-                            value="<?= htmlspecialchars($rArray['fecha_alta'] ?? date('Y-m-d')) ?>">
+                            value="<?= !empty($rArray['fecha_alta']) ? htmlspecialchars($rArray['fecha_alta']) : '' ?>">
                     </div>
                 </div>
                 <!-- Fecha nacimiento y sexo -->

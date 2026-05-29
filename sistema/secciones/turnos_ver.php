@@ -57,60 +57,48 @@ if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
 function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
 {
     $stmt = $pdo->prepare("
-        SELECT tipo_socio, fecha_alta
-        FROM pacientes
-        WHERE Id = ?
+        SELECT 
+            p.tipo_socio, 
+            p.fecha_alta,
+            GREATEST(0, COALESCE(PERIOD_DIFF(
+                DATE_FORMAT(CURDATE(), '%Y%m'),
+                DATE_FORMAT(MAX(pa.fecha_correspondiente), '%Y%m')
+            ), 999)) AS meses_adeudados,
+            MAX(pa.fecha_correspondiente) AS ultimo_pago
+        FROM pacientes p
+        LEFT JOIN pagos_afiliados pa ON pa.paciente_id = p.Id
+        WHERE p.Id = ?
+        GROUP BY p.Id
     ");
     $stmt->execute([$paciente_id]);
-
     $p = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$p) {
-        return ['tipo' => 'particular', 'cobra_como' => 'particular'];
+    if (!$p) return ['tipo' => 'particular', 'cobra_como' => 'particular'];
+
+    // 🟣 Vitalicio
+    if (strtolower($p['tipo_socio']) === 'vitalicio') {
+        return ['tipo' => 'vitalicio', 'cobra_como' => 'socio'];
     }
 
-    // 🔥 NUEVO (primer mes)
-    if (!empty($p['fecha_alta'])) {
-
-        $alta = new DateTime($p['fecha_alta']);
-        $actual = new DateTime();
-
-        $diff = $alta->diff($actual);
-
-        if ($diff->y == 0 && $diff->m < 1) {
+    // 🟡 Primeros 90 días → EN GRACIA (cobra como particular, SIEMPRE)
+    if (!empty($p['fecha_alta']) && $p['fecha_alta'] !== '0000-00-00') {
+        $dias = (new DateTime())->diff(new DateTime($p['fecha_alta']))->days;
+        if ($dias <= 90) {
             return ['tipo' => 'nuevo', 'cobra_como' => 'particular'];
         }
     }
 
-    // 🔥 VITALICIO (valor específico)
-    if (!empty($p['tipo_socio']) && strtolower($p['tipo_socio']) === 'vitalicio') {
-        return ['tipo' => 'vitalicio', 'cobra_como' => 'socio'];
-    }
-
-    // 🔥 SOCIO NORMAL (validar deuda)
-    $stmt = $pdo->prepare("
-        SELECT MAX(fecha_correspondiente)
-        FROM pagos_afiliados
-        WHERE paciente_id = ?
-    ");
-    $stmt->execute([$paciente_id]);
-
-    $ultimaFecha = $stmt->fetchColumn();
-
-    if (!$ultimaFecha) {
-        return ['tipo' => 'particular', 'cobra_como' => 'particular'];
-    }
-
-    $ultimo = new DateTime(date('Y-m-01', strtotime($ultimaFecha)));
-    $actual = new DateTime(date('Y-m-01'));
-
-    $diff = $ultimo->diff($actual);
-    $meses = ($diff->y * 12) + $diff->m;
-
-    if ($meses <= 3) {
+    // ✅ Al día → SOCIO (cubre pacientes viejos sin fecha_alta)
+    if ($p['ultimo_pago'] && (int)$p['meses_adeudados'] <= 1) {
         return ['tipo' => 'socio', 'cobra_como' => 'socio'];
     }
 
+    // 🔴 Nunca pagó
+    if (!$p['ultimo_pago']) {
+        return ['tipo' => 'particular', 'cobra_como' => 'particular'];
+    }
+
+    // 🔴 Moroso
     return ['tipo' => 'moroso', 'cobra_como' => 'particular'];
 }
 /* =============================

@@ -54,44 +54,43 @@ try {
     }
 
     function obtenerTipoPaciente(PDO $pdo, int $paciente_id): string
-    {
-        if ($paciente_id <= 0) return 'particular';
+{
+    if ($paciente_id <= 0) return 'particular';
 
-        $stmt = $pdo->prepare("
-            SELECT tipo_socio, fecha_alta
-            FROM pacientes
-            WHERE Id = :id
-        ");
-        $stmt->execute([':id' => $paciente_id]);
-        $p = $stmt->fetch(PDO::FETCH_ASSOC);
+    $stmt = $pdo->prepare("
+        SELECT 
+            p.tipo_socio, 
+            p.fecha_alta,
+            GREATEST(0, COALESCE(PERIOD_DIFF(
+                DATE_FORMAT(CURDATE(), '%Y%m'),
+                DATE_FORMAT(MAX(pa.fecha_correspondiente), '%Y%m')
+            ), 999)) AS meses_adeudados,
+            MAX(pa.fecha_correspondiente) AS ultimo_pago
+        FROM pacientes p
+        LEFT JOIN pagos_afiliados pa ON pa.paciente_id = p.Id
+        WHERE p.Id = ?
+        GROUP BY p.Id
+    ");
+    $stmt->execute([$paciente_id]);
+    $p = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$p) return 'particular';
+    if (!$p) return 'particular';
 
-        if ($p['tipo_socio'] === 'vitalicio') return 'socio';
+    // 🟣 Vitalicio
+    if (strtolower($p['tipo_socio']) === 'vitalicio') return 'socio';
 
-        if (!empty($p['fecha_alta'])) {
-            $hoy = new DateTime();
-            $alta = new DateTime($p['fecha_alta']);
-            if ($hoy->diff($alta)->days <= 30) return 'particular';
-        }
-
-        $stmt = $pdo->prepare("
-            SELECT MAX(fecha_correspondiente)
-            FROM pagos_afiliados
-            WHERE paciente_id = :id
-        ");
-        $stmt->execute([':id' => $paciente_id]);
-
-        $ultima = $stmt->fetchColumn();
-        if (!$ultima) return 'particular';
-
-        $ultimo = new DateTime(date('Y-m-01', strtotime($ultima)));
-        $actual = new DateTime(date('Y-m-01'));
-
-        $meses = ($ultimo->diff($actual)->y * 12) + $ultimo->diff($actual)->m;
-
-        return ($meses <= 3) ? 'socio' : 'particular';
+    // 🟡 Primeros 90 días → particular (ANTES que al día)
+    if (!empty($p['fecha_alta']) && $p['fecha_alta'] !== '0000-00-00') {
+        $dias = (new DateTime())->diff(new DateTime($p['fecha_alta']))->days;
+        if ($dias <= 90) return 'particular';
     }
+
+    // ✅ Al día → socio
+    if ($p['ultimo_pago'] && (int)$p['meses_adeudados'] <= 1) return 'socio';
+
+    // 🔴 Nunca pagó o moroso
+    return 'particular';
+}
 
     $caja = obtenerCajaAbierta($pdo, $usuarioId);
     if (!$caja) throw new Exception("No hay caja abierta");
@@ -268,27 +267,27 @@ try {
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ");
 
-$concepto = implode(', ', array_column($detalle, 'nombre'));
-$tipoCobro = 'INGRESO';
+    $concepto = implode(', ', array_column($detalle, 'nombre'));
+    $tipoCobro = 'INGRESO';
 
-$stmt->execute([
-    $turno_id,
-    $paciente_id,
-    $profesional_id,
-    $total,
-    $usuarioId,
-    $tipoCobro,
-    $caja_id,
-    $caja_sesion_id,
-    $caja_id,
-    $nuevo,
-    $numeroCompleto,
-    $medio_pago,
-    $empleado_destino_id,
-    $transferencia_tipo,
-    $deudaClinica,
-    $concepto
-]);
+    $stmt->execute([
+        $turno_id,
+        $paciente_id,
+        $profesional_id,
+        $total,
+        $usuarioId,
+        $tipoCobro,
+        $caja_id,
+        $caja_sesion_id,
+        $caja_id,
+        $nuevo,
+        $numeroCompleto,
+        $medio_pago,
+        $empleado_destino_id,
+        $transferencia_tipo,
+        $deudaClinica,
+        $concepto
+    ]);
 
     $cobro_id = $pdo->lastInsertId();
 
@@ -341,7 +340,7 @@ $stmt->execute([
         ]);
     }
 
-    
+
     /* =========================
        UPDATE TURNO
     ========================= */

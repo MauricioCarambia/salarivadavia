@@ -19,72 +19,40 @@ if ($practica_id <= 0) {
 =============================*/
 function obtenerTipoPaciente(PDO $pdo, int $paciente_id): string
 {
-    if ($paciente_id <= 0) {
-        return 'particular';
-    }
+    if ($paciente_id <= 0) return 'particular';
 
-    /* =========================
-       TRAER PACIENTE
-    =========================*/
     $stmt = $pdo->prepare("
-        SELECT tipo_socio, fecha_alta
-        FROM pacientes
-        WHERE Id = :id
+        SELECT 
+            p.tipo_socio, 
+            p.fecha_alta,
+            GREATEST(0, COALESCE(PERIOD_DIFF(
+                DATE_FORMAT(CURDATE(), '%Y%m'),
+                DATE_FORMAT(MAX(pa.fecha_correspondiente), '%Y%m')
+            ), 999)) AS meses_adeudados,
+            MAX(pa.fecha_correspondiente) AS ultimo_pago
+        FROM pacientes p
+        LEFT JOIN pagos_afiliados pa ON pa.paciente_id = p.Id
+        WHERE p.Id = ?
+        GROUP BY p.Id
     ");
-    $stmt->execute([':id' => $paciente_id]);
-    $paciente = $stmt->fetch(PDO::FETCH_ASSOC);
+    $stmt->execute([$paciente_id]);
+    $p = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$paciente) {
-        return 'particular';
+    if (!$p) return 'particular';
+
+    // 🟣 Vitalicio
+    if (strtolower($p['tipo_socio']) === 'vitalicio') return 'socio';
+
+    // 🟡 Primeros 90 días → particular (ANTES que al día)
+    if (!empty($p['fecha_alta']) && $p['fecha_alta'] !== '0000-00-00') {
+        $dias = (new DateTime())->diff(new DateTime($p['fecha_alta']))->days;
+        if ($dias <= 90) return 'particular';
     }
 
-    // 🟣 1. VITALICIO → SIEMPRE SOCIO
-   if (!empty($paciente['tipo_socio']) && strtolower(trim($paciente['tipo_socio'])) === 'vitalicio') {
-    return 'socio';
-}
+    // ✅ Al día → socio
+    if ($p['ultimo_pago'] && (int)$p['meses_adeudados'] <= 1) return 'socio';
 
-    /* =========================
-       🟡 2. SOCIO NUEVO (GRACIA)
-    =========================*/
-    if (!empty($paciente['fecha_alta'])) {
-        $hoy = new DateTime();
-        $alta = new DateTime($paciente['fecha_alta']);
-        $dias = $hoy->diff($alta)->days;
-
-        if ($dias <= 30) {
-            return 'particular';
-        }
-    }
-
-    /* =========================
-       🔵 3. DEUDA
-    =========================*/
-    $stmt = $pdo->prepare("
-        SELECT MAX(fecha_correspondiente)
-        FROM pagos_afiliados
-        WHERE paciente_id = :id
-    ");
-    $stmt->execute([':id' => $paciente_id]);
-
-    $ultimaFecha = $stmt->fetchColumn();
-
-    // Nunca pagó
-    if (!$ultimaFecha) {
-        return 'particular';
-    }
-
-    $ultimo = new DateTime(date('Y-m-01', strtotime($ultimaFecha)));
-    $actual = new DateTime(date('Y-m-01'));
-
-    $diff = $ultimo->diff($actual);
-    $mesesDeuda = ($diff->y * 12) + $diff->m;
-
-    // 🔵 hasta 3 meses → socio
-    if ($mesesDeuda <= 3) {
-        return 'socio';
-    }
-
-    // 🔴 más de 3 meses → particular
+    // 🔴 Nunca pagó o moroso
     return 'particular';
 }
 
