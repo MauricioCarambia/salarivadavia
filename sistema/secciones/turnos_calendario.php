@@ -197,7 +197,7 @@ $dias_anulados = $stmt->fetchAll(PDO::FETCH_COLUMN, 0); // obtenemos solo las fe
             title: 'Día Anulado'
         }));
 
-        const calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
+        window.calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
             locale: 'es',
             timeZone: 'local',
             initialView: 'timeGridWeek',
@@ -227,7 +227,14 @@ $dias_anulados = $stmt->fetchAll(PDO::FETCH_COLUMN, 0); // obtenemos solo las fe
             headerToolbar: {
                 left: 'prev,next today imprimirAgenda',
                 center: 'title',
-                right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                right: 'timeGridWeek,timeGridDay'
+            },
+            buttonText: {
+                today: 'Hoy',
+                month: 'Mes',
+                week: 'Semana',
+                day: 'Día',
+                list: 'Lista'
             },
             customButtons: {
                 imprimirAgenda: {
@@ -307,13 +314,13 @@ $dias_anulados = $stmt->fetchAll(PDO::FETCH_COLUMN, 0); // obtenemos solo las fe
                 const url = `./?seccion=turnos_ver&id=${info.event.id}`;
 
                 // Click rueda del mouse
-               info.el.addEventListener('auxclick', function(e) {
+                info.el.addEventListener('auxclick', function(e) {
 
-    if (e.button === 1) {
-        window.open(url, '_blank');
-    }
+                    if (e.button === 1) {
+                        window.open(url, '_blank');
+                    }
 
-});
+                });
 
             },
 

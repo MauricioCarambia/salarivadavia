@@ -55,106 +55,7 @@ if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $swalGuardado = true;
 }
-// function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
-// {
-//     $stmt = $pdo->prepare("
-//         SELECT
-//             p.tipo_socio,
-//             p.fecha_alta,
 
-//             MAX(pa.fecha_correspondiente) AS ultimo_pago,
-
-//             CASE
-//                 WHEN MAX(pa.fecha_correspondiente) IS NULL THEN 999
-//                 ELSE GREATEST(
-//                     0,
-//                     PERIOD_DIFF(
-//                         DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 MONTH), '%Y%m'),
-//                         DATE_FORMAT(MAX(pa.fecha_correspondiente), '%Y%m')
-//                     )
-//                 )
-//             END AS meses_adeudados
-
-//         FROM pacientes p
-//         LEFT JOIN pagos_afiliados pa
-//             ON pa.paciente_id = p.Id
-//         WHERE p.Id = ?
-//         GROUP BY p.Id
-//     ");
-
-//     $stmt->execute([$paciente_id]);
-
-//     $p = $stmt->fetch(PDO::FETCH_ASSOC);
-
-//     if (!$p) {
-//         return [
-//             'tipo' => 'particular',
-//             'cobra_como' => 'particular'
-//         ];
-//     }
-
-//     /* =========================
-//        VITALICIO
-//     ========================= */
-//     if (strtolower($p['tipo_socio'] ?? '') === 'vitalicio') {
-//         return [
-//             'tipo' => 'vitalicio',
-//             'cobra_como' => 'socio'
-//         ];
-//     }
-
-//     /* =========================
-//        EN GRACIA (3 meses)
-//     ========================= */
-//     if (
-//         !empty($p['fecha_alta']) &&
-//         $p['fecha_alta'] !== '0000-00-00'
-//     ) {
-
-//         $alta = new DateTime($p['fecha_alta']);
-//         $hoy  = new DateTime();
-
-//         $diff = $alta->diff($hoy);
-
-//         if ($diff->y == 0 && $diff->m < 3) {
-
-//             return [
-//                 'tipo' => 'nuevo',
-//                 'cobra_como' => 'particular'
-//             ];
-//         }
-//     }
-
-//     /* =========================
-//        NUNCA PAGÓ
-//     ========================= */
-//     if (!$p['ultimo_pago']) {
-
-//         return [
-//             'tipo' => 'particular',
-//             'cobra_como' => 'particular'
-//         ];
-//     }
-
-//     /* =========================
-//        SOCIO
-//     ========================= */
-//     if ((int)$p['meses_adeudados'] <= 2) {
-
-//         return [
-//             'tipo' => 'socio',
-//             'cobra_como' => 'socio'
-//         ];
-//     }
-
-//     /* =========================
-//        MOROSO
-//     ========================= */
-//     return [
-//         'tipo' => 'moroso',
-//         'cobra_como' => 'particular'
-//     ];
-// }
 /* =============================
    TURNO
 =============================*/
@@ -301,7 +202,9 @@ $mensaje = urlencode($mensaje);
                 </h3>
 
                 <div class="card-tools">
-                    <a href="./?seccion=pacientes_edit&id=<?= $r['pacienteId'] ?>&nc=<?= $rand ?>" class="btn btn-success btn-sm">Editar paciente</a>
+                    <a href="./?seccion=pacientes_edit&id=<?= $r['pacienteId'] ?>&turno_id=<?= $r['Id'] ?>"  class="btn btn-success btn-sm">
+                        Editar paciente
+                    </a>
                     <button type="button"
                         class="btn btn-danger btn-sm"
                         onclick="eliminarTurno(<?= (int)$id ?>)">

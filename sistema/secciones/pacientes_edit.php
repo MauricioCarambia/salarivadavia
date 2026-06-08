@@ -3,6 +3,7 @@ require_once __DIR__ . '/../inc/db.php'; // $pdo = instancia PDO
 $rand = rand(1000, 9999); // valor aleatorio
 
 $id = $_GET['id'] ?? null;
+$turnoId = (int)($_GET['turno_id'] ?? 0);
 $swalGuardado = false;
 $swalError = false;
 
@@ -309,7 +310,21 @@ WHERE Id = :id";
                 </div>
 
                 <div class="form-group text-right">
-                    <a href="./?seccion=pacientes&nc=<?= $rand ?>" class="btn btn-secondary">Volver</a>
+                    <?php if ($turnoId > 0): ?>
+
+                        <a href="./?seccion=turnos_ver&id=<?= $turnoId ?>"
+                            class="btn btn-secondary">
+                            Volver al turno
+                        </a>
+
+                    <?php else: ?>
+
+                        <a href="./?seccion=pacientes&nc=<?= $rand ?>"
+                            class="btn btn-secondary">
+                            Volver
+                        </a>
+
+                    <?php endif; ?>
                     <button type="submit" name="guardar" class="btn btn-primary">Guardar</button>
                 </div>
             </form>
@@ -327,7 +342,17 @@ WHERE Id = :id";
                     text: 'Los cambios se guardaron correctamente.',
                     confirmButtonText: 'Aceptar'
                 }).then(() => {
-                    window.location.href = './?seccion=pacientes&nc=<?= $rand ?>';
+                    <?php if ($turnoId > 0): ?>
+
+                        window.location.href =
+                            './?seccion=turnos_ver&id=<?= $turnoId ?>';
+
+                    <?php else: ?>
+
+                        window.location.href =
+                            './?seccion=pacientes&nc=<?= $rand ?>';
+
+                    <?php endif; ?>
                 });
             <?php elseif ($swalError): ?>
                 Swal.fire({

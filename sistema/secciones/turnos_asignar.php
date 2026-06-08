@@ -329,7 +329,15 @@ $fechaCompleta = $dt->format('d/m/Y');
                         title: 'Turno asignado',
                         timer: 1500,
                         showConfirmButton: false
-                    }).then(() => parent.location.reload());
+                    }).then(() => {
+
+                        parent.$('#modalTurno').modal('hide');
+
+                        if (parent.calendar) {
+                            parent.calendar.refetchEvents();
+                        }
+
+                    });
 
                 } else {
 

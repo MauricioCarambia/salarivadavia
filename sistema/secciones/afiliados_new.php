@@ -396,7 +396,7 @@ $meses = [
             c.push(sep());
 
             // Afiliados cubiertos
-            c.push(left("AFILIADOS:"));
+            c.push(left("SOCIOS:"));
             c.push("\n");
             afiliados.forEach(af => {
                 c.push(left("  " + af.apellido + ", " + af.nombre));
@@ -430,7 +430,6 @@ $meses = [
             c.push(center("¡GRACIAS POR ELEGIRNOS!"));
             c.push("\n");
             c.push(sep());
-            c.push(center("DOCUMENTO NO VALIDO COMO FACTURA"));
             c.push("\n\n\n\n");
 
             // Corte
