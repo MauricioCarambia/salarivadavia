@@ -82,13 +82,13 @@ foreach ($turnos as $t) {
 
                 <h3 class="card-title">
                     Últimos 25 turnos
-                     <a href="./?seccion=pacientes"
-                    class="btn btn-secondary btn-sm">
-                    Volver
-                </a>
+                    <a href="./?seccion=pacientes"
+                        class="btn btn-secondary btn-sm">
+                        Volver
+                    </a>
                 </h3>
 
-               
+
 
             </div>
 
@@ -104,7 +104,7 @@ foreach ($turnos as $t) {
                         Total: <?= $total ?>
                     </span>
 
-                                  <?php
+                    <?php
                     $porcentaje = $total > 0
                         ? round(($asistencia / $total) * 100)
                         : 0;
@@ -133,6 +133,7 @@ foreach ($turnos as $t) {
                             <th>Estado</th>
                             <th>Sobreturno</th>
                             <th>Asistencia</th>
+                            <th>Imprimir</th>
                         </tr>
 
                     </thead>
@@ -207,8 +208,8 @@ foreach ($turnos as $t) {
                                 <td>
 
                                     <span class="badge <?= $t['sobreturno']
-                                                                ? 'badge-warning'
-                                                                : 'badge-secondary' ?>">
+                                                            ? 'badge-warning'
+                                                            : 'badge-secondary' ?>">
 
                                         <?= $t['sobreturno']
                                             ? 'Sí'
@@ -245,7 +246,18 @@ foreach ($turnos as $t) {
                                     <?php endif; ?>
 
                                 </td>
+                                <td class="text-center">
 
+                                    <button
+                                        class="btn btn-warning btn-sm rounded-circle btnImprimirTurno"
+                                        data-id="<?= $t['id'] ?>"
+                                        >
+
+                                        <i class="fas fa-print text-white"></i>
+
+                                    </button>
+
+                                </td>
                             </tr>
 
                         <?php endforeach; ?>
@@ -263,6 +275,38 @@ foreach ($turnos as $t) {
 </div>
 
 <script>
+    document.addEventListener("DOMContentLoaded", function() {
+
+        if (typeof qz === "undefined") {
+            console.error("QZ no está cargado");
+            return;
+        }
+
+        qz.security.setCertificatePromise(function(resolve, reject) {
+            fetch("certificado/certificate.pem")
+                .then(res => res.text())
+                .then(resolve)
+                .catch(reject);
+        });
+
+        qz.security.setSignaturePromise(function(toSign) {
+            return function(resolve, reject) {
+                fetch("certificado/firma.php", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            request: toSign
+                        })
+                    })
+                    .then(res => res.text())
+                    .then(resolve)
+                    .catch(reject);
+            };
+        });
+
+    });
     $(document).ready(function() {
 
         $('.datatable').each(function() {
@@ -270,4 +314,142 @@ foreach ($turnos as $t) {
         });
 
     });
+    $(document).on('click', '.btnImprimirTurno', async function() {
+
+        let turnoId = $(this).data('id');
+
+        try {
+
+            await imprimirTurno(turnoId);
+
+        } catch (err) {
+
+            console.error(err);
+
+            Swal.fire(
+                'Error',
+                'No se pudo imprimir el turno',
+                'error'
+            );
+
+        }
+
+    });
+    async function imprimirTurno(turnoId) {
+
+        const data = await $.getJSON(
+            'ajax/obtener_comprobante_turno.php', {
+                id: turnoId
+            }
+        );
+
+        if (!qz.websocket.isActive()) {
+            await qz.websocket.connect();
+        }
+
+        const config = qz.configs.create("POS-80C", {
+            encoding: "CP437"
+        });
+
+        let contenido = [];
+
+        function center(txt) {
+            return "\x1B\x61\x01" + txt + "\n";
+        }
+
+        function left(txt) {
+            return "\x1B\x61\x00" + txt + "\n";
+        }
+
+        function separator() {
+            return "------------------------------------------------\n";
+        }
+
+        contenido.push("\x1B\x45\x01");
+        contenido.push("\x1D\x21\x11");
+        contenido.push(center("SALA RIVADAVIA"));
+        contenido.push("\x1D\x21\x00");
+        contenido.push("\x1B\x45\x00");
+
+        contenido.push("\n");
+
+        contenido.push(center("COMPROBANTE DE TURNO"));
+
+        contenido.push(separator());
+
+        contenido.push(
+            left(
+                "Paciente: " +
+                data.paciente_apellido +
+                " " +
+                data.paciente_nombre
+            )
+        );
+
+        contenido.push(
+            left(
+                "DNI: " +
+                (data.documento || '-')
+            )
+        );
+
+        contenido.push(
+            left(
+                "Profesional: " +
+                data.profesional_apellido +
+                " " +
+                data.profesional_nombre
+            )
+        );
+
+        contenido.push("\n");
+
+        const fechaTurno = new Date(data.fecha);
+
+        contenido.push(
+            left(
+                "Fecha: " +
+                fechaTurno.toLocaleDateString('es-AR')
+            )
+        );
+
+        contenido.push(
+            left(
+                "Hora: " +
+                fechaTurno.toLocaleTimeString('es-AR', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })
+            )
+        );
+
+        contenido.push(
+            left(
+                "Sobreturno: " +
+                (data.sobreturno ? 'SI' : 'NO')
+            )
+        );
+
+        contenido.push(separator());
+
+        contenido.push(
+            center(
+                "PRESENTARSE 10 MINUTOS ANTES"
+            )
+        );
+
+        contenido.push("\n");
+
+        contenido.push(
+            center(
+                "GRACIAS POR ELEGIRNOS"
+            )
+        );
+
+        contenido.push("\n\n\n\n");
+
+        contenido.push("\x1D\x56\x00");
+
+        await qz.print(config, contenido);
+    }
 </script>

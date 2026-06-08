@@ -1,19 +1,49 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
 
-$busqueda = $_GET['q'] ?? '';
+$busqueda = trim($_GET['q'] ?? '');
 $data = [];
 
-if (!empty($busqueda)) {
-    // Buscamos en nombre o apellido (ajustado a tus columnas Id, nombre, apellido)
-    $stmt = $pdo->prepare("
-        SELECT Id AS id, CONCAT(apellido, ' ', nombre) AS text 
-        FROM pacientes 
-        WHERE nombre LIKE ? OR apellido LIKE ? 
+if ($busqueda !== '') {
+
+    $palabras = preg_split('/\s+/', $busqueda);
+
+    $where = [];
+    $params = [];
+
+    foreach ($palabras as $palabra) {
+        $where[] = "(
+            nombre LIKE ?
+            OR apellido LIKE ?
+            OR documento LIKE ?
+        )";
+
+        $term = "%{$palabra}%";
+
+        $params[] = $term;
+        $params[] = $term;
+        $params[] = $term;
+    }
+
+    $sql = "
+        SELECT
+            Id AS id,
+            CONCAT(
+                apellido,
+                ' ',
+                nombre,
+                ' - DNI: ',
+                COALESCE(documento,'')
+            ) AS text
+        FROM pacientes
+        WHERE " . implode(' AND ', $where) . "
+        ORDER BY apellido, nombre
         LIMIT 20
-    ");
-    $term = "%$busqueda%";
-    $stmt->execute([$term, $term]);
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+
     $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 

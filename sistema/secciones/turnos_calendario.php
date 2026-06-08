@@ -294,15 +294,27 @@ $dias_anulados = $stmt->fetchAll(PDO::FETCH_COLUMN, 0); // obtenemos solo las fe
 
             // 🔥 COLORES DE FONDO (Corregido)
             eventDidMount: (info) => {
+
                 if (info.event.display === 'background') return;
 
                 if (info.event.extendedProps.sobreturno == 1) {
                     info.el.classList.add('evento-sobreturno');
-                    // Opcional: un borde punteado para diferenciarlo visualmente más allá del color
                     info.el.style.borderStyle = 'dashed';
                 }
-                // Hacer que todo el evento sea un link
+
                 info.el.style.cursor = 'pointer';
+
+                const url = `./?seccion=turnos_ver&id=${info.event.id}`;
+
+                // Click rueda del mouse
+               info.el.addEventListener('auxclick', function(e) {
+
+    if (e.button === 1) {
+        window.open(url, '_blank');
+    }
+
+});
+
             },
 
             selectAllow: function(selectInfo) {
@@ -333,14 +345,30 @@ $dias_anulados = $stmt->fetchAll(PDO::FETCH_COLUMN, 0); // obtenemos solo las fe
             },
 
             eventClick: (info) => {
+
                 if (info.event.display === 'background') return;
-                // Abrir en la misma pestaña o pestaña nueva según prefieras
-                window.location.href = `./?seccion=turnos_ver&id=${info.event.id}`;
+
+                const url = `./?seccion=turnos_ver&id=${info.event.id}`;
+
+                // Click rueda del mouse
+                if (info.jsEvent.button === 1) {
+                    window.open(url, '_blank');
+                    return;
+                }
+
+                // Ctrl + Click
+                if (info.jsEvent.ctrlKey) {
+                    window.open(url, '_blank');
+                    return;
+                }
+
+                // Click normal
+                window.location.href = url;
             },
 
             // ... dentro de la configuración de FullCalendar ...
 
-          
+
 
             // 2. Lógica inteligente al soltar el evento
             eventDrop: (info) => {

@@ -24,7 +24,7 @@ if (!$articulo) {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="sistema/styles/style.css">
-
+ 
 </head>
 
 <body class="bodynoticia">
@@ -47,9 +47,9 @@ if (!$articulo) {
                     <i class="fab fa-whatsapp"></i>
                 </a>
             </div>
-            <div class="nav-links">
+             <div class="nav-links">
                 <a href="index.php">Inicio</a>
-                <a href="noticias.php">Noticias</a>
+                 <a href="noticias.php">Noticias</a>
             </div>
         </div>
     </nav>
@@ -77,12 +77,13 @@ if (!$articulo) {
 
         <?php if (!empty($articulo['imagen'])): ?>
 
-            <img
-                class="featured-image"
-                src="/sistema/uploads/<?= urlencode($articulo['imagen']) ?>"
-                alt="<?= htmlspecialchars($articulo['titulo']) ?>">
+    <img 
+        class="featured-image"
+        src="/sistema/uploads/<?= urlencode($articulo['imagen']) ?>"
+        alt="<?= htmlspecialchars($articulo['titulo']) ?>"
+    >
 
-        <?php endif; ?>
+<?php endif; ?>
 
         <div class="article-content">
             <p><?= nl2br(htmlspecialchars($articulo['texto'])) ?></p>
@@ -187,22 +188,20 @@ if (!$articulo) {
 
 </html>
 <script>
-    document.getElementById('share-instagram').addEventListener('click', copyToClipboard);
-    document.getElementById('copy-link').addEventListener('click', copyToClipboard);
+document.getElementById('share-instagram').addEventListener('click', copyToClipboard);
+document.getElementById('copy-link').addEventListener('click', copyToClipboard);
 
-    function copyToClipboard() {
-        const el = document.createElement('textarea');
-        el.value = window.location.href;
-        document.body.appendChild(el);
-        el.select();
-        document.execCommand('copy');
-        document.body.removeChild(el);
-
-        // Mostrar mensaje de éxito
-        const msg = document.getElementById('copy-message');
-        msg.style.display = 'block';
-        setTimeout(() => {
-            msg.style.display = 'none';
-        }, 2000);
-    }
+function copyToClipboard() {
+    const el = document.createElement('textarea');
+    el.value = window.location.href;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+    
+    // Mostrar mensaje de éxito
+    const msg = document.getElementById('copy-message');
+    msg.style.display = 'block';
+    setTimeout(() => { msg.style.display = 'none'; }, 2000);
+}
 </script>

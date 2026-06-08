@@ -297,86 +297,215 @@ $laboratorio = $pdo->query("
                 }
 
                 const config = qz.configs.create("POS-80C", {
-                    encoding: 'CP437'
+                    encoding: "CP437"
                 });
 
                 let contenido = [];
 
+                function center(txt) {
+                    return "\x1B\x61\x01" + txt + "\n";
+                }
+
+                function left(txt) {
+                    return "\x1B\x61\x00" + txt + "\n";
+                }
+
+                function right(txt) {
+                    return "\x1B\x61\x02" + txt + "\n";
+                }
+
+                function separator() {
+                    return "------------------------------------------------\n";
+                }
+
                 function linea(nombre, valor) {
 
-                    let left = nombre.substring(0, 30);
-                    let right = "$" + parseFloat(valor).toFixed(2);
+                    let izquierda = String(nombre || '')
+                        .substring(0, 28);
 
-                    let spaces = 48 - (left.length + right.length);
-                    if (spaces < 1) spaces = 1;
+                    let derecha =
+                        "$ " +
+                        parseFloat(valor || 0)
+                        .toLocaleString("es-AR", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        });
 
-                    return left + " ".repeat(spaces) + right;
+                    let espacios =
+                        48 - (izquierda.length + derecha.length);
+
+                    if (espacios < 1) {
+                        espacios = 1;
+                    }
+
+                    return izquierda +
+                        " ".repeat(espacios) +
+                        derecha;
                 }
 
-              /* ENCABEZADO CON LOGO */
-            contenido.push("\x1B\x61\x01"); // Centrado
+                const ahora = new Date();
 
-            // 1. Insertar la imagen (puede ser URL o Base64)
-            contenido.push({
-                type: 'pixel',
-                format: 'png', // o 'png'
-                flavor: 'file',
-                data: 'images/logo_blanco_negro.png', // Ruta relativa, absoluta o base64
-                options: {
-                    language: "ESCPOS",
-                    dotDensity: "double"
-                }
-            });
+                const fecha =
+                    ahora.toLocaleDateString("es-AR");
 
-            //             const logo = {
-            //    type: 'pixel',
-            //    format: 'png',
-            //    flavor: 'file',
-            //    data: 'https://tuweb.com/logo.png',
-            //    options: { 
-            //       language: "ESCPOS", 
-            //       dotDensity: "double",
-            //       width: 200 // Ajusta el tamaño en píxeles según tu papel de 80mm
-            //    }
-            // };
+                const hora =
+                    ahora.toLocaleTimeString("es-AR");
 
-            // // Luego en tu función:
-            // let contenido = [logo, "\x1B\x61\x01", "SALA RIVADAVIA\n", ...];
-
-            contenido.push("\n"); // Salto de línea después del logo
-            // contenido.push("\x1B\x61\x01");
-            contenido.push("SALA RIVADAVIA\n");
-                contenido.push("LABORATORIO\n");
-                contenido.push("Av. Eva Perón 695\n");
-                contenido.push("Temperley\n");
-                contenido.push("Fecha: " + new Date().toLocaleString() + "\n");
-                contenido.push("------------------------------------------\n");
-
-                /* ================= DETALLE ================= */
-                contenido.push("\x1B\x61\x00");
-
-                items.forEach(i => {
-                    contenido.push(linea(i.nombre, i.valor) + "\n");
-                });
-
-                contenido.push("------------------------------------------\n");
-
-                /* ================= TOTAL ================= */
-                contenido.push("\x1B\x61\x02");
-                contenido.push("TOTAL: $" + parseFloat(total).toFixed(2) + "\n");
+                /* =====================================
+                   LOGO
+                ===================================== */
 
                 contenido.push("\x1B\x61\x01");
-                contenido.push("\nGracias por su visita\n");
 
-                /* ================= CORTE ================= */
-                contenido.push("\n\n\n");
+
+
+                /* =====================================
+                   CLINICA
+                ===================================== */
+
+                // Negrita ON
+                contenido.push("\x1B\x45\x01");
+
+                // Tamaño doble ancho + doble alto
+                contenido.push("\x1D\x21\x11");
+
+                contenido.push(center("SALA RIVADAVIA"));
+
+                // Volver a tamaño normal
+                contenido.push("\x1D\x21\x00");
+
+                // Negrita OFF
+                contenido.push("\x1B\x45\x00");
+                contenido.push("\n");
+
+                contenido.push(center("PRESUPUESTO DE LABORATORIO"));
+                contenido.push(center("LABORATORIO MESSINA"));
+                contenido.push(center("Garibaldi 176, Temperley"));
+                contenido.push(center("TEL: 011-4244-4939"));
+
+
+                contenido.push("\n");
+
+                contenido.push(separator());
+
+                /* =====================================
+                   FECHA
+                ===================================== */
+
+                contenido.push(left("FECHA: " + fecha));
+                contenido.push(left("HORA : " + hora));
+
+                contenido.push("\n");
+
+                contenido.push(center("ESTUDIOS DE LABORATORIO"));
+
+                contenido.push(separator());
+
+                /* =====================================
+                   DETALLE
+                ===================================== */
+
+                contenido.push(left("DESCRIPCION"));
+
+                contenido.push("\n");
+
+                items.forEach(item => {
+
+                    contenido.push(
+                        left(
+                            linea(
+                                item.nombre,
+                                item.valor
+                            )
+                        )
+                    );
+
+                });
+
+                contenido.push(separator());
+
+                /* =====================================
+                   CANTIDAD
+                ===================================== */
+
+                contenido.push(
+                    left(
+                        "Cantidad de estudios: " +
+                        items.length
+                    )
+                );
+
+                contenido.push(separator());
+
+                /* =====================================
+                   TOTAL
+                ===================================== */
+
+                contenido.push("\x1B\x45\x01");
+                contenido.push("\x1D\x21\x11");
+
+                contenido.push(center("TOTAL"));
+
+                contenido.push(
+                    right(
+                        "$ " +
+                        parseFloat(total).toLocaleString(
+                            "es-AR", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                            }
+                        )
+                    )
+                );
+
+                contenido.push("\x1D\x21\x00");
+                contenido.push("\x1B\x45\x00");
+
+                contenido.push(separator());
+
+                /* =====================================
+                   PIE
+                ===================================== */
+
+                contenido.push("\n");
+
+                contenido.push(
+                    center("¡GRACIAS POR ELEGIRNOS!")
+                );
+
+                contenido.push("\n");
+
+                contenido.push(separator());
+                contenido.push(separator());
+
+                contenido.push(
+                    center(
+                        "PRESUPUESTO NO VALIDO COMO FACTURA"
+                    )
+                );
+
+                contenido.push("\n\n\n\n");
+
+                /* =====================================
+                   CORTE
+                ===================================== */
+
                 contenido.push("\x1D\x56\x00");
 
                 await qz.print(config, contenido);
 
             } catch (err) {
-                console.error("ERROR IMPRESIÓN LAB:", err);
-                Swal.fire("Error", "No se pudo imprimir", "error");
+
+                console.error(
+                    "ERROR IMPRESION LAB:",
+                    err
+                );
+
+                Swal.fire(
+                    "Error",
+                    "No se pudo imprimir el ticket",
+                    "error"
+                );
             }
         }
     });

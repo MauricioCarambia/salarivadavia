@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/services/afiliados.php';
 $user_tipo = $_SESSION['tipo'] ?? null;
 $id = $_GET['id'] ?? 0;
 $rand = uniqid();
@@ -70,11 +71,11 @@ $meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agost
             <h3 class="card-title">Historial de pagos del socio
 
 
-              
-                  <a href="./?seccion=afiliados_new&id=<?= $id ?>&nc=<?= $rand ?>" class="btn btn-success btn-sm">
-                     <i class="fas fa-plus"></i> Nuevo pago
-                  </a>
-            
+
+               <a href="./?seccion=afiliados_new&id=<?= $id ?>&nc=<?= $rand ?>" class="btn btn-success btn-sm">
+                  <i class="fas fa-plus"></i> Nuevo pago
+               </a>
+
 
                <a href="./?seccion=socios&nc=<?= $rand ?>" class="btn btn-secondary btn-sm ml-2 rounded">
                   Volver
@@ -110,22 +111,63 @@ $meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agost
             </div>
 
             <hr>
+            <?php
 
+            $estadoAfiliado = obtenerEstadoAfiliado($pdo, (int)$id);
+            $estado = strtoupper($estadoAfiliado['tipo']);
+            ?>
             <div>
                <strong>Estado:</strong><br>
 
-               <?php if ($aldia): ?>
-                  <span class="badge badge-success p-2">
-                     <i class="fas fa-check"></i> Al día
+               <?php if ($estadoAfiliado['tipo'] === 'vitalicio'): ?>
+
+                  <span class="badge badge-info p-2">
+                     <i class="fas fa-crown"></i> Vitalicio
                   </span>
-               <?php else: ?>
+
+               <?php elseif ($estadoAfiliado['tipo'] === 'nuevo'): ?>
+
+                  <span class="badge badge-primary p-2">
+                     <i class="fas fa-user-clock"></i> En gracia
+                  </span>
+
+                  <small class="text-muted d-block mt-1">
+                     Durante los primeros 3 meses abona como particular
+                  </small>
+
+               <?php elseif ($estadoAfiliado['tipo'] === 'socio'): ?>
+
+                  <span class="badge badge-success p-2">
+                     <i class="fas fa-check"></i> Socio al día
+                  </span>
+
+               <?php elseif ($estadoAfiliado['tipo'] === 'moroso'): ?>
+
                   <span class="badge badge-danger p-2">
                      <i class="fas fa-times"></i> Moroso
                   </span>
-                  <small class="text-danger">
-                     Debe <?= $mesesDeuda ?> meses
+
+                  <small class="text-danger d-block mt-1">
+                     Debe <?= $estadoAfiliado['meses_adeudados'] ?> meses
                   </small>
+
+               <?php else: ?>
+
+                  <span class="badge badge-secondary p-2">
+                     Particular
+                  </span>
+
                <?php endif; ?>
+
+               <div class="mt-2">
+                  <strong>Cobra como:</strong>
+
+                  <?php if ($estadoAfiliado['cobra_como'] === 'socio'): ?>
+                     <span class="text-success font-weight-bold">SOCIO</span>
+                  <?php else: ?>
+                     <span class="text-danger font-weight-bold">PARTICULAR</span>
+                  <?php endif; ?>
+               </div>
 
             </div>
 
@@ -171,25 +213,25 @@ $meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agost
                               <td>$<?= number_format($pago['monto'], 2) ?></td>
 
                               <td>
-                              
-                                    <div class="btn-group">
 
-                                       <!-- EDITAR -->
-                                       <button class="btn btn-sm btn-success btnEdit rounded-circle"
-                                          data-id="<?= $pago['Id'] ?>" data-monto="<?= $pago['monto'] ?>"
-                                          data-fecha="<?= date('Y-m', strtotime($pago['fecha_correspondiente'])) ?>"
-                                          title="Editar">
-                                          <i class="fas fa-edit"></i>
-                                       </button>
+                                 <div class="btn-group">
 
-                                       <!-- ELIMINAR -->
-                                       <button class="btn btn-sm btn-danger btnDelete rounded-circle"
-                                          data-id="<?= $pago['Id'] ?>" title="Eliminar">
-                                          <i class="fas fa-trash"></i>
-                                       </button>
+                                    <!-- EDITAR -->
+                                    <button class="btn btn-sm btn-success btnEdit rounded-circle"
+                                       data-id="<?= $pago['Id'] ?>" data-monto="<?= $pago['monto'] ?>"
+                                       data-fecha="<?= date('Y-m', strtotime($pago['fecha_correspondiente'])) ?>"
+                                       title="Editar">
+                                       <i class="fas fa-edit"></i>
+                                    </button>
 
-                                    </div>
-                               
+                                    <!-- ELIMINAR -->
+                                    <button class="btn btn-sm btn-danger btnDelete rounded-circle"
+                                       data-id="<?= $pago['Id'] ?>" title="Eliminar">
+                                       <i class="fas fa-trash"></i>
+                                    </button>
+
+                                 </div>
+
                               </td>
                            </tr>
                         <?php endforeach; ?>
@@ -242,16 +284,18 @@ $meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agost
    </div>
 </div>
 <script>
-   $(function () {
+   $(function() {
 
       let tabla = $('.datatable').DataTable({
-         order: [[0, 'desc']]
+         order: [
+            [0, 'desc']
+         ]
       });
 
       /* =========================
          EDITAR - ABRIR MODAL
       ========================= */
-      $(document).on('click', '.btnEdit', function () {
+      $(document).on('click', '.btnEdit', function() {
 
          $('#edit_id').val($(this).data('id'));
          $('#edit_monto').val($(this).data('monto'));
@@ -263,7 +307,7 @@ $meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agost
       /* =========================
          EDITAR - GUARDAR AJAX
       ========================= */
-      $('#formEditarPago').submit(function (e) {
+      $('#formEditarPago').submit(function(e) {
          e.preventDefault();
 
          $.ajax({
@@ -272,7 +316,7 @@ $meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agost
             data: $(this).serialize(),
             dataType: 'json',
 
-            success: function (resp) {
+            success: function(resp) {
 
                if (resp.success) {
 
@@ -290,7 +334,7 @@ $meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agost
                }
             },
 
-            error: function () {
+            error: function() {
                Swal.fire('Error', 'Error de conexión', 'error');
             }
          });
@@ -300,7 +344,7 @@ $meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agost
       /* =========================
          ELIMINAR
       ========================= */
-      $(document).on('click', '.btnDelete', function () {
+      $(document).on('click', '.btnDelete', function() {
 
          let id = $(this).data('id');
          let fila = $(this).closest('tr');
@@ -319,10 +363,12 @@ $meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agost
                $.ajax({
                   url: 'ajax/afiliado_pago_delete.php',
                   type: 'POST',
-                  data: { id: id },
+                  data: {
+                     id: id
+                  },
                   dataType: 'json',
 
-                  success: function (resp) {
+                  success: function(resp) {
 
                      if (resp.success) {
 
@@ -341,7 +387,7 @@ $meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agost
 
                   },
 
-                  error: function () {
+                  error: function() {
                      Swal.fire('Error', 'Error de conexión', 'error');
                   }
 

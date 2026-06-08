@@ -255,7 +255,10 @@ function obtenerCajaSesionActiva($pdo, $usuarioId)
 
                                             <?php
                                             $puedeCerrar = $sesionActiva
-                                                && $sesionActiva['usuario_id'] == $usuarioId;
+                                                && (
+                                                    $sesionActiva['usuario_id'] == $usuarioId
+                                                    || $esAdmin
+                                                );
                                             ?>
 
                                             <?php if (!$sesionActiva): ?>
@@ -282,7 +285,7 @@ function obtenerCajaSesionActiva($pdo, $usuarioId)
                                                 <?php else: ?>
 
                                                     <span class="badge badge-secondary">
-                                                        Solo el usuario que abrió puede cerrar
+                                                        Solo el usuario que abrió o un administrador puede cerrar
                                                     </span>
 
                                                 <?php endif; ?>

@@ -20,9 +20,15 @@ $horaSeleccionada = $dt->format('H:i');
 
 // ============================== PROFESIONAL ==============================
 $stmt = $conexion->prepare("
-    SELECT apellido, nombre, duracion_turnos 
-    FROM profesionales 
-    WHERE Id = :id 
+    SELECT
+        p.apellido,
+        p.nombre,
+        p.duracion_turnos,
+        e.especialidad
+    FROM profesionales p
+    LEFT JOIN especialidades e
+        ON e.Id = p.especialidad_id
+    WHERE p.Id = :id
     LIMIT 1
 ");
 $stmt->execute([':id' => $profesional]);
@@ -32,6 +38,9 @@ if (!$prof)
     exit("Profesional inexistente");
 
 $nombreProfesional = htmlspecialchars($prof['apellido'] . ' ' . $prof['nombre']);
+$especialidadProfesional = htmlspecialchars(
+    $prof['especialidad'] ?? ''
+);
 $duracionTurno = max(5, (int) $prof['duracion_turnos']);
 
 // ============================== HORARIOS ==============================
@@ -179,6 +188,38 @@ $fechaCompleta = $dt->format('d/m/Y');
 </div>
 
 <script>
+    document.addEventListener("DOMContentLoaded", function() {
+
+        if (typeof qz === "undefined") {
+            console.error("QZ no está cargado");
+            return;
+        }
+
+        qz.security.setCertificatePromise(function(resolve, reject) {
+            fetch("certificado/certificate.pem")
+                .then(res => res.text())
+                .then(resolve)
+                .catch(reject);
+        });
+
+        qz.security.setSignaturePromise(function(toSign) {
+            return function(resolve, reject) {
+                fetch("certificado/firma.php", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            request: toSign
+                        })
+                    })
+                    .then(res => res.text())
+                    .then(resolve)
+                    .catch(reject);
+            };
+        });
+
+    });
     // 🔍 BUSQUEDA (MISMA LOGICA PERO MÁS LIMPIA)
     $("#form-busqueda").on('submit', function(e) {
         e.preventDefault();
@@ -263,6 +304,7 @@ $fechaCompleta = $dt->format('d/m/Y');
                             await imprimirTicketTurno({
                                 paciente: nombre,
                                 profesional: res.profesional,
+                                especialidad: res.especialidad,
                                 fecha: res.fecha.split(' ')[0],
                                 hora: res.hora,
                                 sobreturno: res.sobreturno
@@ -324,107 +366,153 @@ $fechaCompleta = $dt->format('d/m/Y');
             }
 
             const config = qz.configs.create("POS-80C", {
-                encoding: 'CP437'
+                encoding: "CP437"
             });
 
             let contenido = [];
 
-            /* =========================
-               FUNCIONES
-            ========================= */
-            function center(texto) {
-                return "\x1B\x61\x01" + texto + "\n";
+            function center(txt) {
+                return "\x1B\x61\x01" + txt + "\n";
             }
 
-            function left(texto) {
-                return "\x1B\x61\x00" + texto + "\n";
+            function left(txt) {
+                return "\x1B\x61\x00" + txt + "\n";
             }
 
             function separator() {
                 return "------------------------------------------------\n";
             }
 
-            /* =========================
+            const ahora = new Date();
+
+            const fechaEmision =
+                ahora.toLocaleDateString("es-AR");
+
+            const horaEmision =
+                ahora.toLocaleTimeString("es-AR");
+
+            /* =====================================
+               RESET
+            ===================================== */
+
+            contenido.push("\x1B\x40");
+
+            /* =====================================
                LOGO
-            ========================= */
-            contenido.push("\x1B\x40"); // RESET
+            ===================================== */
 
-            contenido.push({
-                type: 'pixel',
-                format: 'image',
-                flavor: 'file',
-                data: 'images/logo_blanco_negro.png',
-                options: {
-                    language: "ESCPOS",
-                    dotDensity: "double"
-                }
-            });
+            contenido.push("\x1B\x61\x01");
 
-            contenido.push("\n");
 
-            /* =========================
-               ENCABEZADO
-            ========================= */
+
+            /* =====================================
+               CLINICA
+            ===================================== */
+
+            // Negrita ON
+            contenido.push("\x1B\x45\x01");
+
+            // Tamaño doble ancho + doble alto
+            contenido.push("\x1D\x21\x11");
+
             contenido.push(center("SALA RIVADAVIA"));
-            contenido.push(center("Av. Eva Peron 695"));
-            contenido.push(center("Temperley"));
 
-            contenido.push(center("--------------------------------"));
+            // Volver a tamaño normal
+            contenido.push("\x1D\x21\x00");
+
+            // Negrita OFF
+            contenido.push("\x1B\x45\x00");
+            contenido.push("\n");
 
             contenido.push(center("COMPROBANTE DE TURNO"));
 
-            contenido.push(center("--------------------------------"));
+            contenido.push(separator());
 
-            /* =========================
-               DATOS TURNO
-            ========================= */
-            contenido.push(left("Paciente:"));
-            contenido.push(left(data.paciente));
-
-            contenido.push("\n");
-
-            contenido.push(left("Profesional:"));
-            contenido.push(left(data.profesional));
+            contenido.push(center("CUIT: 30-54589575-3"));
+            contenido.push(center("ING. BRUTOS: 30-54589575-3"));
+            contenido.push(center("IVA RESPONSABLE INSCRIPTO"));
+            contenido.push(center("INICIO ACTIVIDAD: 27/11/2013"));
 
             contenido.push("\n");
 
-            contenido.push(left("Fecha: " + data.fecha));
-            contenido.push(left("Hora: " + data.hora));
+            contenido.push(center("AV. EVA PERON 695"));
+            contenido.push(center("TEMPERLEY (1834)"));
+            contenido.push(center("BUENOS AIRES"));
+
+            contenido.push("\n");
+
+            contenido.push(center("TEL: 3989-4325"));
+            contenido.push(center("TEL: 3991-2183"));
+            contenido.push(center("WHATSAPP: 11 2243-6786"));
+
+            contenido.push(separator());
+
+
+            /* =====================================
+               PACIENTE
+            ===================================== */
+
+            contenido.push(left("PACIENTE:"));
+            contenido.push(left(data.paciente || "-"));
+
+            contenido.push("\n");
+
+            contenido.push(left("PROFESIONAL:"));
+            contenido.push(left(data.profesional || "-"));
+
+            if (data.especialidad) {
+                contenido.push("\n");
+                contenido.push(left("ESPECIALIDAD:"));
+                contenido.push(left(data.especialidad));
+            }
+
+
+            contenido.push("\n");
+
+            contenido.push(separator());
+
+            /* =====================================
+               FECHA DEL TURNO
+            ===================================== */
+
+            contenido.push(left("FECHA DEL TURNO:"));
+            contenido.push(left(data.fecha || "-"));
+
+            contenido.push("\n");
+
+            contenido.push(left("HORA DEL TURNO:"));
+            contenido.push(left(data.hora || "-"));
 
             if (parseInt(data.sobreturno) === 1) {
 
                 contenido.push("\n");
 
-                contenido.push("\x1B\x45\x01"); // bold ON
-                contenido.push(left("*** SOBRETURNO ***"));
-                contenido.push("\x1B\x45\x00"); // bold OFF
+                contenido.push("\x1B\x45\x01");
+                contenido.push(center("*** SOBRETURNO ***"));
+                contenido.push("\x1B\x45\x00");
             }
 
             contenido.push(separator());
 
-            /* =========================
-               MENSAJE
-            ========================= */
-            contenido.push(center("Presentarse 10 minutos antes"));
-            contenido.push(center("Se abona unicamente en efectivo"));
+            /* =====================================
+               MENSAJES
+            ===================================== */
+
+            contenido.push(center("PRESENTARSE 10 MINUTOS ANTES"));
+            contenido.push(center("SE ABONA UNICAMENTE EN EFECTIVO"));
 
             contenido.push("\n");
 
-            contenido.push(center("Gracias por elegirnos"));
+            contenido.push(center("¡GRACIAS POR ELEGIRNOS!"));
 
-            /* =========================
-               FECHA IMPRESION
-            ========================= */
-            contenido.push("\n");
 
-            contenido.push(left(
-                "Emitido: " + new Date().toLocaleString('es-AR')
-            ));
 
-            /* =========================
-               ESPACIO + CORTE
-            ========================= */
+
             contenido.push("\n\n\n\n");
+
+            /* =====================================
+               CORTE
+            ===================================== */
 
             contenido.push("\x1D\x56\x00");
 
@@ -434,7 +522,11 @@ $fechaCompleta = $dt->format('d/m/Y');
 
             console.error(err);
 
-            alert("Error imprimiendo ticket: " + err);
+            Swal.fire({
+                icon: "error",
+                title: "Error imprimiendo",
+                text: err.toString()
+            });
         }
     }
 </script>

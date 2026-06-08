@@ -3,74 +3,170 @@ require_once __DIR__ . '/../inc/db.php';
 
 header('Content-Type: application/json');
 
-$data = json_decode(file_get_contents("php://input"), true);
+$data = json_decode(file_get_contents('php://input'), true);
 
-$id = $data['id'] ?? null;
-$practica = $data['practica_id'] ?? null;
+$id = isset($data['id']) && $data['id'] !== ''
+    ? (int)$data['id']
+    : 0;
+
+$practica_id = isset($data['practica_id'])
+    ? (int)$data['practica_id']
+    : 0;
+
 $profesional_ids = $data['profesional_ids'] ?? [];
+
+$tipo_paciente = $data['tipo_paciente'] ?? '';
+
 $reglas = $data['reglas'] ?? [];
-$tipoPaciente = $data['tipo_paciente'] ?? null;
 
 try {
 
     $pdo->beginTransaction();
 
-    $stmtInsertReparto = $pdo->prepare("
-        INSERT INTO practicas_reparto (practica_id, profesional_id, tipo_paciente)
-        VALUES (?, ?, ?)
-    ");
+    // =====================================================
+    // EDITAR
+    // =====================================================
+    if ($id > 0) {
 
-    $stmtInsertDetalle = $pdo->prepare("
-        INSERT INTO practicas_reparto_detalle
-        (reparto_id, tipo_id, destino_id, valor)
-        VALUES (?, ?, ?, ?)
-    ");
-
-    foreach ($profesional_ids as $profesional_id) {
-
-        $profesional_id = (int)$profesional_id;
+        $profesional_id = isset($profesional_ids[0])
+            ? (int)$profesional_ids[0]
+            : 0;
 
         if ($profesional_id <= 0) {
-            continue;
+            throw new Exception('Profesional inválido');
         }
 
-        // =========================
-        // INSERT CABECERA
-        // =========================
-        $stmtInsertReparto->execute([
-            $data['practica_id'],
+        $stmt = $pdo->prepare("
+            UPDATE practicas_reparto
+            SET
+                practica_id = ?,
+                profesional_id = ?,
+                tipo_paciente = ?
+            WHERE id = ?
+        ");
+
+        $stmt->execute([
+            $practica_id,
             $profesional_id,
-            $data['tipo_paciente']
+            $tipo_paciente,
+            $id
         ]);
 
-        $reparto_id = $pdo->lastInsertId();
+        // borrar reglas actuales
+        $stmt = $pdo->prepare("
+            DELETE FROM practicas_reparto_detalle
+            WHERE reparto_id = ?
+        ");
 
-        // =========================
-        // VALIDAR REGLAS
-        // =========================
-        if (!empty($data['reglas'])) {
+        $stmt->execute([$id]);
 
-            foreach ($data['reglas'] as $regla) {
+        $reparto_id = $id;
+    }
 
-                $tipoId = (int)($regla['tipo_id'] ?? 0);
-                $destinoId = (int)($regla['destino_id'] ?? 0);
-                $valor = (float)($regla['valor'] ?? 0);
+    // =====================================================
+    // NUEVO
+    // =====================================================
+    else {
 
-                if (!$tipoId || !$destinoId) {
-                    throw new Exception("Regla inválida");
-                }
+        $stmtInsertReparto = $pdo->prepare("
+            INSERT INTO practicas_reparto
+            (
+                practica_id,
+                profesional_id,
+                tipo_paciente
+            )
+            VALUES (?, ?, ?)
+        ");
 
-                if (!is_numeric($valor)) {
-                    throw new Exception("Valor inválido en regla");
-                }
+        foreach ($profesional_ids as $profesional_id) {
 
-                $stmtInsertDetalle->execute([
-                    $reparto_id,
-                    $tipoId,
-                    $destinoId,
-                    $valor
-                ]);
+            $profesional_id = (int)$profesional_id;
+
+            if ($profesional_id <= 0) {
+                continue;
             }
+
+            $stmtInsertReparto->execute([
+                $practica_id,
+                $profesional_id,
+                $tipo_paciente
+            ]);
+
+            $reparto_id = $pdo->lastInsertId();
+
+            if (!empty($reglas)) {
+
+                $stmtDetalle = $pdo->prepare("
+                    INSERT INTO practicas_reparto_detalle
+                    (
+                        reparto_id,
+                        tipo_id,
+                        destino_id,
+                        valor
+                    )
+                    VALUES (?, ?, ?, ?)
+                ");
+
+                foreach ($reglas as $regla) {
+
+                    $tipo_id = (int)($regla['tipo_id'] ?? 0);
+                    $destino_id = (int)($regla['destino_id'] ?? 0);
+                    $valor = (float)($regla['valor'] ?? 0);
+
+                    if ($tipo_id <= 0 || $destino_id <= 0) {
+                        continue;
+                    }
+
+                    $stmtDetalle->execute([
+                        $reparto_id,
+                        $tipo_id,
+                        $destino_id,
+                        $valor
+                    ]);
+                }
+            }
+        }
+
+        $pdo->commit();
+
+        echo json_encode([
+            'success' => true
+        ]);
+        exit;
+    }
+
+    // =====================================================
+    // REINSERTAR REGLAS EN EDICIÓN
+    // =====================================================
+    if (!empty($reglas)) {
+
+        $stmtDetalle = $pdo->prepare("
+            INSERT INTO practicas_reparto_detalle
+            (
+                reparto_id,
+                tipo_id,
+                destino_id,
+                valor
+            )
+            VALUES (?, ?, ?, ?)
+        ");
+
+        foreach ($reglas as $regla) {
+
+            $tipo_id = (int)($regla['tipo_id'] ?? 0);
+            $destino_id = (int)($regla['destino_id'] ?? 0);
+            $valor = (float)($regla['valor'] ?? 0);
+
+            if ($tipo_id <= 0 || $destino_id <= 0) {
+                continue;
+            }
+
+            $stmtDetalle->execute([
+                $reparto_id,
+                $tipo_id,
+                $destino_id,
+                $valor
+            ]);
         }
     }
 

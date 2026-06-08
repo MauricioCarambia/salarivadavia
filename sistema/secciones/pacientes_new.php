@@ -33,28 +33,46 @@ $campos = [
 foreach ($campos as $key => $val) {
     $campos[$key] = $_POST[$key] ?? '';
 }
-function normalizarCelular($numero)
+function normalizarCelularArgentina(string $numero): string
 {
     $numero = preg_replace('/\D/', '', $numero);
 
-    // Quitar +54 si viene
-    if (substr($numero, 0, 2) === '54') {
+    if ($numero === '') {
+        return '';
+    }
+
+    // Ya está correcto
+    if (preg_match('/^549\d{10}$/', $numero)) {
+        return $numero;
+    }
+
+    // Quitar 54
+    if (strpos($numero, '54') === 0) {
         $numero = substr($numero, 2);
     }
 
-    // Quitar 0 inicial (ej: 011)
-    if (substr($numero, 0, 1) === '0') {
+    // Quitar 0 inicial
+    if (strpos($numero, '0') === 0) {
         $numero = substr($numero, 1);
     }
 
-    // 🔥 Detectar y quitar 15 SOLO si está después del código de área
-    // Caso AMBA (11)
-    if (substr($numero, 0, 2) === '11' && substr($numero, 2, 2) === '15') {
-        $numero = '11' . substr($numero, 4);
+    // Casos con 15
+    if (preg_match('/^(11)15(\d{8})$/', $numero, $m)) {
+        $numero = '11' . $m[2];
     }
-    // Otros códigos (ej: 221, 341, etc)
-    elseif (preg_match('/^(\d{3})15/', $numero, $m)) {
-        $numero = $m[1] . substr($numero, 5);
+
+    if (preg_match('/^(2\d{2,3})15(\d{6,8})$/', $numero, $m)) {
+        $numero = $m[1] . $m[2];
+    }
+
+    // Si quedó un celular de AMBA de 10 dígitos
+    if (preg_match('/^11\d{8}$/', $numero)) {
+        return '549' . $numero;
+    }
+
+    // Interior
+    if (preg_match('/^(\d{10,12})$/', $numero)) {
+        return '549' . $numero;
     }
 
     return '549' . $numero;
@@ -78,7 +96,9 @@ if (isset($_POST['guardar'])) {
             :obra_social_id, :obra_social_plan, :obra_social_numero,
             :sexo, :historia_clinica, :nota, :tipo_socio, :fecha_alta
         )";
-        $campos['celular'] = normalizarCelular($campos['celular']);
+        $campos['celular'] = normalizarCelularArgentina(
+            trim($_POST['celular'] ?? '')
+        );
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
             ':nombre' => $campos['nombre'],
@@ -224,7 +244,12 @@ $provincias = [
                 <div class="form-row">
                     <div class="form-group col-md-4">
                         <label>Celular</label>
-                        <input type="text" name="celular" class="form-control" value="<?= htmlspecialchars($campos['celular']) ?>">
+                        <input type="text"
+                            name="celular"
+                            class="form-control"
+                            placeholder="Ej: 11xxxxxxxx"
+                            value="<?= htmlspecialchars($campos['celular']) ?>">
+
                     </div>
                     <div class="form-group col-md-4">
                         <label>Teléfono fijo</label>

@@ -11,9 +11,24 @@
                         Solo se usa para carga inicial o corrección manual.
                     </small>
                 </div>
+                <div class="col-md-4">
 
+                    <label>Fondo Inicial</label>
+
+                    <input
+                        type="number"
+                        step="0.01"
+                        id="fondoInicialDia"
+                        class="form-control"
+                        value="0">
+
+                    <small class="text-muted">
+                        Solo para carga inicial o corrección manual.
+                    </small>
+
+                </div>
                 <div class="col-md-4 d-flex align-items-end mb-4">
-                    <button class="btn btn-success">
+                    <button type="submit" class="btn btn-success">
                         Guardar Monto Inicial
                     </button>
                 </div>
@@ -21,38 +36,46 @@
         </form>
     </div>
 </div>
-<div class="row mb-3">
+<div class="row">
 
-    <!-- CAJA inicial -->
-    <div class="col-md-4">
-        <div class="card card-info card-outline">
+    <div class="col-md-6">
+        <div class="card card-warning card-outline">
             <div class="card-body text-center">
-                <h6>Monto inicial cargado</h6>
+                <h6>Monto Inicial</h6>
                 <h3 id="kpiInicial">$0.00</h3>
             </div>
         </div>
     </div>
-    <!-- CAJA DISPONIBLE -->
-    <div class="col-md-4">
+
+    <div class="col-md-6">
+        <div class="card card-info card-outline">
+            <div class="card-body text-center">
+                <h6>Fondo Inicial</h6>
+                <h3 id="kpiFondoInicial">$0.00</h3>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row">
+    <div class="col-md-6">
         <div class="card card-warning card-outline">
             <div class="card-body text-center">
-                <h6>Caja Disponible</h6>
+                <h6>Caja Acumulada</h6>
                 <h3 id="kpiCaja">$0.00</h3>
             </div>
         </div>
     </div>
 
-    <!-- FONDO DISPONIBLE -->
-    <div class="col-md-4">
+    <div class="col-md-6">
         <div class="card card-info card-outline">
             <div class="card-body text-center">
-                <h6>Fondo Disponible</h6>
+                <h6>Fondos Acumulados</h6>
                 <h3 id="kpiFondos">$0.00</h3>
             </div>
         </div>
     </div>
-
-    <!-- TOTAL -->
+</div>
+<div class="row">
     <div class="col-md-12">
         <div class="card card-success card-outline">
             <div class="card-body text-center">
@@ -63,6 +86,23 @@
     </div>
 
 </div>
+<table id="tablaLibroDiario"
+    class="table table-striped table-hover">
+
+    <thead>
+        <tr>
+            <th>Fecha</th>
+            <th>Monto Inicial</th>
+            <th>Fondo Inicial</th>
+            <th>Caja</th>
+            <th>Fondos</th>
+            <th>Total</th>
+        </tr>
+    </thead>
+
+    <tbody id="tablaControlDiario"></tbody>
+  
+</table>
 <!-- <div class="card card-info card-outline">
     <div class="card-body">
         <h5>📊 Historial Diario</h5>
@@ -82,120 +122,184 @@
     </div>
 </div> -->
 <script>
-$(document).ready(function() {
-    cargarTodo();
-    // setInterval(cargarDashboard, 5000);
-});
-
-// ==========================
-// CARGA GENERAL
-// ==========================
-function cargarTodo() {
-    cargarDashboard();
-    cargarControlDiario();
-}
-
-// ==========================
-// DASHBOARD
-// ==========================
-function cargarDashboard() {
-
-    $.get("ajax/dashboard_caja.php", function(res) {
-
-        if (!res.success) return;
-
-        let d = res.data;
-
-        // ==========================
-        // KPI (YA CALCULADOS EN BACKEND)
-        // ==========================
-        $("#kpiInicial").text("$" + formatearNumero(d.monto_inicial));
-
-        $("#kpiCaja").text("$" + formatearNumero(d.saldo_caja));
-
-        $("#kpiFondos").text("$" + formatearNumero(d.saldo_fondo));
-
-        $("#kpiTotal").text("$" + formatearNumero(d.saldo_total));
-
-        // sync input
-        //$("#montoInicialDia").val(d.monto_inicial);
-
-    }, "json");
-}
-
-// ==========================
-// FORMATO NUMÉRICO
-// ==========================
-function formatearNumero(valor) {
-    return Number(valor || 0).toLocaleString('es-AR', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    });
-}
-
-// ==========================
-// HISTORIAL DIARIO
-// ==========================
-function cargarControlDiario() {
-
-    $.get("ajax/listar_control_diario.php", function(res) {
-
-        if (!res.success && !Array.isArray(res)) return;
-
-        let data = res.success ? res.data : res;
-        let html = "";
-
-        data.forEach(r => {
-
-            html += `
-<tr>
-    <td>${r.fecha}</td>
-
-    <td>$${formatearNumero(r.monto_inicial)}</td>
-
-    <td>$${formatearNumero(r.total_cajas)}</td>
-
-    <td>$${formatearNumero(r.total_fondos)}</td>
-
-    <td class="font-weight-bold text-success">
-        $${formatearNumero(r.saldo_total)}
-    </td>
-</tr>`;
-        });
-
-        $("#tablaControlDiario").html(html);
-
-    }, "json");
-}
-
-// ==========================
-// GUARDAR MONTO INICIAL
-// ==========================
-$("#formControlDiario").submit(function(e) {
-    e.preventDefault();
-
-    const monto = parseFloat($("#montoInicialDia").val());
-
-    if (isNaN(monto) || monto < 0) {
-        Swal.fire("Error", "Monto inválido", "error");
-        return;
+    const BASE_URL = "/salarivadavia/sistema";
+    // ==========================
+    // CARGA GENERAL
+    // ==========================
+    function cargarTodo() {
+        cargarDashboard();
+        cargarControlDiario();
     }
 
-    $.ajax({
-        url: "ajax/guardar_monto_inicial.php",
-        type: "POST",
-        contentType: "application/json",
-        data: JSON.stringify({
-            monto_inicial: monto
-        }),
-        success: function(res) {
-            if (res.success) {
-                Swal.fire("OK", "Monto actualizado", "success");
-                cargarTodo();
-            } else {
-                Swal.fire("Error", res.message, "error");
+    // ==========================
+    // DASHBOARD ERP
+    // ==========================
+    function cargarDashboard() {
+
+        $.get(BASE_URL + "/erp/api/dashboard.php", function(res) {
+
+            if (!res.success) return;
+
+            let k = res.kpis || {};
+
+            $("#kpiInicial").text(
+                "$" + formatearNumero(k.monto_inicial)
+            );
+
+            $("#kpiFondoInicial").text(
+                "$" + formatearNumero(k.fondo_inicial)
+            );
+
+            $("#kpiCaja").text(
+                "$" + formatearNumero(k.caja)
+            );
+
+            $("#kpiFondos").text(
+                "$" + formatearNumero(k.fondo)
+            );
+
+            $("#kpiTotal").text(
+                "$" + formatearNumero(k.total)
+            );
+
+        }, "json");
+    }
+
+    // ==========================
+    // FORMATO
+    // ==========================
+    function formatearNumero(valor) {
+        return Number(valor || 0).toLocaleString('es-AR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    // ==========================
+    // TABLA ERP
+    // ==========================
+    function cargarControlDiario() {
+
+        $.get(BASE_URL + "/erp/api/libro_diario.php", function(res) {
+
+            if (!res.success) return;
+
+            let html = "";
+
+            (res.data || []).forEach(r => {
+
+                html += `
+            <tr>
+                <td>${r.fecha}</td>
+
+                <td>$${formatearNumero(r.monto_inicial)}</td>
+
+                <td>$${formatearNumero(r.fondo_inicial)}</td>
+
+                <td>$${formatearNumero(r.saldo_caja)}</td>
+
+                <td>$${formatearNumero(r.saldo_fondo)}</td>
+
+                <td class="font-weight-bold text-success">
+                    $${formatearNumero(r.saldo_total)}
+                </td>
+            </tr>
+            `;
+            });
+
+            $("#tablaControlDiario").html(html);
+
+            if ($.fn.DataTable.isDataTable("#tablaLibroDiario")) {
+                $("#tablaLibroDiario").DataTable().destroy();
             }
+
+            $("#tablaLibroDiario").DataTable({
+
+                responsive: true,
+
+                pageLength: 25,
+
+                order: [
+                    [0, "desc"]
+                ],
+
+                language: {
+                    url: "//cdn.datatables.net/plug-ins/1.13.8/i18n/es-ES.json"
+                },
+
+                dom: 'Bfrtip',
+
+                buttons: [
+
+                    {
+                        extend: 'copy',
+                        text: 'Copiar'
+                    },
+
+                    {
+                        extend: 'excel',
+                        text: 'Excel'
+                    },
+
+                    {
+                        extend: 'pdf',
+                        text: 'PDF'
+                    },
+
+                    {
+                        extend: 'print',
+                        text: 'Imprimir'
+                    }
+
+                ]
+            });
+
+        }, "json");
+    }
+
+    // ==========================
+    // GUARDAR MONTO INICIAL
+    // ==========================
+    $("#formControlDiario").submit(function(e) {
+        e.preventDefault();
+
+        const monto = parseFloat($("#montoInicialDia").val());
+        const fondo = parseFloat($("#fondoInicialDia").val()) || 0;
+
+        if (isNaN(monto) || monto < 0) {
+            Swal.fire("Error", "Monto inválido", "error");
+            return;
         }
+
+        $.ajax({
+            url: BASE_URL + "/erp/api/caja/apertura.php",
+            type: "POST",
+            contentType: "application/json",
+            dataType: "json",
+            data: JSON.stringify({
+                monto_inicial: monto,
+                fondo_inicial: fondo
+            }),
+            success: function(res) {
+                if (res.success) {
+                    Swal.fire("OK", "Caja actualizada", "success");
+                    cargarDashboard();
+                    cargarControlDiario();
+                } else {
+                    Swal.fire("Error", res.message, "error");
+                }
+            },
+            error: function(xhr) {
+                Swal.fire("Error", "No se pudo conectar: " + xhr.status + " " + xhr.statusText, "error");
+                console.error(xhr.responseText);
+            }
+        });
     });
-});
+
+    // ==========================
+    // INIT
+    // ==========================
+    $(document).ready(function() {
+        cargarTodo();
+    });
 </script>

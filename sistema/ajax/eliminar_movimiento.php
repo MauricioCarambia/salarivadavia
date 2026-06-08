@@ -1,22 +1,15 @@
 <?php
-require_once __DIR__ . '/../inc/db.php';
 session_name("turnos");
 session_start();
-
+require_once __DIR__ . '/../inc/db.php';
 header('Content-Type: application/json');
 
 try {
-
-    $id = (int)($_POST['id'] ?? 0); // 🔥 ahora es COBRO ID
+    $id        = (int)($_POST['id'] ?? 0);
     $usuarioId = $_SESSION['user_id'] ?? 0;
 
-    if ($id <= 0) {
-        throw new Exception('ID inválido');
-    }
-
-    if (!$usuarioId) {
-        throw new Exception('Sesión no válida');
-    }
+    if (!$usuarioId) throw new Exception('Usuario no autenticado');
+    if ($id <= 0)    throw new Exception('ID inválido');
 
     $pdo->beginTransaction();
 
@@ -33,13 +26,8 @@ try {
     $stmt->execute([$id]);
     $cobro = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$cobro) {
-        throw new Exception('Cobro no encontrado');
-    }
+    if (!$cobro) throw new Exception('Cobro no encontrado');
 
-    /* ==============================
-       🚫 VALIDAR YA ANULADO
-    ============================== */
     if ($cobro['estado'] === 'anulado') {
         throw new Exception('El cobro ya está anulado');
     }
@@ -47,14 +35,8 @@ try {
     /* ==============================
        💰 ANULAR COBRO
     ============================== */
-    $stmt = $pdo->prepare("
-        UPDATE cobros 
-        SET estado = 'anulado'
-        WHERE id = ?
-    ");
+    $stmt = $pdo->prepare("UPDATE cobros SET estado = 'anulado' WHERE id = ?");
     $stmt->execute([$id]);
-
-  
 
     $pdo->commit();
 
@@ -64,10 +46,7 @@ try {
     ]);
 
 } catch (Exception $e) {
-
-    if ($pdo->inTransaction()) {
-        $pdo->rollBack();
-    }
+    if ($pdo->inTransaction()) $pdo->rollBack();
 
     echo json_encode([
         'success' => false,

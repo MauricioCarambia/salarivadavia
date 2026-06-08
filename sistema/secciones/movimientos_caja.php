@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
-
+require_once __DIR__ . '/../inc/services/afiliados.php';
 $usuario_id = $_SESSION['user_id'] ?? 0;
 
 /* =========================
@@ -33,7 +33,7 @@ $hastaSQL = $hasta . " 23:59:59";
 
 $caja_id = $_GET['caja_id'] ?? '';
 $turno = $_GET['turno'] ?? '';
-$empleado_id = $_GET['empleado_id'] ?? '';
+$empleado_id = $_GET['empleado_id'] ?? $usuario_id;
 
 /* =========================
    🧠 WHERE
@@ -60,26 +60,39 @@ if ($empleado_id) {
    📊 MOVIMIENTOS
 ========================= */
 $stmt = $pdo->prepare("
-    SELECT 
-        c.id,
-        c.tipo,
-        c.total as monto,
-        c.fecha,
-        c.concepto,
-        c.numero_completo,
-        c.estado,
-        c.medio_pago,
-        c.empleado_destino_id,
-        ed.nombre AS empleado_destino_nombre,
-        GROUP_CONCAT(DISTINCT d.nombre SEPARATOR ', ') AS destino_nombre
-    FROM cobros c
-    LEFT JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
-    LEFT JOIN cobros_reparto cr ON cr.cobro_id = c.id
-    LEFT JOIN destinos_reparto d ON d.id = cr.destino_id
-    LEFT JOIN empleados ed ON ed.id = c.empleado_destino_id
-    $where
-    GROUP BY c.id
-    ORDER BY c.fecha DESC
+SELECT 
+    c.id,
+    c.tipo,
+    c.total AS monto,
+    c.fecha,
+    c.concepto,
+    c.numero_completo,
+    c.estado,
+    c.medio_pago,
+    c.transferencia_tipo,
+    c.empleado_destino_id,
+
+    ed.nombre AS empleado_destino_nombre,
+
+    CONCAT(
+        COALESCE(pr.apellido,''), ' ',
+        COALESCE(pr.nombre,'')
+    ) AS profesional_destino_nombre,
+
+    GROUP_CONCAT(DISTINCT d.nombre SEPARATOR ', ') AS destino_nombre
+
+FROM cobros c
+
+LEFT JOIN caja_sesion cs      ON cs.id        = c.caja_sesion_id
+LEFT JOIN cobros_reparto cr   ON cr.cobro_id  = c.id
+LEFT JOIN destinos_reparto d  ON d.id         = cr.destino_id
+LEFT JOIN empleados ed        ON ed.id        = c.empleado_destino_id
+LEFT JOIN profesionales pr    ON pr.Id        = c.profesional_id
+
+$where
+
+GROUP BY c.id
+ORDER BY c.fecha DESC
 ");
 
 $stmt->execute($params);
@@ -88,7 +101,7 @@ $movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
    🎯 DESTINOS
 ========================= */
 $stmt = $pdo->query("
-    SELECT id, nombre, tipo
+    SELECT id, nombre, tipo, categoria
     FROM destinos_reparto
     ORDER BY nombre ASC
 ");
@@ -106,65 +119,6 @@ $stmt = $pdo->query("
 ");
 $profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
-{
-    $stmt = $pdo->prepare("
-        SELECT tipo_socio, fecha_alta
-        FROM pacientes
-        WHERE Id = ?
-    ");
-    $stmt->execute([$paciente_id]);
-
-    $p = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if (!$p) {
-        return ['tipo' => 'particular', 'cobra_como' => 'particular'];
-    }
-
-    // 🔥 NUEVO (primer mes)
-    if (!empty($p['fecha_alta'])) {
-
-        $alta = new DateTime($p['fecha_alta']);
-        $actual = new DateTime();
-
-        $diff = $alta->diff($actual);
-
-        if ($diff->y == 0 && $diff->m < 1) {
-            return ['tipo' => 'nuevo', 'cobra_como' => 'particular'];
-        }
-    }
-
-    // 🔥 VITALICIO (valor específico)
-    if (!empty($p['tipo_socio']) && strtolower($p['tipo_socio']) === 'vitalicio') {
-        return ['tipo' => 'vitalicio', 'cobra_como' => 'socio'];
-    }
-
-    // 🔥 SOCIO NORMAL (validar deuda)
-    $stmt = $pdo->prepare("
-        SELECT MAX(fecha_correspondiente)
-        FROM pagos_afiliados
-        WHERE paciente_id = ?
-    ");
-    $stmt->execute([$paciente_id]);
-
-    $ultimaFecha = $stmt->fetchColumn();
-
-    if (!$ultimaFecha) {
-        return ['tipo' => 'particular', 'cobra_como' => 'particular'];
-    }
-
-    $ultimo = new DateTime(date('Y-m-01', strtotime($ultimaFecha)));
-    $actual = new DateTime(date('Y-m-01'));
-
-    $diff = $ultimo->diff($actual);
-    $meses = ($diff->y * 12) + $diff->m;
-
-    if ($meses <= 3) {
-        return ['tipo' => 'socio', 'cobra_como' => 'socio'];
-    }
-
-    return ['tipo' => 'moroso', 'cobra_como' => 'particular'];
-}
 ?>
 <div class="card card-outline card-info mb-3 p-3">
     <form method="GET" class="row">
@@ -226,11 +180,24 @@ function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
 </div>
 <div class="card card-outline card-warning mb-3 p-3">
     <form id="formMovimientoManual">
-
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="alert alert-warning py-2 mb-0">
+                    <small>
+                        <strong>Importante:</strong>
+                        Para ingresos utilizar únicamente
+                        <strong>Ingresos Sala</strong>,
+                        <strong>Cuotas</strong> o
+                        <strong>Cuota Inicial(Primera Cuota)</strong>.
+                        <strong>El resto no usar</strong>.
+                    </small>
+                </div>
+            </div>
+        </div>
         <div class="row">
 
             <!-- TIPO -->
-            <div class="col-md-2 mb-2">
+            <div class="col-md-2 mb-3">
                 <label>Tipo</label>
                 <select name="tipo" class="form-control" required>
                     <option value="" selected disabled>Seleccione...</option>
@@ -238,55 +205,50 @@ function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
                     <option value="egreso">Egreso (-)</option>
                 </select>
             </div>
+
             <!-- DESTINO -->
-            <div class="col-md-2 mb-2">
+            <div class="col-md-4 mb-3">
                 <label>Destino</label>
                 <select name="destino_id" id="destino" class="form-control">
                     <option value="">-- Seleccionar destino --</option>
+
                     <?php foreach ($destinos as $d): ?>
-                        <option value="<?= $d['id'] ?>" data-tipo="<?= $d['tipo'] ?>"><?= $d['nombre'] ?></option>
+                        <option
+                            value="<?= $d['id'] ?>"
+                            data-tipo="<?= $d['tipo'] ?>"
+                            data-categoria="<?= strtolower($d['categoria'] ?? '') ?>">
+                            <?= htmlspecialchars($d['nombre']) ?>
+                        </option>
                     <?php endforeach; ?>
                 </select>
             </div>
-            <!-- <div class="col-md-2 mb-2">
-                <label>Origen del dinero</label>
-                <select name="origen" id="origen" class="form-control" required>
-                    <option value="caja">Caja del día</option>
-                    <option value="fondo">Fondo acumulado</option>
-                </select>
-            </div> -->
+
             <!-- CONCEPTO -->
-            <div class="col-md-2 mb-2">
+            <div class="col-md-4 mb-3">
                 <label>Concepto</label>
                 <input type="text" name="concepto" class="form-control" required>
             </div>
 
             <!-- MONTO -->
-            <div class="col-md-2 mb-2">
+            <div class="col-md-2 mb-3">
                 <label>Monto</label>
                 <input type="number" step="0.01" name="monto" id="monto" class="form-control">
-            </div>
-
-            <!-- BOTON -->
-            <div class="col-md-2 mb-2 d-flex align-items-end">
-                <button type="submit" class="btn btn-success w-100">
-                    <i class="fas fa-save"></i> Guardar
-                </button>
             </div>
 
         </div>
 
 
+
         <div class="row">
 
             <!-- PACIENTE -->
-            <div class="col-md-3 mb-2">
+            <div class="col-md-4 mb-3">
                 <label>Paciente</label>
                 <select name="paciente_id" id="buscadorPacientes" class="form-control"></select>
             </div>
 
             <!-- PROFESIONAL -->
-            <div class="col-md-3 mb-2">
+            <div class="col-md-4 mb-3">
                 <label>Profesional</label>
                 <select id="profesional" name="profesional_id" class="form-control">
                     <option value="">-- Opcional --</option>
@@ -299,31 +261,61 @@ function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
             </div>
 
             <!-- PRACTICA -->
-            <div class="col-md-2 mb-2">
+            <div class="col-md-4 mb-3">
                 <label>Práctica</label>
                 <select name="practica_id" id="practicas" class="form-control">
                     <option value="">-- Opcional --</option>
                 </select>
             </div>
-            <div class="col-md-2 mb-2">
+
+        </div>
+
+        <div class="row">
+
+            <!-- MEDIO DE PAGO -->
+            <div class="col-md-3 mb-3">
                 <label>Medio de Pago</label>
-                <select name="medio_pago" id="medio_pago" class="form-control" required>
+                <select name="medio_pago" id="medio_pago" class="form-control">
                     <option value="efectivo">Efectivo</option>
                     <option value="transferencia">Transferencia</option>
                 </select>
             </div>
-            <div class="col-md-2 mb-2" id="boxEmpleadoDestino" style="display:none;">
+
+            <!-- TIPO TRANSFERENCIA -->
+            <div class="col-md-3 mb-3" id="boxTransferenciaTipo" style="display:none;">
+                <label>Tipo Transferencia</label>
+                <select name="transferencia_tipo" id="transferencia_tipo" class="form-control">
+                    <option value="">Seleccione...</option>
+                    <option value="clinica">Transferencia Clínica</option>
+                    <option value="profesional">Cobrado por Profesional</option>
+                </select>
+            </div>
+
+            <!-- EMPLEADO DESTINO -->
+            <div class="col-md-4 mb-3" id="boxEmpleadoDestino" style="display:none;">
                 <label>Empleado Destino</label>
                 <select name="empleado_destino_id" class="form-control">
                     <option value="">Seleccione...</option>
                     <?php foreach ($pdo->query("SELECT id, nombre FROM empleados")->fetchAll() as $e): ?>
                         <option value="<?= $e['id'] ?>">
-                            <?= $e['nombre'] ?>
+                            <?= htmlspecialchars($e['nombre']) ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
             </div>
+
+            <!-- BOTON -->
+            <div class="col-md-2 mb-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-success btn-block">
+                    <i class="fas fa-save mr-1"></i>
+                    Guardar
+                </button>
+            </div>
+
         </div>
+
+
+
 
     </form>
 </div>
@@ -371,14 +363,31 @@ function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
                                     <td class="small align-middle">
 
                                         <?php if ($m['medio_pago'] === 'efectivo'): ?>
+
                                             <span class="badge badge-success">Efectivo</span>
+
+                                        <?php elseif ($m['medio_pago'] === 'transferencia'): ?>
+
+                                            <span class="badge badge-primary">Transferencia</span><br>
+
+                                            <?php if ($m['transferencia_tipo'] === 'clinica'): ?>
+
+                                                <small class="badge badge-info">
+                                                    <i class="fas fa-user mr-1"></i>
+                                                    <?= htmlspecialchars($m['empleado_destino_nombre'] ?: '-') ?>
+                                                </small>
+
+                                            <?php elseif ($m['transferencia_tipo'] === 'profesional'): ?>
+
+                                                <small class="badge badge-info text-dark">
+                                                    <i class="fas fa-user-md mr-1"></i>
+                                                    Cobrado por <?= htmlspecialchars(trim($m['profesional_destino_nombre']) ?: '-') ?>
+                                                </small>
+
+                                            <?php endif; ?>
+
                                         <?php endif; ?>
 
-                                        <?php if ($m['medio_pago'] === 'transferencia'): ?>
-                                            <span class="badge badge-info">
-                                                Transferencia → <?= $m['empleado_destino_nombre'] ?? 'Sin empleado' ?>
-                                            </span>
-                                        <?php endif; ?>
                                     </td>
                                     <td class="align-middle font-weight-bold 
     <?= ($m['estado'] === 'anulado') ? 'text-danger' : 'text-success' ?>">
@@ -457,14 +466,32 @@ function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
                                     <td class="small align-middle">
 
                                         <?php if ($m['medio_pago'] === 'efectivo'): ?>
+
                                             <span class="badge badge-success">Efectivo</span>
+
+                                        <?php elseif ($m['medio_pago'] === 'transferencia'): ?>
+
+                                            <span class="badge badge-primary">Transferencia</span><br>
+
+                                            <?php if ($m['transferencia_tipo'] === 'clinica'): ?>
+
+                                                <small class="badge badge-info">
+                                                    <i class="fas fa-user mr-1"></i>
+                                                    <?= htmlspecialchars($m['empleado_destino_nombre'] ?: '-') ?>
+                                                </small>
+
+                                            <?php elseif ($m['transferencia_tipo'] === 'profesional'): ?>
+
+                                                <small class="badge badge-info text-dark">
+                                                    <i class="fas fa-user-md mr-1"></i>
+                                                    Cobrado por <?= htmlspecialchars(trim($m['profesional_destino_nombre']) ?: '-') ?>
+                                                </small>
+
+
+                                            <?php endif; ?>
+
                                         <?php endif; ?>
 
-                                        <?php if ($m['medio_pago'] === 'transferencia'): ?>
-                                            <span class="badge badge-info">
-                                                Transferencia → <?= $m['empleado_destino_nombre'] ?? 'Sin empleado' ?>
-                                            </span>
-                                        <?php endif; ?>
                                     </td>
                                     <td class="align-middle font-weight-bold text-danger">
 
@@ -483,11 +510,6 @@ function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
                                             <button
                                                 class="btn btn-warning rounded-circle btn-sm btnImprimir"
                                                 data-id="<?= $m['id'] ?>"
-                                                data-paciente="<?= htmlspecialchars($m['pac_nom'] . ' ' . $m['pac_ape']) ?>"
-                                                data-profesional="<?= htmlspecialchars($m['prof_nom'] . ' ' . $m['prof_ape']) ?>"
-                                                data-total="<?= $m['monto'] ?>"
-                                                data-concepto="<?= htmlspecialchars($m['concepto']) ?>"
-                                                data-estado="<?= $m['estado'] ?>"
                                                 title="Imprimir">
                                                 <i class="fas fa-print text-white"></i>
                                             </button>
@@ -608,23 +630,50 @@ function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
         $('#formMovimientoManual').on('submit', function(e) {
             e.preventDefault();
 
-            let tipo = $('select[name="tipo"]').val();
-            let monto = parseFloat($('#monto').val() || 0);
+            let medio = $('#medio_pago').val();
 
-            guardar(); // 👈 SIEMPRE guarda
+            if (medio === 'transferencia') {
+                let tipoTransferencia = $('#transferencia_tipo').val();
 
-            function guardar() {
-                $.post('ajax/guardar_movimiento.php', $('#formMovimientoManual').serialize(), function(res) {
+                if (!tipoTransferencia) {
+                    Swal.fire('Atención', 'Seleccione el tipo de transferencia', 'warning');
+                    return;
+                }
 
-                    if (res.success) {
-                        Swal.fire('OK', 'Movimiento guardado', 'success')
-                            .then(() => location.reload());
-                    } else {
-                        Swal.fire('Error', res.message, 'error');
+                if (tipoTransferencia === 'clinica' && !$('select[name="empleado_destino_id"]').val()) {
+                    Swal.fire('Atención', 'Debe seleccionar un empleado destino', 'warning');
+                    return;
+                }
+            }
+
+            $.post('ajax/guardar_movimiento.php', $(this).serialize(), async function(res) {
+
+                if (res.success) {
+                    const r = await Swal.fire({
+                        title: 'Movimiento guardado',
+                        text: '¿Desea imprimir el comprobante?',
+                        icon: 'success',
+                        showCancelButton: true,
+                        confirmButtonText: 'Imprimir',
+                        cancelButtonText: 'No imprimir'
+                    });
+
+                    if (r.isConfirmed) {
+                        try {
+                            await imprimirMovimiento(res.cobro_id);
+                        } catch (err) {
+                            console.error(err);
+                            await Swal.fire('Atención', 'El movimiento se guardó pero no se pudo imprimir.', 'warning');
+                        }
                     }
 
-                }, 'json');
-            }
+                    location.reload();
+
+                } else {
+                    Swal.fire('Error', res.message, 'error');
+                }
+
+            }, 'json');
         });
 
         /* =========================
@@ -717,7 +766,7 @@ function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
             let paciente_id = $('#buscadorPacientes').val();
 
             if (!practica_id) {
-                $('#monto').prop('readonly', false).val('');
+                $('#monto').prop('readonly', false);
                 return;
             }
 
@@ -727,46 +776,102 @@ function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
             }, function(res) {
 
                 if (!res.success) {
-                    $('#monto').prop('readonly', false).val('');
+                    $('#monto')
+                        .val('')
+                        .prop('readonly', false);
+
                     return;
                 }
 
                 $('#monto')
-                    .val(parseFloat(res.precio))
+                    .val(parseFloat(res.precio).toFixed(2))
                     .prop('readonly', true);
 
+                // Solo nombre de práctica
                 if (res.nombre) {
                     $('input[name="concepto"]').val(res.nombre);
                 }
 
+                // Mostrar estado afiliado (opcional)
+                if ($('#estadoAfiliado').length && res.afiliado) {
+
+                    let html = '';
+
+                    switch (res.afiliado.tipo) {
+
+                        case 'vitalicio':
+                            html = '<span class="badge badge-primary">Vitalicio</span>';
+                            break;
+
+                        case 'nuevo':
+                            html = '<span class="badge badge-info">En gracia</span>';
+                            break;
+
+                        case 'socio':
+                            html = '<span class="badge badge-success">Socio al día</span>';
+                            break;
+
+                        case 'moroso':
+                            html =
+                                '<span class="badge badge-danger">' +
+                                'Moroso (' +
+                                res.afiliado.meses_adeudados +
+                                ' meses)' +
+                                '</span>';
+                            break;
+
+                        default:
+                            html = '<span class="badge badge-secondary">Particular</span>';
+                    }
+
+                    $('#estadoAfiliado').html(html);
+                }
+
             }, 'json');
+
         });
 
         /* =========================
            🔁 DESTINO / PRACTICA
         ========================= */
         function toggleDestino() {
+
             let practica = $('#practicas').val();
 
             if (practica) {
-                // Si hay práctica → bloquea destino
+
+                // Forzar ingreso
+                $('select[name="tipo"]').val('ingreso').trigger('change');
+
+                // Bloquear destino
                 $('#destino').prop('disabled', true);
+
             } else {
-                // Si NO hay práctica → habilita destino
+
+                // Habilitar destino nuevamente
                 $('#destino').prop('disabled', false);
+
             }
         }
 
         function filtrarDestinos() {
+
             let tipo = $('select[name="tipo"]').val();
 
             $('#destino option').each(function() {
 
                 let t = $(this).data('tipo');
+                let categoria = $(this).data('categoria');
 
                 if (!t) return;
 
-                // 👉 SI NO HAY TIPO, MOSTRAR TODO
+                // Ocultar fondos siempre
+                if (categoria === 'profesional') {
+                    $(this).hide();
+                    return;
+                }
+
+                // Filtrado por ingreso/egreso
                 if (!tipo) {
                     $(this).show();
                 } else {
@@ -777,6 +882,20 @@ function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
 
             $('#destino').val('');
         }
+        $('#destino option').each(function() {
+
+            let categoria = $(this).data('categoria');
+
+            if (categoria === 'fondo') {
+
+                $(this).css({
+                    'font-weight': 'bold',
+                    'background': '#40c4f8'
+                });
+
+            }
+
+        });
 
         $('#practicas').on('change', toggleDestino);
         $('select[name="tipo"]').on('change', filtrarDestinos);
@@ -784,17 +903,30 @@ function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
         /* =========================
            💳 MEDIO DE PAGO
         ========================= */
-        $('#medio_pago').on('change', function() {
+        function actualizarTransferencia() {
+            let medio = $('#medio_pago').val();
+            let tipo = $('#transferencia_tipo').val();
 
-            let esTransferencia = $(this).val() === 'transferencia';
+            $('#boxTransferenciaTipo').hide();
+            $('#boxEmpleadoDestino').hide();
 
-            $('#boxEmpleadoDestino').toggle(esTransferencia);
-
-            if (!esTransferencia) {
-                $('select[name="empleado_destino_id"]').val('');
+            if (medio === 'transferencia') {
+                $('#boxTransferenciaTipo').show();
+                if (tipo === 'clinica') {
+                    $('#boxEmpleadoDestino').show();
+                }
             }
+        }
 
-        }).trigger('change');
+        $('#medio_pago').on('change', function() {
+            // Resetear tipo cuando cambia el medio
+            $('#transferencia_tipo').val('');
+            actualizarTransferencia();
+        });
+
+        $('#transferencia_tipo').on('change', actualizarTransferencia);
+
+        actualizarTransferencia();
 
         /* =========================
            📝 AUTO CONCEPTO
@@ -820,19 +952,32 @@ function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
     ========================= */
     $(document).on('click', '.btnImprimir', async function() {
 
-        let btn = $(this);
+        let cobroId = $(this).data('id');
 
-        // 🔥 ARMAMOS DATA DIRECTO DEL BOTÓN
-        let data = {
-            paciente: btn.data('paciente') || '---',
-            profesional: btn.data('profesional') || '---',
-            total: btn.data('total') || 0,
-            estado: btn.data('estado') || 'activo',
-            detalle: [{
-                nombre: btn.data('concepto') || 'Movimiento',
-                precio: btn.data('total') || 0
-            }]
-        };
+        try {
+
+            await imprimirMovimiento(cobroId);
+
+        } catch (err) {
+
+            console.error(err);
+
+            Swal.fire(
+                'Error',
+                err.message || 'No se pudo imprimir',
+                'error'
+            );
+
+        }
+
+    });
+    async function imprimirMovimiento(cobroId) {
+
+        const data = await $.getJSON(
+            'ajax/obtener_comprobante_movimiento.php', {
+                id: cobroId
+            }
+        );
 
         try {
 
@@ -841,92 +986,269 @@ function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
             }
 
             const config = qz.configs.create("POS-80C", {
-                encoding: 'CP437'
+                encoding: "CP437"
             });
 
-            let contenido = [];
+            const contenido = [];
 
-            function linea(nombre, precio) {
-                let left = (nombre || '').substring(0, 30);
-                let right = "$" + parseFloat(precio).toFixed(2);
-
-                let spaces = 48 - (left.length + right.length);
-                if (spaces < 1) spaces = 1;
-
-                return left + " ".repeat(spaces) + right;
+            function center(txt) {
+                return "\x1B\x61\x01" + txt + "\n";
             }
 
-            /* =========================
-               🧾 ENCABEZADO
-            ========================= */
+            function left(txt) {
+                return "\x1B\x61\x00" + txt + "\n";
+            }
+
+            function right(txt) {
+                return "\x1B\x61\x02" + txt + "\n";
+            }
+
+            function separator() {
+                return "------------------------------------------------\n";
+            }
+
+            function linea(nombre, valor) {
+
+                let izquierda = nombre.substring(0, 28);
+                let derecha = "$" + parseFloat(valor).toLocaleString(
+                    "es-AR", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    }
+                );
+
+                let espacios =
+                    48 - (izquierda.length + derecha.length);
+
+                if (espacios < 1) espacios = 1;
+
+                return izquierda +
+                    " ".repeat(espacios) +
+                    derecha;
+            }
+            let medio = data.medio_pago;
+
+            if (
+                data.medio_pago === 'transferencia' &&
+                data.transferencia_tipo === 'profesional'
+            ) {
+                medio = 'COBRADO POR PROFESIONAL';
+            } else if (
+                data.medio_pago === 'transferencia' &&
+                data.transferencia_tipo === 'clinica'
+            ) {
+                medio = 'TRANSFERENCIA SALA';
+            } else {
+                medio = 'EFECTIVO';
+            }
+            const ahora = new Date();
+
+            const fecha =
+                ahora.toLocaleDateString("es-AR");
+
+            const hora =
+                ahora.toLocaleTimeString("es-AR");
+
+            /* =====================================
+               LOGO
+            ===================================== */
+
             contenido.push("\x1B\x61\x01");
 
-            contenido.push({
-                type: 'pixel',
-                format: 'png',
-                flavor: 'file',
-                data: 'images/logo_blanco_negro.png',
-                options: {
-                    language: "ESCPOS",
-                    dotDensity: "double"
-                }
-            });
+
+
+            /* =====================================
+               CLINICA
+            ===================================== */
+
+            // Negrita ON
+            contenido.push("\x1B\x45\x01");
+
+            // Tamaño doble ancho + doble alto
+            contenido.push("\x1D\x21\x11");
+
+            contenido.push(center("SALA RIVADAVIA"));
+
+            // Volver a tamaño normal
+            contenido.push("\x1D\x21\x00");
+
+            // Negrita OFF
+            contenido.push("\x1B\x45\x00");
+            contenido.push("\n");
+
+            contenido.push(center(
+                "COMPROBANTE N° " +
+                (data.numero_completo || "0001-00000001")
+            ));
+
+            contenido.push(separator());
+
+            contenido.push(center("CUIT: 30-54589575-3"));
+            contenido.push(center("ING. BRUTOS: 30-54589575-3"));
+            contenido.push(center("IVA RESPONSABLE INSCRIPTO"));
+            contenido.push(center("INICIO ACTIVIDAD: 27/11/2013"));
 
             contenido.push("\n");
-            contenido.push("SALA RIVADAVIA\n");
-            contenido.push("Av. Eva Peron 695\n");
-            contenido.push("Temperley\n");
-            contenido.push("Fecha: " + new Date().toLocaleString() + "\n");
-            contenido.push("------------------------------------------------\n");
 
-            /* =========================
-               📄 DATOS
-            ========================= */
-            contenido.push("\x1B\x61\x00");
-            contenido.push("Paciente: " + data.paciente + "\n");
-            contenido.push("Profesional: " + data.profesional + "\n");
-            contenido.push("------------------------------------------------\n");
+            contenido.push(center("AV. EVA PERON 695"));
+            contenido.push(center("TEMPERLEY (1834)"));
+            contenido.push(center("BUENOS AIRES"));
 
-            /* =========================
-               📦 DETALLE
-            ========================= */
-            data.detalle.forEach(d => {
-                contenido.push(linea(d.nombre, d.precio) + "\n");
-            });
+            contenido.push("\n");
 
-            contenido.push("------------------------------------------------\n");
+            contenido.push(center("TEL: 3989-4325"));
+            contenido.push(center("TEL: 3991-2183"));
+            contenido.push(center("WHATSAPP: 11 2243-6786"));
 
-            /* =========================
-               💰 TOTAL
-            ========================= */
-            contenido.push("\x1B\x61\x02");
-            contenido.push("TOTAL: $" + parseFloat(data.total).toFixed(2) + "\n");
+            contenido.push(separator());
 
-            /* =========================
-               🔴 ANULADO
-            ========================= */
-            if (data.estado === 'anulado') {
-                contenido.push("\x1B\x61\x01");
-                contenido.push("***************\n");
-                contenido.push("   ANULADO\n");
-                contenido.push("***************\n");
+            /* =====================================
+               FECHA
+            ===================================== */
+
+            contenido.push(left("FECHA: " + fecha));
+            contenido.push(left("HORA : " + hora));
+
+            contenido.push("\n");
+
+            contenido.push(center("CONSUMIDOR FINAL"));
+
+            contenido.push(separator());
+
+            /* =====================================
+               DATOS
+            ===================================== */
+
+
+            contenido.push("\n");
+
+            if (data.paciente) {
+
+                contenido.push(left("PACIENTE:"));
+                contenido.push(left(data.paciente));
+
+                contenido.push("\n");
             }
 
-            contenido.push("\x1B\x61\x01");
-            contenido.push("\nGracias por su visita\n");
+            if (data.profesional) {
 
-            /* =========================
-               ✂️ CORTE
-            ========================= */
-            contenido.push("\n\n\n");
+                contenido.push(left("PROFESIONAL:"));
+                contenido.push(left(data.profesional));
+
+                contenido.push("\n");
+            }
+
+            contenido.push(separator());
+
+            /* =====================================
+               DETALLE
+            ===================================== */
+
+            contenido.push(left("DESCRIPCION"));
+
+            contenido.push("\n");
+
+            contenido.push(
+                left(
+                    linea(
+                        data.concepto || "Movimiento",
+                        data.total
+                    )
+                )
+            );
+
+            contenido.push("\n");
+
+            contenido.push(separator());
+
+            /* =====================================
+   TOTAL
+===================================== */
+
+            contenido.push("\x1B\x45\x01"); // negrita
+
+            contenido.push(center("TOTAL"));
+
+            contenido.push("\x1D\x21\x11");
+
+            contenido.push(
+                center(
+                    "$ " +
+                    parseFloat(data.total).toLocaleString(
+                        "es-AR", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        }
+                    )
+                )
+            );
+
+            contenido.push("\x1D\x21\x00"); // tamaño normal
+            contenido.push("\x1B\x45\x00"); // quitar negrita
+
+            contenido.push(separator());
+
+            /* =====================================
+               ESTADO
+            ===================================== */
+
+            if (data.estado === "anulado") {
+
+                contenido.push(center("***** ANULADO *****"));
+
+                contenido.push(separator());
+            }
+
+            /* =====================================
+               MEDIO PAGO
+            ===================================== */
+
+            contenido.push(center("METODO DE PAGO"));
+
+            contenido.push(center(medio));
+
+            contenido.push(separator());
+
+            /* =====================================
+               PIE
+            ===================================== */
+
+            contenido.push("\n");
+
+            contenido.push(
+                center("¡GRACIAS POR ELEGIRNOS!")
+            );
+
+            contenido.push("\n");
+
+            contenido.push(separator());
+            contenido.push(separator());
+
+            contenido.push(
+                center(
+                    "DOCUMENTO NO VALIDO COMO FACTURA"
+                )
+            );
+
+            contenido.push("\n\n\n\n");
+
+            /* =====================================
+               CORTE
+            ===================================== */
+
             contenido.push("\x1D\x56\x00");
 
             await qz.print(config, contenido);
 
         } catch (err) {
-            console.error(err);
-            alert("Error imprimiendo: " + err);
-        }
 
-    });
+            console.error(err);
+
+            Swal.fire({
+                icon: "error",
+                title: "Error imprimiendo",
+                text: err.toString()
+            });
+        }
+    }
 </script>

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/services/afiliados.php';
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
 $fecha = date('Y-m-d H:i:s');
@@ -54,53 +55,106 @@ if ($id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $swalGuardado = true;
 }
-function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
-{
-    $stmt = $pdo->prepare("
-        SELECT 
-            p.tipo_socio, 
-            p.fecha_alta,
-            GREATEST(0, COALESCE(PERIOD_DIFF(
-                DATE_FORMAT(CURDATE(), '%Y%m'),
-                DATE_FORMAT(MAX(pa.fecha_correspondiente), '%Y%m')
-            ), 999)) AS meses_adeudados,
-            MAX(pa.fecha_correspondiente) AS ultimo_pago
-        FROM pacientes p
-        LEFT JOIN pagos_afiliados pa ON pa.paciente_id = p.Id
-        WHERE p.Id = ?
-        GROUP BY p.Id
-    ");
-    $stmt->execute([$paciente_id]);
-    $p = $stmt->fetch(PDO::FETCH_ASSOC);
+// function obtenerTipoPaciente(PDO $pdo, int $paciente_id): array
+// {
+//     $stmt = $pdo->prepare("
+//         SELECT
+//             p.tipo_socio,
+//             p.fecha_alta,
 
-    if (!$p) return ['tipo' => 'particular', 'cobra_como' => 'particular'];
+//             MAX(pa.fecha_correspondiente) AS ultimo_pago,
 
-    // 🟣 Vitalicio
-    if (strtolower($p['tipo_socio']) === 'vitalicio') {
-        return ['tipo' => 'vitalicio', 'cobra_como' => 'socio'];
-    }
+//             CASE
+//                 WHEN MAX(pa.fecha_correspondiente) IS NULL THEN 999
+//                 ELSE GREATEST(
+//                     0,
+//                     PERIOD_DIFF(
+//                         DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 MONTH), '%Y%m'),
+//                         DATE_FORMAT(MAX(pa.fecha_correspondiente), '%Y%m')
+//                     )
+//                 )
+//             END AS meses_adeudados
 
-    // 🟡 Primeros 90 días → EN GRACIA (cobra como particular, SIEMPRE)
-    if (!empty($p['fecha_alta']) && $p['fecha_alta'] !== '0000-00-00') {
-        $dias = (new DateTime())->diff(new DateTime($p['fecha_alta']))->days;
-        if ($dias <= 90) {
-            return ['tipo' => 'nuevo', 'cobra_como' => 'particular'];
-        }
-    }
+//         FROM pacientes p
+//         LEFT JOIN pagos_afiliados pa
+//             ON pa.paciente_id = p.Id
+//         WHERE p.Id = ?
+//         GROUP BY p.Id
+//     ");
 
-    // ✅ Al día → SOCIO (cubre pacientes viejos sin fecha_alta)
-    if ($p['ultimo_pago'] && (int)$p['meses_adeudados'] <= 1) {
-        return ['tipo' => 'socio', 'cobra_como' => 'socio'];
-    }
+//     $stmt->execute([$paciente_id]);
 
-    // 🔴 Nunca pagó
-    if (!$p['ultimo_pago']) {
-        return ['tipo' => 'particular', 'cobra_como' => 'particular'];
-    }
+//     $p = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // 🔴 Moroso
-    return ['tipo' => 'moroso', 'cobra_como' => 'particular'];
-}
+//     if (!$p) {
+//         return [
+//             'tipo' => 'particular',
+//             'cobra_como' => 'particular'
+//         ];
+//     }
+
+//     /* =========================
+//        VITALICIO
+//     ========================= */
+//     if (strtolower($p['tipo_socio'] ?? '') === 'vitalicio') {
+//         return [
+//             'tipo' => 'vitalicio',
+//             'cobra_como' => 'socio'
+//         ];
+//     }
+
+//     /* =========================
+//        EN GRACIA (3 meses)
+//     ========================= */
+//     if (
+//         !empty($p['fecha_alta']) &&
+//         $p['fecha_alta'] !== '0000-00-00'
+//     ) {
+
+//         $alta = new DateTime($p['fecha_alta']);
+//         $hoy  = new DateTime();
+
+//         $diff = $alta->diff($hoy);
+
+//         if ($diff->y == 0 && $diff->m < 3) {
+
+//             return [
+//                 'tipo' => 'nuevo',
+//                 'cobra_como' => 'particular'
+//             ];
+//         }
+//     }
+
+//     /* =========================
+//        NUNCA PAGÓ
+//     ========================= */
+//     if (!$p['ultimo_pago']) {
+
+//         return [
+//             'tipo' => 'particular',
+//             'cobra_como' => 'particular'
+//         ];
+//     }
+
+//     /* =========================
+//        SOCIO
+//     ========================= */
+//     if ((int)$p['meses_adeudados'] <= 2) {
+
+//         return [
+//             'tipo' => 'socio',
+//             'cobra_como' => 'socio'
+//         ];
+//     }
+
+//     /* =========================
+//        MOROSO
+//     ========================= */
+//     return [
+//         'tipo' => 'moroso',
+//         'cobra_como' => 'particular'
+//     ];
+// }
 /* =============================
    TURNO
 =============================*/
@@ -121,7 +175,7 @@ if (!$r) {
     echo '<div class="alert alert-danger">Turno no encontrado</div>';
     exit;
 }
-$tipoPaciente = obtenerTipoPaciente($pdo, (int)$r['pacienteId']);
+// $tipoPaciente = obtenerTipoPaciente($pdo, (int)$r['pacienteId']);
 /* =============================
    PACIENTE COMPLETO
 =============================*/
@@ -134,7 +188,10 @@ $stmtPaciente = $pdo->prepare("
 $stmtPaciente->execute([':id' => $r['pacienteId']]);
 $rPaciente = $stmtPaciente->fetch(PDO::FETCH_ASSOC);
 
-
+$tipoPaciente = obtenerEstadoAfiliado(
+    $pdo,
+    (int)$r['pacienteId']
+);
 /* =============================
    DATOS
 =============================*/
@@ -151,33 +208,62 @@ Paciente: $paciente
 Profesional: $profesional
 Día: $fecha $hora");
 
-function normalizarCelular($numero)
+function normalizarCelularArgentina(string $numero): string
 {
-    $numero = preg_replace('/\D/', '', $numero);
+    // Solo números
+    $numero = preg_replace('/\D+/', '', trim($numero));
 
-    // Quitar +54 si viene
-    if (substr($numero, 0, 2) === '54') {
+    if (empty($numero)) {
+        return '';
+    }
+
+    // Ya está correcto
+    if (preg_match('/^549\d{10,11}$/', $numero)) {
+        return $numero;
+    }
+
+    // +54
+    if (strpos($numero, '54') === 0) {
         $numero = substr($numero, 2);
     }
 
-    // Quitar 0 inicial (ej: 011)
-    if (substr($numero, 0, 1) === '0') {
+    // 0 de larga distancia
+    if (strpos($numero, '0') === 0) {
         $numero = substr($numero, 1);
     }
 
-    // 🔥 Detectar y quitar 15 SOLO si está después del código de área
-    // Caso AMBA (11)
-    if (substr($numero, 0, 2) === '11' && substr($numero, 2, 2) === '15') {
-        $numero = '11' . substr($numero, 4);
-    }
-    // Otros códigos (ej: 221, 341, etc)
-    elseif (preg_match('/^(\d{3})15/', $numero, $m)) {
-        $numero = $m[1] . substr($numero, 5);
+    /*
+     * Quitar 15 después de característica
+     *
+     * 11 15 38225784
+     * 221 15 5555555
+     */
+    $numero = preg_replace('/^(\d{2,4})15/', '$1', $numero);
+
+    /*
+     * Casos viejos:
+     * 1538225784
+     */
+    if (strpos($numero, '15') === 0) {
+        $numero = substr($numero, 2);
     }
 
+    /*
+     * Si quedó un número local de 8 dígitos
+     * asumimos AMBA (11)
+     */
+    if (strlen($numero) === 8) {
+        $numero = '11' . $numero;
+    }
+
+    /*
+     * WhatsApp Argentina:
+     * 54 + 9 + característica + número
+     */
     return '549' . $numero;
 }
-$cel = normalizarCelular($r['pacienteCelular']);
+$cel = normalizarCelularArgentina($r['pacienteCelular']);
+
 $mensaje = "Recordatorio de turno
 
 Paciente: $paciente
@@ -251,15 +337,20 @@ $mensaje = urlencode($mensaje);
                             <?php
                             $tipo = $tipoPaciente['tipo'];
 
-                            if ($tipo == 'vitalicio') {
+                            if ($tipo === 'vitalicio') {
+
                                 echo '<span class="badge badge-primary">Vitalicio</span>';
-                            } elseif ($tipo == 'nuevo') {
-                                echo '<span class="badge badge-info">Nuevo</span>';
-                            } elseif ($tipo == 'socio') {
+                            } elseif ($tipo === 'nuevo') {
+
+                                echo '<span class="badge badge-info">En gracia</span>';
+                            } elseif ($tipo === 'socio') {
+
                                 echo '<span class="badge badge-success">Socio</span>';
-                            } elseif ($tipo == 'moroso') {
+                            } elseif ($tipo === 'moroso') {
+
                                 echo '<span class="badge badge-danger">Moroso</span>';
                             } else {
+
                                 echo '<span class="badge badge-secondary">Particular</span>';
                             }
                             ?>
@@ -850,99 +941,266 @@ $mensaje = urlencode($mensaje);
      * codigo para impresora
      **************************************************/
     async function imprimirTicket(data) {
+
         try {
+
             if (!qz.websocket.isActive()) {
                 await qz.websocket.connect();
             }
 
-            // DEBUG opcional (podés dejarlo o sacarlo)
-            // const printers = await qz.printers.find();
-            // console.log("IMPRESORAS:", printers);
-
-            // CONFIGURACIÓN DIRECTA (SIN find)
             const config = qz.configs.create("POS-80C", {
-                encoding: 'CP437'
+                encoding: "CP437"
             });
 
             let contenido = [];
 
-            function linea(nombre, precio) {
-                let left = nombre.substring(0, 30);
-                let right = "$" + parseFloat(precio).toFixed(2);
-
-                let spaces = 48 - (left.length + right.length);
-                if (spaces < 1) spaces = 1;
-
-                return left + " ".repeat(spaces) + right;
+            function center(txt) {
+                return "\x1B\x61\x01" + txt + "\n";
             }
 
-            /* ENCABEZADO CON LOGO */
-            contenido.push("\x1B\x61\x01"); // Centrado
+            function left(txt) {
+                return "\x1B\x61\x00" + txt + "\n";
+            }
 
-            // 1. Insertar la imagen (puede ser URL o Base64)
-            contenido.push({
-                type: 'pixel',
-                format: 'png', // o 'png'
-                flavor: 'file',
-                data: 'images/logo_blanco_negro.png', // Ruta relativa, absoluta o base64
-                options: {
-                    language: "ESCPOS",
-                    dotDensity: "double"
+            function right(txt) {
+                return "\x1B\x61\x02" + txt + "\n";
+            }
+
+            function separator() {
+                return "------------------------------------------------\n";
+            }
+
+            function linea(nombre, precio) {
+
+                let izquierda = nombre.substring(0, 28);
+                let derecha = "$" + parseFloat(precio).toLocaleString(
+                    "es-AR", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    }
+                );
+
+                let espacios = 48 - (izquierda.length + derecha.length);
+
+                if (espacios < 1) {
+                    espacios = 1;
                 }
-            });
 
-            //             const logo = {
-            //    type: 'pixel',
-            //    format: 'png',
-            //    flavor: 'file',
-            //    data: 'https://tuweb.com/logo.png',
-            //    options: { 
-            //       language: "ESCPOS", 
-            //       dotDensity: "double",
-            //       width: 200 // Ajusta el tamaño en píxeles según tu papel de 80mm
-            //    }
-            // };
+                return izquierda + " ".repeat(espacios) + derecha;
+            }
 
-            // // Luego en tu función:
-            // let contenido = [logo, "\x1B\x61\x01", "SALA RIVADAVIA\n", ...];
+            const ahora = new Date();
 
-            contenido.push("\n"); // Salto de línea después del logo
-            // contenido.push("\x1B\x61\x01");
-            contenido.push("SALA RIVADAVIA\n");
-            contenido.push("Av. Eva Peron 695\n");
-            contenido.push("Temperley\n");
-            contenido.push("Fecha: " + new Date().toLocaleString() + "\n");
-            contenido.push("------------------------------------------------\n");
+            const fecha =
+                ahora.toLocaleDateString("es-AR");
 
-            /* DATOS */
-            contenido.push("\x1B\x61\x00");
-            contenido.push("Paciente: " + data.paciente + "\n");
-            contenido.push("Profesional: " + data.profesional + "\n");
-            contenido.push("------------------------------------------------\n");
+            const hora =
+                ahora.toLocaleTimeString("es-AR");
 
-            /* DETALLE */
-            data.detalle.forEach(d => {
-                contenido.push(linea(d.nombre, d.precio) + "\n");
-            });
-
-            contenido.push("------------------------------------------------\n");
-
-            /* TOTAL */
-            contenido.push("\x1B\x61\x02");
-            contenido.push("TOTAL: $" + parseFloat(data.total).toFixed(2) + "\n");
+            /* =====================================
+               LOGO
+            ===================================== */
 
             contenido.push("\x1B\x61\x01");
-            contenido.push("\nGracias por su visita\n");
 
-            /* CORTE */
-            contenido.push("\n\n\n");
+            // posibles pruebas de imagenes
+            //             contenido.push({
+            //     type: 'pixel',
+            //     format: 'image',
+            //     flavor: 'file',
+            //     data: window.location.origin + '/images/cruz_medica.png'
+            // });
+
+            // contenido.push({
+            //     type: 'raw',
+            //     format: 'image',
+            //     flavor: 'file',
+            //     data: window.location.origin + '/images/cruz_medica.png'
+            // });
+
+
+
+            /* =====================================
+               CLINICA
+            ===================================== */
+
+            // Negrita ON
+            contenido.push("\x1B\x45\x01");
+
+            // Tamaño doble ancho + doble alto
+            contenido.push("\x1D\x21\x11");
+
+            contenido.push(center("SALA RIVADAVIA"));
+
+            // Volver a tamaño normal
+            contenido.push("\x1D\x21\x00");
+
+            // Negrita OFF
+            contenido.push("\x1B\x45\x00");
+            contenido.push("\n");
+
+            contenido.push(center(
+                "COMPROBANTE N° " +
+                (data.numero_completo || "0001-00000001")
+            ));
+
+            contenido.push(separator());
+
+            contenido.push(center("CUIT: 30-54589575-3"));
+            contenido.push(center("ING. BRUTOS: 30-54589575-3"));
+            contenido.push(center("IVA RESPONSABLE INSCRIPTO"));
+            contenido.push(center("INICIO ACTIVIDAD: 27/11/2013"));
+
+            contenido.push("\n");
+
+            contenido.push(center("AV. EVA PERON 695"));
+            contenido.push(center("TEMPERLEY (1834)"));
+            contenido.push(center("BUENOS AIRES"));
+
+            contenido.push("\n");
+
+            contenido.push(center("TEL: 3989-4325"));
+            contenido.push(center("TEL: 3991-2183"));
+            contenido.push(center("WHATSAPP: 11 2243-6786"));
+
+            contenido.push(separator());
+
+            /* =====================================
+               FECHA
+            ===================================== */
+
+            contenido.push(left("FECHA: " + fecha));
+            contenido.push(left("HORA : " + hora));
+
+            contenido.push("\n");
+
+            contenido.push(center("CONSUMIDOR FINAL"));
+
+            contenido.push(separator());
+
+            /* =====================================
+               PACIENTE
+            ===================================== */
+
+            contenido.push(left("PACIENTE:"));
+
+            contenido.push(left(
+                data.paciente || "-"
+            ));
+
+            contenido.push("\n");
+
+            contenido.push(left("PROFESIONAL:"));
+
+            contenido.push(left(
+                data.profesional || "-"
+            ));
+
+            contenido.push(separator());
+
+            /* =====================================
+               DETALLE
+            ===================================== */
+
+            contenido.push(left("DESCRIPCION"));
+
+            contenido.push("\n");
+
+            data.detalle.forEach(item => {
+
+                contenido.push(
+                    left(
+                        linea(
+                            item.nombre,
+                            item.precio
+                        )
+                    )
+                );
+
+            });
+
+            contenido.push(separator());
+
+            /* =====================================
+               TOTAL
+            ===================================== */
+
+            contenido.push("\x1B\x45\x01");
+            contenido.push("\x1D\x21\x11");
+
+            contenido.push(
+                right(
+                    "$ " +
+                    parseFloat(data.total).toLocaleString(
+                        "es-AR", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        }
+                    )
+                )
+            );
+
+            contenido.push("\x1D\x21\x00");
+            contenido.push("\x1B\x45\x00");
+
+            contenido.push(
+                center("TOTAL")
+            );
+
+            contenido.push(separator());
+
+            /* =====================================
+               MEDIO DE PAGO
+            ===================================== */
+
+            contenido.push(center("METODO DE PAGO"));
+
+            contenido.push(center(
+                (data.medio_pago || "EFECTIVO")
+                .toUpperCase()
+            ));
+
+            contenido.push(separator());
+
+            /* =====================================
+               MENSAJE FINAL
+            ===================================== */
+
+            contenido.push("\n");
+
+            contenido.push(center(
+                "¡GRACIAS POR ELEGIRNOS!"
+            ));
+
+            contenido.push("\n");
+
+            contenido.push(separator());
+            contenido.push(separator());
+
+            contenido.push(center(
+                "DOCUMENTO NO VALIDO COMO FACTURA"
+            ));
+
+            contenido.push("\n\n\n\n");
+
+            /* =====================================
+               CORTE
+            ===================================== */
+
             contenido.push("\x1D\x56\x00");
 
             await qz.print(config, contenido);
 
         } catch (err) {
+
             console.error(err);
-            alert("Error imprimiendo: " + err);
+
+            Swal.fire({
+                icon: "error",
+                title: "Error imprimiendo",
+                text: err.toString()
+            });
+
         }
     }
 

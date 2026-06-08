@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/services/afiliados.php';
 $rand = uniqid();
 $busqueda = trim($_GET['busqueda'] ?? '');
 $pacientes = [];
@@ -71,8 +72,58 @@ LIMIT 25
     $stmt->execute($params);
     $pacientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
-?>
 
+$stmt = $pdo->query("
+    SELECT COUNT(*) total
+    FROM pacientes
+    WHERE tipo_socio = 'vitalicio'
+");
+
+$totalVitalicios = (int)$stmt->fetchColumn();
+$stmt = $pdo->query("
+    SELECT COUNT(*) total
+    FROM pacientes p
+
+    LEFT JOIN (
+        SELECT
+            paciente_id,
+            MAX(fecha_correspondiente) ultimo_pago
+        FROM pagos_afiliados
+        GROUP BY paciente_id
+    ) pa ON pa.paciente_id = p.Id
+
+    WHERE
+        p.tipo_socio <> 'vitalicio'
+
+        AND pa.ultimo_pago IS NOT NULL
+
+        AND PERIOD_DIFF(
+            DATE_FORMAT(
+                DATE_SUB(CURDATE(), INTERVAL 1 MONTH),
+                '%Y%m'
+            ),
+            DATE_FORMAT(
+                pa.ultimo_pago,
+                '%Y%m'
+            )
+        ) <= 2
+");
+
+$totalActivos = (int)$stmt->fetchColumn();
+?>
+<div class="mb-3">
+
+    <span class="badge badge-success p-2 mr-2">
+        Socios activos:
+        <?= number_format($totalActivos, 0, ',', '.') ?>
+    </span>
+
+    <span class="badge badge-info p-2">
+        Vitalicios:
+        <?= number_format($totalVitalicios, 0, ',', '.') ?>
+    </span>
+
+</div>
 <!-- Buscador -->
 <div class="row mb-3">
     <div class="col-12">
@@ -114,46 +165,7 @@ LIMIT 25
                 <div class="card-body table-responsive">
                     <table class="table table-striped  datatable" style="width:100%">
                         <thead class="thead-dark">
-                            <?php
-                            function tipoCobro($r)
-{
-    // 🟣 Vitalicio
-    if ($r['tipo_socio'] == 'vitalicio') {
-        return 'SOCIO';
-    }
 
-    // ✅ Está al día → SOCIO (cubre pacientes viejos sin fecha_alta)
-    if ($r['aldia'] == 'si') {
-        return 'SOCIO';
-    }
-
-    // Sin fecha alta → particular (nunca pagó y no tiene fecha de ingreso)
-    if (empty($r['fecha_alta']) || $r['fecha_alta'] == '0000-00-00') {
-        return 'PARTICULAR';
-    }
-
-    $hoy  = new DateTime();
-    $alta = new DateTime($r['fecha_alta']);
-    $dias = $hoy->diff($alta)->days;
-
-    // 🟡 Primeros 3 meses
-    if ($dias <= 90) {
-        return 'EN_GRACIA';
-    }
-
-    // 🔴 Nunca pagó
-    if ((int)$r['meses_adeudados'] === 999) {
-        return 'PARTICULAR';
-    }
-
-    // 🔴 Debe más de 1 mes
-    if ((int)$r['meses_adeudados'] > 1) {
-        return 'PARTICULAR';
-    }
-
-    return 'SOCIO';
-}
-                            ?>
                             <tr>
                                 <th>Apellido</th>
                                 <th>Nombre</th>
@@ -169,96 +181,126 @@ LIMIT 25
                         </thead>
                         <tbody>
                             <?php foreach ($pacientes as $r): ?>
+
+                                <?php
+                                $tipoPaciente = obtenerEstadoAfiliado($pdo, (int)$r['Id']);
+                                $meses = (int)$tipoPaciente['meses_adeudados'];
+                                ?>
+
                                 <tr>
+
                                     <td><?= htmlspecialchars($r['apellido']) ?></td>
                                     <td><?= htmlspecialchars($r['nombre']) ?></td>
-                                    <td><?= htmlspecialchars($r['tipo_documento']) ?>: <?= htmlspecialchars($r['documento']) ?>
+
+                                    <td>
+                                        <?= htmlspecialchars($r['tipo_documento']) ?>:
+                                        <?= htmlspecialchars($r['documento']) ?>
                                     </td>
 
                                     <td><?= htmlspecialchars($r['celular']) ?></td>
+
                                     <td>
                                         <?= htmlspecialchars($r['nro_afiliado']) ?>
+                                    </td>
+
+                                    <!-- TIPO COBRO -->
+                                    <td>
+
+                                        <?php if ($tipoPaciente['cobra_como'] === 'socio'): ?>
+
+                                            <span class="text-primary font-weight-bold">
+                                                SOCIO
+                                            </span>
+
+                                        <?php else: ?>
+
+                                            <span class="text-dark font-weight-bold">
+                                                PARTICULAR
+                                            </span>
+
+                                        <?php endif; ?>
 
                                     </td>
-                                    <td>
-                                        <?php
-                                        // Columna "Tipo Cobro"
-                                        $tipo = tipoCobro($r);
 
-                                        if ($tipo == 'SOCIO') {
-                                            echo '<span class="text-primary font-weight-bold">SOCIO</span>';
-                                        } elseif ($tipo == 'EN_GRACIA') {
-                                            // Durante gracia cobra como particular, pero lo diferenciamos visualmente
-                                            echo '<span class="text-dark font-weight-bold">PARTICULAR</span>';
-                                        } else {
-                                            echo '<span class="text-dark font-weight-bold">PARTICULAR</span>';
+                                    <!-- AL DIA -->
+                                    <td>
+
+                                        <?php
+
+                                        switch ($tipoPaciente['tipo']) {
+
+                                            case 'vitalicio':
+                                                echo '<span class="text-info font-weight-bold">Vitalicio</span>';
+                                                break;
+
+                                            case 'nuevo':
+                                                echo '<span class="text-primary font-weight-bold">En gracia</span>';
+                                                break;
+
+                                            case 'socio':
+                                                echo '<span class="text-success font-weight-bold">Sí</span>';
+                                                break;
+
+                                            default:
+                                                echo '<span class="text-danger font-weight-bold">No</span>';
+                                                break;
                                         }
+
                                         ?>
+
                                     </td>
+
+                                    <!-- MESES ADEUDADOS -->
                                     <td>
+
                                         <?php
-
-                                        if ($r['tipo_socio'] == 'vitalicio') {
-
-                                            echo '<span class="text-info font-weight-bold">
-                Vitalicio
-              </span>';
-                                        } else {
-
-                                            $tipo = tipoCobro($r);
-
-                                            if ($tipo == 'EN_GRACIA') {
-
-                                                echo '<span class="text-primary font-weight-bold">
-                    En gracia
-                  </span>';
-                                            } elseif ($tipo == 'PARTICULAR') {
-
-                                                echo '<span class="text-danger font-weight-bold">
-                    No
-                  </span>';
-                                            } else {
-
-                                                echo '<span class="text-success font-weight-bold">
-                    Sí
-                  </span>';
-                                            }
-                                        }
-                                        ?>
-                                    </td>
-                                    <td>
-                                        <?php
-                                        $meses = (int) $r['meses_adeudados'];
 
                                         if ($meses === 999) {
+
                                             echo '<span class="text-danger">Nunca pagó</span>';
                                         } elseif ($meses <= 2) {
+
                                             echo '<span class="text-success">' . $meses . '</span>';
-                                        } elseif ($meses <= 4) {
+                                        } elseif ($meses == 3) {
+
                                             echo '<span class="text-warning">' . $meses . '</span>';
                                         } else {
+
                                             echo '<span class="text-danger">' . $meses . '</span>';
                                         }
+
                                         ?>
+
                                     </td>
+
                                     <td class="text-center">
+
                                         <div class="btn-group">
+
                                             <a href="./?seccion=socios_historial&id=<?= $r['Id'] ?>&nc=<?= $rand ?>"
-                                                class="btn btn-info btn-sm rounded-circle" title="Historial">
+                                                class="btn btn-info btn-sm rounded-circle"
+                                                title="Historial">
                                                 <i class="fa fa-eye"></i>
                                             </a>
+
                                             <a href="./?seccion=afiliados_new&id=<?= $r['Id'] ?>&nc=<?= $rand ?>"
-                                                class="btn btn-success btn-sm rounded-circle" title="Nuevo pago">
+                                                class="btn btn-success btn-sm rounded-circle"
+                                                title="Nuevo pago">
                                                 <i class="fa fa-plus"></i>
                                             </a>
+
                                             <a href="./?seccion=pacientes_edit&id=<?= $r['Id'] ?>&nc=<?= $rand ?>"
-                                                class="btn btn-warning btn-sm rounded-circle" title="Editar">
+                                                class="btn btn-warning btn-sm rounded-circle"
+                                                title="Editar">
                                                 <i class="fas fa-pencil-alt"></i>
                                             </a>
+
                                         </div>
+
                                     </td>
+
                                 </tr>
-                                
+
                             <?php endforeach; ?>
                         </tbody>
                     </table>

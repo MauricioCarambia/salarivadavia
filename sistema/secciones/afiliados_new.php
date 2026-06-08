@@ -2,49 +2,6 @@
 require_once __DIR__ . '/../inc/db.php';
 
 $id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
-$mensaje = '';
-$tipoMensaje = '';
-
-/* =========================
-   GUARDAR PAGO
-========================= */
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
-    $monto = isset($_POST['monto']) ? (float) $_POST['monto'] : 0;
-    $fecha = $_POST['fecha'] ?? '';
-
-    if ($monto > 0 && $fecha) {
-
-        $fecha .= '-01';
-
-       $stmt = $conexion->prepare("
-    INSERT INTO pagos_afiliados (paciente_id, monto, fecha_pago, fecha_correspondiente)
-    SELECT 
-        p.Id,
-        :monto,
-        NOW(),
-        :fecha
-    FROM pacientes p
-    WHERE SUBSTRING_INDEX(SUBSTRING_INDEX(p.nro_afiliado, '/', 1), ' ', 1) = (
-        SELECT SUBSTRING_INDEX(SUBSTRING_INDEX(nro_afiliado, '/', 1), ' ', 1)
-        FROM pacientes
-        WHERE Id = :paciente_id
-    )
-");
-
-       $stmt->execute([
-    ':paciente_id' => $id,
-    ':monto' => $monto,
-    ':fecha' => $fecha
-]);
-
-        $tipoMensaje = 'success';
-        $mensaje = 'Pago cargado correctamente';
-    } else {
-        $tipoMensaje = 'error';
-        $mensaje = 'Datos inválidos';
-    }
-}
 
 /* =========================
    ULTIMO MES PAGADO
@@ -52,7 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $stmt = $conexion->prepare("
     SELECT 
         MONTH(fecha_correspondiente) AS mes,
-        YEAR(fecha_correspondiente) AS anio
+        YEAR(fecha_correspondiente)  AS anio
     FROM pagos_afiliados
     WHERE paciente_id = :id
     ORDER BY fecha_correspondiente DESC
@@ -69,194 +26,539 @@ $stmtPaciente = $conexion->prepare("
         os.obra_social,
         p.*
     FROM pacientes p
-    LEFT JOIN obras_sociales os 
-        ON os.Id = p.obra_social_id
+    LEFT JOIN obras_sociales os ON os.Id = p.obra_social_id
     WHERE p.Id = :id
 ");
 $stmtPaciente->execute([':id' => $id]);
 $paciente = $stmtPaciente->fetch(PDO::FETCH_ASSOC);
 
-/* =========================
-   MESES
-========================= */
 $meses = [
-    'Enero',
-    'Febrero',
-    'Marzo',
-    'Abril',
-    'Mayo',
-    'Junio',
-    'Julio',
-    'Agosto',
-    'Septiembre',
-    'Octubre',
-    'Noviembre',
-    'Diciembre'
+    'Enero','Febrero','Marzo','Abril','Mayo','Junio',
+    'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'
 ];
 ?>
 
-<div class="row">
-    <div class="col-6">
-        <div class="card card-info card-outline">
-            <h1  class="ml-2"> Nuevo pago de afiliado
 
-            </h1>
-            <div class="card-header">
-                <h3 class="card-title">
-                    Último mes:
-                    <?= $ultimoPago
-                        ? $meses[$ultimoPago['mes'] - 1] . ' de ' . $ultimoPago['anio']
-                        : 'Sin pagos registrados'; ?>
-                </h3>
-            </div>
-
-            <div class="card-body">
-
-                <form method="POST">
-
-                    <div class="form-group">
-                        <label>Monto</label>
-                        <div class="input-group">
-                            <div class="input-group-prepend">
-                                <span class="input-group-text">$</span>
-                            </div>
-                            <input type="number" name="monto" step="0.01" min="0" class="form-control" required>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Mes correspondiente</label>
-                        <input type="month" name="fecha" class="form-control" value="<?= date('Y-m') ?>" required>
-                    </div>
-                    
-                    <button type="button" id="btnPagoMasivo" class="btn btn-success float-right ml-2">
-    <i class="fa fa-users"></i> Pago Masivo
-</button>
-<a href="./?seccion=socios" class="btn btn-secondary float-right">
-                        Volver
-                    </a>
-                </form>
-
-            </div>
+<!-- ========== DATOS DEL PACIENTE (arriba, ancho completo) ========== -->
+<div class="card card-info card-outline mb-3">
+    <div class="card-header">
+        <h3 class="card-title"><i class="fas fa-user mr-1"></i> Datos del paciente</h3>
+        <?php if ($ultimoPago): ?>
+        <div class="card-tools">
+            <span class="badge badge-info">
+                Último pago: <?= $meses[$ultimoPago['mes'] - 1] . ' ' . $ultimoPago['anio'] ?>
+            </span>
         </div>
+        <?php else: ?>
+        <div class="card-tools">
+            <span class="badge badge-warning">Sin pagos registrados</span>
+        </div>
+        <?php endif; ?>
     </div>
-
-
-    <!-- ================= PACIENTE ================= -->
-
-    <div class="col-6">
-        <div class="card card-info card-outline">
-
-            <div class="card-header">
-                <h3 class="card-title">Datos del paciente</h3>
+    <div class="card-body py-2">
+        <?php if ($paciente): ?>
+        <div class="row">
+            <div class="col-md-3">
+                <small class="text-muted d-block">Apellido y nombre</small>
+                <strong><?= htmlspecialchars($paciente['apellido']) ?>, <?= htmlspecialchars($paciente['nombre']) ?></strong>
             </div>
-
-            <div class="card-body">
-
-                <?php if ($paciente): ?>
-
-                    <strong>Apellido:</strong> <?= $paciente['apellido'] ?><br>
-                    <strong>Nombre:</strong> <?= $paciente['nombre'] ?><br>
-                    <strong>Domicilio:</strong> <?= $paciente['domicilio'] ?><br>
-                    <strong>Provincia:</strong> <?= $paciente['provincia'] ?><br>
-                    <strong>Localidad:</strong> <?= $paciente['localidad'] ?><br>
-                    <strong>Celular:</strong> <?= $paciente['celular'] ?><br>
-                    <strong>Email:</strong> <?= $paciente['email'] ?><br>
-                    <strong>Documento:</strong> <?= $paciente['tipo_documento'] ?>     <?= $paciente['documento'] ?><br>
-                    <strong>N° socio:</strong> <?= $paciente['nro_afiliado'] ?><br>
-                    <strong>Obra social:</strong> <?= $paciente['obra_social'] ?><br>
-
-                <?php else: ?>
-                    <div class="alert alert-warning">Paciente no encontrado</div>
-                <?php endif; ?>
-
+            <div class="col-md-2">
+                <small class="text-muted d-block">N° socio</small>
+                <strong><?= htmlspecialchars($paciente['nro_afiliado']) ?></strong>
+            </div>
+            <div class="col-md-2">
+                <small class="text-muted d-block">Documento</small>
+                <?= htmlspecialchars($paciente['tipo_documento']) ?> <?= htmlspecialchars($paciente['documento']) ?>
+            </div>
+            <div class="col-md-2">
+                <small class="text-muted d-block">Celular</small>
+                <?= htmlspecialchars($paciente['celular']) ?>
+            </div>
+            <div class="col-md-2">
+                <small class="text-muted d-block">Obra social</small>
+                <?= htmlspecialchars($paciente['obra_social']) ?>
+            </div>
+            <div class="col-md-1">
+                <small class="text-muted d-block">Localidad</small>
+                <?= htmlspecialchars($paciente['localidad']) ?>
             </div>
         </div>
+        <?php else: ?>
+        <div class="alert alert-warning mb-0">Paciente no encontrado</div>
+        <?php endif; ?>
     </div>
 </div>
-<div class="modal fade" id="modalMasivo">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5>Pago masivo por afiliado</h5>
-                <button class="close" data-dismiss="modal">&times;</button>
-            </div>
 
-            <div class="modal-body" id="contenidoMasivo">
-                Cargando...
-            </div>
+<!-- ========== FILA: INPUTS (izq) + CARRITO (der) ========== -->
+<div class="row">
 
-            <div class="modal-footer">
-                <button class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-                <button class="btn btn-success" id="confirmarPagoMasivo">
-                    Confirmar pago
+    <!-- INPUTS -->
+    <div class="col-md-4">
+        <div class="card card-info card-outline">
+            <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-plus-circle mr-1"></i> Agregar mes</h3>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label>Monto</label>
+                    <input type="number" id="monto" class="form-control" min="0" step="0.01" placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label>Mes a abonar</label>
+                    <input type="month" id="fecha" class="form-control" value="<?= date('Y-m') ?>">
+                </div>
+                <button type="button" id="agregarMes" class="btn btn-primary btn-block">
+                    <i class="fas fa-plus mr-1"></i> Agregar al carrito
                 </button>
             </div>
         </div>
     </div>
-</div>
 
-<!-- ================= SWEET ALERT ================= -->
-<?php if ($mensaje): ?>
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            Swal.fire({
-                icon: '<?= $tipoMensaje ?>',
-                title: '<?= $mensaje ?>',
-                timer: 2000,
-                showConfirmButton: false
-            });
-        });
-    </script>
-<?php endif; ?>
-<script>
-    document.getElementById('btnPagoMasivo').addEventListener('click', function() {
+    <!-- CARRITO -->
+    <div class="col-md-8">
+        <div class="card card-info card-outline">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="card-title"><i class="fas fa-shopping-cart mr-1"></i> Carrito de pagos</h3>
+                <span id="carritoCount" class="badge badge-secondary">0 ítems</span>
+            </div>
+            <div class="card-body p-0">
 
-    let pacienteId = <?= $id ?>;
+                <div id="carritoEmpty" class="text-center text-muted py-5">
+                    <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                    <span>Agregá meses para comenzar</span>
+                </div>
 
-    fetch('ajax/preview_pago_masivo.php?paciente_id=' + pacienteId)
-        .then(r => r.json())
-        .then(data => {
-
-            let html = `
-                <p><strong>Se aplicará el pago a ${data.length} afiliados:</strong></p>
-                <table class="table table-sm">
+                <table class="table table-sm table-hover mb-0" id="carritoTable" style="display:none;">
                     <thead>
                         <tr>
-                            <th>Afiliado</th>
-                            <th>N°</th>
+                            <th>Mes / Año</th>
+                            <th class="text-right">Monto</th>
+                            <th width="40"></th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="carritoBody"></tbody>
+                    <tfoot>
+                        <tr class="bg-light">
+                            <th>TOTAL</th>
+                            <th class="text-right" id="totalCarrito">$0,00</th>
+                            <th></th>
+                        </tr>
+                    </tfoot>
+                </table>
+
+            </div>
+            <div class="card-footer text-right">
+                <button type="button" id="guardarPagos" class="btn btn-success" disabled>
+                    <i class="fas fa-save mr-1"></i> Guardar pagos
+                </button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+
+<!-- ================= JS CARRITO + TICKET ================= -->
+<script>
+(function () {
+    const pacienteId = <?= $id ?>;
+    const nroSocio   = <?= json_encode($paciente['nro_afiliado'] ?? '') ?>;
+
+    let carrito = [];
+
+    const meses = [
+        'Enero','Febrero','Marzo','Abril','Mayo','Junio',
+        'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'
+    ];
+
+    /* ---- helpers ---- */
+    function formatMoney(n) {
+        return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function labelFecha(ym) {
+        const [y, m] = ym.split('-');
+        return meses[parseInt(m) - 1] + ' ' + y;
+    }
+
+    function renderCarrito() {
+        const tbody   = document.getElementById('carritoBody');
+        const empty   = document.getElementById('carritoEmpty');
+        const table   = document.getElementById('carritoTable');
+        const total   = document.getElementById('totalCarrito');
+        const count   = document.getElementById('carritoCount');
+        const btnSave = document.getElementById('guardarPagos');
+
+        tbody.innerHTML = '';
+
+        if (carrito.length === 0) {
+            empty.style.display = '';
+            table.style.display = 'none';
+            total.textContent = '$ 0,00';
+            count.textContent = '0 ítems';
+            btnSave.disabled = true;
+            return;
+        }
+
+        empty.style.display = 'none';
+        table.style.display = '';
+        let suma = 0;
+
+        carrito.forEach((item, idx) => {
+            suma += item.monto;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${item.label}</td>
+                <td class="text-right">${formatMoney(item.monto)}</td>
+                <td class="text-center">
+                    <button class="btn btn-xs btn-danger" data-idx="${idx}" title="Quitar">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </td>
             `;
-
-            data.forEach(p => {
-                html += `
-                    <tr>
-                        <td>${p.apellido} ${p.nombre}</td>
-                        <td>${p.nro_afiliado}</td>
-                    </tr>
-                `;
-            });
-
-            html += `</tbody></table>`;
-
-            document.getElementById('contenidoMasivo').innerHTML = html;
-
-            $('#modalMasivo').modal('show');
+            tbody.appendChild(tr);
         });
-});
-document.getElementById('confirmarPagoMasivo').addEventListener('click', function() {
 
-    let form = document.querySelector('form');
-    let formData = new FormData(form);
+        total.textContent = formatMoney(suma);
+        count.textContent = carrito.length + (carrito.length === 1 ? ' ítem' : ' ítems');
+        btnSave.disabled = false;
+    }
 
-    fetch('', { // mismo archivo
-        method: 'POST',
-        body: formData
-    })
-    .then(() => {
-        location.reload();
+    /* ---- agregar al carrito ---- */
+    document.getElementById('agregarMes').addEventListener('click', function () {
+        const monto = parseFloat(document.getElementById('monto').value);
+        const fecha = document.getElementById('fecha').value;
+
+        if (!monto || monto <= 0) {
+            Swal.fire({ icon: 'warning', title: 'Ingresá un monto válido', timer: 1800, showConfirmButton: false });
+            return;
+        }
+        if (!fecha) {
+            Swal.fire({ icon: 'warning', title: 'Seleccioná un mes', timer: 1800, showConfirmButton: false });
+            return;
+        }
+        if (carrito.some(i => i.fecha === fecha)) {
+            Swal.fire({ icon: 'warning', title: 'Ese mes ya está en el carrito', timer: 1800, showConfirmButton: false });
+            return;
+        }
+
+        // Verificar si ya está pagado en la base de datos
+        const btnAgregar = document.getElementById('agregarMes');
+        btnAgregar.disabled = true;
+        btnAgregar.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Verificando...';
+
+        fetch(`ajax/verificar_mes_afiliado.php?paciente_id=<?= $id ?>&fecha=${fecha}`)
+            .then(r => r.json())
+            .then(data => {
+                btnAgregar.disabled = false;
+                btnAgregar.innerHTML = '<i class="fas fa-plus mr-1"></i> Agregar al carrito';
+
+                if (data.pagado) {
+                    const meses_es = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+                    const [anio, mes] = fecha.split('-');
+                    const mesNombre = meses_es[parseInt(mes) - 1] + ' ' + anio;
+
+                    const filas = data.lista.map(p => {
+                        const fechaPago = new Date(p.fecha_pago).toLocaleDateString('es-AR');
+                        return `<tr>
+                            <td style="padding:4px 8px;">${p.apellido}, ${p.nombre}</td>
+                            <td style="padding:4px 8px;color:#666;">${p.nro_afiliado}</td>
+                            <td style="padding:4px 8px;text-align:right;">$${parseFloat(p.monto).toLocaleString('es-AR',{minimumFractionDigits:2})}</td>
+                            <td style="padding:4px 8px;color:#999;font-size:12px;">${fechaPago}</td>
+                        </tr>`;
+                    }).join('');
+
+                    Swal.fire({
+                        icon: 'warning',
+                        title: `${mesNombre} ya fue pagado`,
+                        html: `
+                            <p style="margin-bottom:10px;font-size:14px;">Los siguientes afiliados ya tienen registrado ese mes:</p>
+                            <table style="width:100%;border-collapse:collapse;font-size:13px;text-align:left;">
+                                <thead>
+                                    <tr style="background:#f0f0f0;">
+                                        <th style="padding:5px 8px;">Afiliado</th>
+                                        <th style="padding:5px 8px;">N° socio</th>
+                                        <th style="padding:5px 8px;text-align:right;">Monto</th>
+                                        <th style="padding:5px 8px;">Fecha pago</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${filas}</tbody>
+                            </table>
+                        `,
+                        showCancelButton: true,
+                        confirmButtonText: 'Agregar igual',
+                        cancelButtonText: 'Cancelar',
+                        confirmButtonColor: '#e67e22',
+                        width: 560,
+                    }).then(result => {
+                        if (result.isConfirmed) agregarAlCarrito(fecha, monto);
+                    });
+
+                } else {
+                    agregarAlCarrito(fecha, monto);
+                }
+            })
+            .catch(() => {
+                btnAgregar.disabled = false;
+                btnAgregar.innerHTML = '<i class="fas fa-plus mr-1"></i> Agregar al carrito';
+                agregarAlCarrito(fecha, monto);
+            });
     });
-});
+
+    function agregarAlCarrito(fecha, monto) {
+        carrito.push({ fecha, label: labelFecha(fecha), monto });
+        renderCarrito();
+
+        const [y, m] = fecha.split('-').map(Number);
+        const next = new Date(y, m, 1);
+        const ny = next.getFullYear();
+        const nm = String(next.getMonth() + 1).padStart(2, '0');
+        document.getElementById('fecha').value = `${ny}-${nm}`;
+        document.getElementById('monto').value = '';
+        document.getElementById('monto').focus();
+    }
+
+    /* ---- borrar del carrito ---- */
+    document.getElementById('carritoBody').addEventListener('click', function (e) {
+        const btn = e.target.closest('button[data-idx]');
+        if (!btn) return;
+        carrito.splice(parseInt(btn.dataset.idx), 1);
+        renderCarrito();
+    });
+
+    /* ====================================================
+       TICKET TÉRMICO
+    ==================================================== */
+    async function imprimirTicketAfiliado(afiliados, items, total) {
+        try {
+            if (!qz.websocket.isActive()) {
+                await qz.websocket.connect();
+            }
+        } catch (connErr) {
+            console.warn('QZ Tray no disponible, no se imprimirá el ticket:', connErr);
+            Swal.fire({
+                icon: 'warning',
+                title: 'Impresora no disponible',
+                text: 'El pago se guardó correctamente pero no se pudo conectar con QZ Tray para imprimir.',
+                confirmButtonText: 'Aceptar'
+            });
+            return;
+        }
+
+        try {
+            const config = qz.configs.create("POS-80C", { encoding: "CP437" });
+
+            const LINE = 48;
+
+            function center(txt) { return "\x1B\x61\x01" + txt + "\n"; }
+            function left(txt)   { return "\x1B\x61\x00" + txt + "\n"; }
+            function right(txt)  { return "\x1B\x61\x02" + txt + "\n"; }
+            function sep()       { return "------------------------------------------------\n"; }
+
+            function linea(label, valor) {
+                const izq = label.substring(0, 28);
+                const der = valor;
+                const esp = Math.max(1, LINE - izq.length - der.length);
+                return izq + " ".repeat(esp) + der;
+            }
+
+            const ahora = new Date();
+            const fecha = ahora.toLocaleDateString("es-AR");
+            const hora  = ahora.toLocaleTimeString("es-AR");
+
+            let c = [];
+
+            // Encabezado clínica
+            c.push("\x1B\x45\x01");
+            c.push("\x1D\x21\x11");
+            c.push(center("SALA RIVADAVIA"));
+            c.push("\x1D\x21\x00");
+            c.push("\x1B\x45\x00");
+            c.push("\n");
+
+            c.push(center("RECIBO DE PAGO DE AFILIADO"));
+            c.push(sep());
+
+            c.push(center("CUIT: 30-54589575-3"));
+            c.push(center("IVA RESPONSABLE INSCRIPTO"));
+            c.push("\n");
+            c.push(center("AV. EVA PERON 695 - TEMPERLEY (1834)"));
+            c.push(center("TEL: 3989-4325 / 3991-2183"));
+            c.push(sep());
+
+            // Fecha y hora
+            c.push(left("FECHA: " + fecha));
+            c.push(left("HORA : " + hora));
+            c.push("\n");
+
+            // Número de socio
+            c.push(center("N° SOCIO: " + nroSocio));
+            c.push(sep());
+
+            // Afiliados cubiertos
+            c.push(left("AFILIADOS:"));
+            c.push("\n");
+            afiliados.forEach(af => {
+                c.push(left("  " + af.apellido + ", " + af.nombre));
+            });
+            c.push(sep());
+
+            // Meses abonados
+            c.push(left("MESES ABONADOS:"));
+            c.push("\n");
+            items.forEach(item => {
+                const precio = parseFloat(item.monto).toLocaleString("es-AR", {
+                    minimumFractionDigits: 2, maximumFractionDigits: 2
+                });
+                c.push(left(linea(item.label, "$ " + precio)));
+            });
+            c.push(sep());
+
+            // Total
+            c.push("\x1B\x45\x01");
+            c.push("\x1D\x21\x11");
+            c.push(right("$ " + parseFloat(total).toLocaleString("es-AR", {
+                minimumFractionDigits: 2, maximumFractionDigits: 2
+            })));
+            c.push("\x1D\x21\x00");
+            c.push("\x1B\x45\x00");
+            c.push(center("TOTAL"));
+            c.push(sep());
+
+            // Pie
+            c.push("\n");
+            c.push(center("¡GRACIAS POR ELEGIRNOS!"));
+            c.push("\n");
+            c.push(sep());
+            c.push(center("DOCUMENTO NO VALIDO COMO FACTURA"));
+            c.push("\n\n\n\n");
+
+            // Corte
+            c.push("\x1D\x56\x00");
+
+            await qz.print(config, c);
+
+        } catch (printErr) {
+            console.error('Error al imprimir:', printErr);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error al imprimir',
+                text: printErr.toString()
+            });
+        }
+    }
+
+    /* ---- guardar pagos ---- */
+    document.getElementById('guardarPagos').addEventListener('click', function () {
+        if (carrito.length === 0) return;
+
+        const totalCarrito = carrito.reduce((s, i) => s + i.monto, 0);
+
+        // Traer afiliados del mismo nro de socio antes de mostrar el Swal
+        fetch('ajax/preview_pago_masivo.php?paciente_id=<?= $id ?>')
+            .then(r => r.json())
+            .catch(() => [])
+            .then(afiliados => {
+
+                const filasMeses = carrito.map(item => `
+                    <tr>
+                        <td style="text-align:left; padding:4px 8px;">${item.label}</td>
+                        <td style="text-align:right; padding:4px 8px;">${formatMoney(item.monto)}</td>
+                    </tr>`
+                ).join('');
+
+                const filasAfiliados = afiliados.length
+                    ? afiliados.map(af => `
+                        <tr>
+                            <td style="padding:3px 8px;">${af.apellido}, ${af.nombre}</td>
+                            <td style="padding:3px 8px; color:#666; font-size:12px;">${af.nro_afiliado}</td>
+                        </tr>`).join('')
+                    : '<tr><td colspan="2" style="padding:4px 8px; color:#999;">Sin afiliados encontrados</td></tr>';
+
+                const previewHtml = `
+                    <div style="font-size:14px; text-align:left;">
+                        <p style="font-weight:600; margin-bottom:4px;">Afiliados alcanzados:</p>
+                        <table style="width:100%; border-collapse:collapse; margin-bottom:12px;">
+                            <thead>
+                                <tr style="background:#f0f0f0;">
+                                    <th style="text-align:left; padding:5px 8px;">Apellido y nombre</th>
+                                    <th style="text-align:left; padding:5px 8px;">N° socio</th>
+                                </tr>
+                            </thead>
+                            <tbody>${filasAfiliados}</tbody>
+                        </table>
+                        <p style="font-weight:600; margin-bottom:4px;">Meses a cobrar:</p>
+                        <table style="width:100%; border-collapse:collapse;">
+                            <thead>
+                                <tr style="background:#f0f0f0;">
+                                    <th style="text-align:left; padding:5px 8px;">Mes</th>
+                                    <th style="text-align:right; padding:5px 8px;">Monto</th>
+                                </tr>
+                            </thead>
+                            <tbody>${filasMeses}</tbody>
+                            <tfoot>
+                                <tr style="border-top:2px solid #333; font-weight:bold;">
+                                    <td style="padding:6px 8px;">TOTAL</td>
+                                    <td style="text-align:right; padding:6px 8px;">${formatMoney(totalCarrito)}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                `;
+
+                Swal.fire({
+                    title: 'Confirmar pago',
+                    html: previewHtml,
+                    icon: 'question',
+                    showCancelButton: true,
+                    showDenyButton: true,
+                    confirmButtonText: '<i class="fas fa-print"></i> Guardar e imprimir',
+                    denyButtonText: '<i class="fas fa-save"></i> Guardar sin imprimir',
+                    cancelButtonText: 'Cancelar',
+                    confirmButtonColor: '#28a745',
+                    denyButtonColor: '#17a2b8',
+                    width: 520,
+                }).then(result => {
+            if (result.isDismissed) return;
+
+            const debeImprimir = result.isConfirmed; // true = imprimir, false = no imprimir
+
+            fetch('ajax/guardar_pagos_afiliado.php?paciente_id=<?= $id ?>', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: carrito })
+            })
+            .then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(async data => {
+                if (data.ok) {
+                    if (debeImprimir) {
+                        await imprimirTicketAfiliado(data.afiliados || [], carrito, totalCarrito);
+                    }
+                    Swal.fire({
+                        icon: 'success',
+                        title: data.msg,
+                        timer: 2000,
+                        showConfirmButton: false
+                    }).then(() => location.reload());
+                } else {
+                    Swal.fire({ icon: 'error', title: 'Error', text: data.msg });
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error de conexión',
+                    text: 'No se pudo comunicar con el servidor. Verificá tu conexión e intentá de nuevo.'
+                });
+            });
+            });  // cierre .then(afiliados =>
+        });  // cierre fetch
+    });
+
+    renderCarrito();
+})();
 </script>

@@ -369,7 +369,7 @@ $estudios = $pdo->query("SELECT DISTINCT estudio FROM cardiologia_sur ORDER BY e
             paciente: fila.find('td:eq(2)').text(),
             documento: fila.find('td:eq(3)').text(),
             celular: fila.find('td:eq(4)').text(),
-            estudio: fila.find('td:eq(5)').text(),
+            estudio: fila.find('td:eq(8)').text(),
             valor: parseFloat(fila.data('valor')) || 0
         };
 

@@ -26,35 +26,35 @@ try {
     // ======================
     // 🆕 SI NO EXISTE → CREAR SOLO BASE
     // ======================
-    if (!$existe) {
+   if (!$existe) {
+    // Tomar saldo del día anterior como base
+    $stmt = $pdo->prepare("
+        SELECT
+            (monto_inicial + total_cajas - egresos_caja) AS saldo_caja,
+            (total_fondos - egresos_fondos)              AS saldo_fondo
+        FROM resumen_financiero_diario
+        WHERE fecha < ?
+        ORDER BY fecha DESC
+        LIMIT 1
+    ");
+    $stmt->execute([$hoy]);
+    $anterior = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        $stmt = $pdo->prepare("
-            INSERT INTO resumen_financiero_diario
-            (fecha, monto_inicial, total_cajas, total_fondos, egresos_caja, egresos_fondos)
-            VALUES (?, ?, 0, 0, 0, 0)
-        ");
+    $stmt = $pdo->prepare("
+        INSERT INTO resumen_financiero_diario
+        (fecha, monto_inicial, total_cajas, total_fondos, egresos_caja, egresos_fondos)
+        VALUES (?, ?, 0, 0, 0, 0)
+    ");
+    $stmt->execute([$hoy, $montoInicial]);
 
-        $stmt->execute([
-            $hoy,
-            $montoInicial
-        ]);
-
-    } else {
-
-        // ======================
-        // 🔁 SOLO ACTUALIZAR ARRANQUE
-        // ======================
-        $stmt = $pdo->prepare("
-            UPDATE resumen_financiero_diario
-            SET monto_inicial = ?
-            WHERE fecha = ?
-        ");
-
-        $stmt->execute([
-            $montoInicial,
-            $hoy
-        ]);
-    }
+} else {
+    $stmt = $pdo->prepare("
+        UPDATE resumen_financiero_diario
+        SET monto_inicial = ?
+        WHERE fecha = ?
+    ");
+    $stmt->execute([$montoInicial, $hoy]);
+}
 
     $pdo->commit();
 

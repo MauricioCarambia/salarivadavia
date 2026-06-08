@@ -22,7 +22,7 @@ class CajaService
     }
 
     /* =========================================
-        📅 WHERE BASE (IGUAL AL TUYO)
+        📅 WHERE BASE
     ========================================= */
     private function buildWhere(array $filtros): array
     {
@@ -51,7 +51,7 @@ class CajaService
     }
 
     /* =========================================
-        💰 TOTALES (TU QUERY ORIGINAL)
+        💰 TOTALES
     ========================================= */
     public function getTotales(array $filtros): array
     {
@@ -60,14 +60,35 @@ class CajaService
             [$where, $params] = $this->buildWhere($filtros);
 
             $sql = "
-            SELECT 
-                SUM(CASE WHEN c.tipo='ingreso' AND LOWER(c.medio_pago)='efectivo' THEN c.total ELSE 0 END) AS ing_efectivo,
-                SUM(CASE WHEN c.tipo='ingreso' AND transferencia_tipo = 'clinica' AND LOWER(c.medio_pago)='transferencia' THEN c.total ELSE 0 END) AS ing_transferencia,
-                SUM(CASE WHEN c.tipo='egreso' AND LOWER(c.medio_pago)='efectivo' THEN c.total ELSE 0 END) AS egr_efectivo,
-                SUM(CASE WHEN c.tipo='egreso' AND LOWER(c.medio_pago)='transferencia' THEN c.total ELSE 0 END) AS egr_transferencia
-            FROM cobros c
-            INNER JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
-            $where
+                SELECT 
+                    SUM(CASE 
+                        WHEN c.tipo = 'ingreso' 
+                         AND LOWER(c.medio_pago) = 'efectivo' 
+                        THEN c.total ELSE 0 
+                    END) AS ing_efectivo,
+
+                    SUM(CASE 
+                        WHEN c.tipo = 'ingreso' 
+                         AND c.transferencia_tipo = 'clinica' 
+                         AND LOWER(c.medio_pago) = 'transferencia' 
+                        THEN c.total ELSE 0 
+                    END) AS ing_transferencia,
+
+                    SUM(CASE 
+                        WHEN c.tipo = 'egreso' 
+                         AND LOWER(c.medio_pago) = 'efectivo' 
+                        THEN c.total ELSE 0 
+                    END) AS egr_efectivo,
+
+                    SUM(CASE 
+                        WHEN c.tipo = 'egreso' 
+                         AND LOWER(c.medio_pago) = 'transferencia' 
+                        THEN c.total ELSE 0 
+                    END) AS egr_transferencia
+
+                FROM cobros c
+                INNER JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
+                $where
             ";
 
             $stmt = $this->pdo->prepare($sql);
@@ -78,33 +99,9 @@ class CajaService
     }
 
     /* =========================================
-        💰 GANANCIA CLÍNICA (FONDO)
+        💰 GANANCIA CLÍNICA EFECTIVO
+        FIX: eliminado doble filtro estado
     ========================================= */
-    public function getGananciaClinica(array $filtros): float
-    {
-        return $this->remember(__FUNCTION__ . md5(json_encode($filtros)), function () use ($filtros) {
-
-            [$where, $params] = $this->buildWhere($filtros);
-
-            $sql = "
-        SELECT COALESCE(SUM(cr.monto),0)
-        FROM cobros_reparto cr
-        INNER JOIN cobros c ON c.id = cr.cobro_id
-        INNER JOIN destinos_reparto dr ON dr.id = cr.destino_id
-        INNER JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
-        $where
-        AND dr.categoria = 'fondo'
-        AND dr.tipo = 'ingreso'
-        AND LOWER(c.medio_pago) = 'efectivo' -- 🔥 CLAVE
-        AND c.estado = 'activo'
-        ";
-
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->execute($params);
-
-            return (float)$stmt->fetchColumn();
-        });
-    }
     public function getGananciaClinicaEfectivo(array $filtros): float
     {
         return $this->remember(__FUNCTION__ . md5(json_encode($filtros)), function () use ($filtros) {
@@ -112,43 +109,16 @@ class CajaService
             [$where, $params] = $this->buildWhere($filtros);
 
             $sql = "
-        SELECT COALESCE(SUM(cr.monto),0)
-        FROM cobros_reparto cr
-        INNER JOIN cobros c ON c.id = cr.cobro_id
-        INNER JOIN destinos_reparto dr ON dr.id = cr.destino_id
-        INNER JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
-        $where
-        AND dr.categoria = 'fondo'
-        AND dr.tipo = 'ingreso'
-        AND LOWER(c.medio_pago) = 'efectivo'
-        AND c.estado = 'activo'
-        ";
-
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->execute($params);
-
-            return (float)$stmt->fetchColumn();
-        });
-    }
-    public function getGananciaClinicaTransferencia(array $filtros): float
-    {
-        return $this->remember(__FUNCTION__ . md5(json_encode($filtros)), function () use ($filtros) {
-
-            [$where, $params] = $this->buildWhere($filtros);
-
-            $sql = "
-        SELECT COALESCE(SUM(cr.monto),0)
-        FROM cobros_reparto cr
-        INNER JOIN cobros c ON c.id = cr.cobro_id
-        INNER JOIN destinos_reparto dr ON dr.id = cr.destino_id
-        INNER JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
-        $where
-        AND dr.categoria = 'fondo'
-        AND dr.tipo = 'ingreso'
-        AND LOWER(c.medio_pago) = 'transferencia'
-        AND c.transferencia_tipo != 'profesional' -- 🔥 CLAVE
-        AND c.estado = 'activo'
-        ";
+                SELECT COALESCE(SUM(cr.monto), 0)
+                FROM cobros_reparto cr
+                INNER JOIN cobros c             ON c.id    = cr.cobro_id
+                INNER JOIN destinos_reparto dr  ON dr.id   = cr.destino_id
+                INNER JOIN caja_sesion cs       ON cs.id   = c.caja_sesion_id
+                $where
+                AND dr.categoria       = 'fondo'
+                AND dr.tipo            = 'ingreso'
+                AND LOWER(c.medio_pago) = 'efectivo'
+            ";
 
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute($params);
@@ -158,7 +128,37 @@ class CajaService
     }
 
     /* =========================================
-        📊 DESTINOS (IGUAL)
+        💰 GANANCIA CLÍNICA TRANSFERENCIA
+        FIX: eliminado doble filtro estado
+    ========================================= */
+    public function getGananciaClinicaTransferencia(array $filtros): float
+    {
+        return $this->remember(__FUNCTION__ . md5(json_encode($filtros)), function () use ($filtros) {
+
+            [$where, $params] = $this->buildWhere($filtros);
+
+            $sql = "
+                SELECT COALESCE(SUM(cr.monto), 0)
+                FROM cobros_reparto cr
+                INNER JOIN cobros c             ON c.id    = cr.cobro_id
+                INNER JOIN destinos_reparto dr  ON dr.id   = cr.destino_id
+                INNER JOIN caja_sesion cs       ON cs.id   = c.caja_sesion_id
+                $where
+                AND dr.categoria            = 'fondo'
+                AND dr.tipo                 = 'ingreso'
+                AND LOWER(c.medio_pago)     = 'transferencia'
+                AND c.transferencia_tipo   != 'profesional'
+            ";
+
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+
+            return (float)$stmt->fetchColumn();
+        });
+    }
+
+    /* =========================================
+        📊 DESTINOS
     ========================================= */
     public function getDestinos(array $filtros): array
     {
@@ -167,74 +167,49 @@ class CajaService
             [$where, $params] = $this->buildWhere($filtros);
 
             $sql = "
-        SELECT 
-            dr.nombre,
-            dr.tipo,
-            dr.categoria,
+                SELECT 
+                    dr.nombre,
+                    dr.tipo,
+                    dr.categoria,
 
-            /* =========================
-               💵 EFECTIVO
-            ========================= */
-            SUM(CASE 
-                WHEN LOWER(c.medio_pago) = 'efectivo' 
-                THEN 
-                    CASE 
-                        WHEN dr.tipo = 'egreso' 
-                        THEN -cr.monto
-                        ELSE cr.monto 
-                    END
-                ELSE 0 
-            END) AS total_efectivo,
+                    SUM(CASE 
+                        WHEN LOWER(c.medio_pago) = 'efectivo' 
+                        THEN (CASE WHEN dr.tipo = 'egreso' THEN -cr.monto ELSE cr.monto END)
+                        ELSE 0 
+                    END) AS total_efectivo,
 
-            /* =========================
-               🏦 TRANSFERENCIAS
-            ========================= */
-            SUM(CASE 
-                WHEN LOWER(c.medio_pago) = 'transferencia' 
-                THEN 
-                    CASE 
-                        -- ❌ NO RESTAR cuando es pago directo a profesional
-                        WHEN dr.tipo = 'egreso' 
+                    SUM(CASE 
+                        WHEN LOWER(c.medio_pago) = 'transferencia' 
+                        THEN (
+                            CASE 
+                                WHEN dr.tipo = 'egreso' AND c.transferencia_tipo = 'profesional' THEN 0
+                                WHEN dr.tipo = 'egreso' THEN -cr.monto
+                                ELSE cr.monto 
+                            END
+                        )
+                        ELSE 0 
+                    END) AS total_transferencia,
+
+                    SUM(
+                        CASE 
+                            WHEN dr.tipo = 'egreso' 
+                             AND LOWER(c.medio_pago) = 'transferencia'
                              AND c.transferencia_tipo = 'profesional'
-                        THEN 0
+                            THEN 0
+                            WHEN dr.tipo = 'egreso' THEN -cr.monto
+                            ELSE cr.monto
+                        END
+                    ) AS total_general
 
-                        -- ✅ RESTAR solo egresos reales de clínica
-                        WHEN dr.tipo = 'egreso' 
-                        THEN -cr.monto
+                FROM cobros_reparto cr
+                INNER JOIN destinos_reparto dr ON dr.id   = cr.destino_id
+                INNER JOIN cobros c             ON c.id   = cr.cobro_id
+                INNER JOIN caja_sesion cs       ON cs.id  = c.caja_sesion_id
 
-                        ELSE cr.monto 
-                    END
-                ELSE 0 
-            END) AS total_transferencia,
+                $where
 
-            /* =========================
-               📊 TOTAL GENERAL
-            ========================= */
-            SUM(
-                CASE 
-                    -- ❌ excluir egreso falso (transferencia directa)
-                    WHEN dr.tipo = 'egreso' 
-                         AND LOWER(c.medio_pago) = 'transferencia'
-                         AND c.transferencia_tipo = 'profesional'
-                    THEN 0
-
-                    -- ✅ egreso real
-                    WHEN dr.tipo = 'egreso'
-                    THEN -cr.monto
-
-                    ELSE cr.monto
-                END
-            ) AS total_general
-
-        FROM cobros_reparto cr
-        INNER JOIN destinos_reparto dr ON dr.id = cr.destino_id
-        INNER JOIN cobros c ON c.id = cr.cobro_id
-        INNER JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
-
-        $where
-
-        GROUP BY dr.id
-        ";
+                GROUP BY dr.id
+            ";
 
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute($params);
@@ -244,7 +219,10 @@ class CajaService
     }
 
     /* =========================================
-        🔴 EGRESOS PROFESIONALES
+        🔴 EGRESOS PROFESIONALES EFECTIVO
+        FIX: reemplazado turno_id IS NOT NULL
+             por dr.categoria = 'profesional'
+             para incluir movimientos manuales
     ========================================= */
     public function getEgresosProfesionalesEfectivo(array $filtros): float
     {
@@ -253,16 +231,16 @@ class CajaService
             [$where, $params] = $this->buildWhere($filtros);
 
             $sql = "
-        SELECT COALESCE(SUM(cr.monto),0)
-        FROM cobros_reparto cr
-        INNER JOIN cobros c ON c.id = cr.cobro_id
-        INNER JOIN destinos_reparto dr ON dr.id = cr.destino_id
-        INNER JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
-        $where
-        AND LOWER(c.medio_pago) = 'efectivo'
-        AND c.turno_id IS NOT NULL
-        AND dr.tipo = 'egreso'
-        ";
+                SELECT COALESCE(SUM(cr.monto), 0)
+                FROM cobros_reparto cr
+                INNER JOIN cobros c             ON c.id   = cr.cobro_id
+                INNER JOIN destinos_reparto dr  ON dr.id  = cr.destino_id
+                INNER JOIN caja_sesion cs       ON cs.id  = c.caja_sesion_id
+                $where
+                AND LOWER(c.medio_pago) = 'efectivo'
+                AND dr.categoria        = 'profesional'
+                AND dr.tipo             = 'egreso'
+            ";
 
             $stmt = $this->pdo->prepare($sql);
             $stmt->execute($params);
@@ -272,7 +250,7 @@ class CajaService
     }
 
     /* =========================================
-        💳 PROFESIONALES A PAGAR
+        💳 PROFESIONALES A PAGAR (TRANSFERENCIA CLÍNICA)
     ========================================= */
     public function getProfesionalesAPagar(array $filtros): float
     {
@@ -281,15 +259,15 @@ class CajaService
             [$where, $params] = $this->buildWhere($filtros);
 
             $sql = "
-            SELECT COALESCE(SUM(cr.monto),0)
-            FROM cobros_reparto cr
-            INNER JOIN cobros c ON c.id = cr.cobro_id
-            INNER JOIN destinos_reparto dr ON dr.id = cr.destino_id
-            INNER JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
-            $where
-            AND LOWER(c.medio_pago) = 'transferencia'
-            AND c.transferencia_tipo = 'clinica'
-            AND dr.tipo = 'egreso'
+                SELECT COALESCE(SUM(cr.monto), 0)
+                FROM cobros_reparto cr
+                INNER JOIN cobros c             ON c.id   = cr.cobro_id
+                INNER JOIN destinos_reparto dr  ON dr.id  = cr.destino_id
+                INNER JOIN caja_sesion cs       ON cs.id  = c.caja_sesion_id
+                $where
+                AND LOWER(c.medio_pago)     = 'transferencia'
+                AND c.transferencia_tipo    = 'clinica'
+                AND dr.tipo                 = 'egreso'
             ";
 
             $stmt = $this->pdo->prepare($sql);
@@ -300,7 +278,7 @@ class CajaService
     }
 
     /* =========================================
-        💸 COMISIÓN CLÍNICA
+        💸 COMISIÓN CLÍNICA (TRANSFERENCIA PROFESIONAL)
     ========================================= */
     public function getComisionClinicaTransferProfesional(array $filtros): float
     {
@@ -309,15 +287,15 @@ class CajaService
             [$where, $params] = $this->buildWhere($filtros);
 
             $sql = "
-            SELECT COALESCE(SUM(cr.monto),0)
-            FROM cobros_reparto cr
-            INNER JOIN cobros c ON c.id = cr.cobro_id
-            INNER JOIN destinos_reparto dr ON dr.id = cr.destino_id
-            INNER JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
-            $where
-            AND LOWER(c.medio_pago) = 'transferencia'
-            AND c.transferencia_tipo = 'profesional'
-            AND dr.categoria = 'caja'
+                SELECT COALESCE(SUM(cr.monto), 0)
+                FROM cobros_reparto cr
+                INNER JOIN cobros c             ON c.id   = cr.cobro_id
+                INNER JOIN destinos_reparto dr  ON dr.id  = cr.destino_id
+                INNER JOIN caja_sesion cs       ON cs.id  = c.caja_sesion_id
+                $where
+                AND LOWER(c.medio_pago)     = 'transferencia'
+                AND c.transferencia_tipo    = 'profesional'
+                AND dr.categoria            = 'caja'
             ";
 
             $stmt = $this->pdo->prepare($sql);
@@ -328,7 +306,99 @@ class CajaService
     }
 
     /* =========================================
+        💸 DEUDA RECUPERADA DE PROFESIONAL
+        FIX: eliminado doble filtro estado
+    ========================================= */
+    public function getDeudaRecuperadaProfesional(array $filtros): float
+    {
+        return $this->remember(__FUNCTION__ . md5(json_encode($filtros)), function () use ($filtros) {
+
+            [$where, $params] = $this->buildWhere($filtros);
+
+            $sql = "
+                SELECT COALESCE(SUM(c.deuda_clinica), 0)
+                FROM cobros c
+                INNER JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
+                $where
+                AND LOWER(c.medio_pago)     = 'transferencia'
+                AND c.transferencia_tipo    = 'profesional'
+                AND c.deuda_clinica         > 0
+            ";
+
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+
+            return (float)$stmt->fetchColumn();
+        });
+    }
+
+    /* =========================================
+        👨‍⚕️ DEUDAS POR PROFESIONAL
+    ========================================= */
+    public function getDeudasProfesionales(array $filtros): array
+    {
+        return $this->remember(__FUNCTION__ . md5(json_encode($filtros)), function () use ($filtros) {
+
+            [$where, $params] = $this->buildWhere($filtros);
+
+            $sql = "
+                SELECT 
+                    p.Id,
+                    p.nombre,
+                    p.apellido,
+                    COALESCE(SUM(c.deuda_clinica), 0) AS deuda_total
+                FROM cobros c
+                INNER JOIN profesionales p  ON p.Id   = c.profesional_id
+                INNER JOIN caja_sesion cs   ON cs.id  = c.caja_sesion_id
+                $where
+                AND LOWER(c.medio_pago)     = 'transferencia'
+                AND c.transferencia_tipo    = 'profesional'
+                AND c.deuda_clinica         > 0
+                GROUP BY p.Id
+                HAVING deuda_total > 0
+            ";
+
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        });
+    }
+
+    /* =========================================
+        🏦 TRANSFERENCIAS POR EMPLEADO
+    ========================================= */
+    public function getTransferenciasEmpleados(array $filtros): array
+    {
+        return $this->remember(__FUNCTION__ . md5(json_encode($filtros)), function () use ($filtros) {
+
+            [$where, $params] = $this->buildWhere($filtros);
+
+            $sql = "
+                SELECT 
+                    e.id,
+                    e.nombre,
+                    SUM(c.total) AS total_transferencias
+                FROM cobros c
+                INNER JOIN empleados e      ON e.id   = c.empleado_destino_id
+                INNER JOIN caja_sesion cs   ON cs.id  = c.caja_sesion_id
+                $where
+                AND LOWER(c.medio_pago)         = 'transferencia'
+                AND c.empleado_destino_id IS NOT NULL
+                GROUP BY e.id
+                HAVING total_transferencias > 0
+            ";
+
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        });
+    }
+
+    /* =========================================
         📋 TURNOS
+        FIX: pr.Id y pa.Id (mayúscula)
     ========================================= */
     public function getTurnos(array $filtros): array
     {
@@ -337,30 +407,34 @@ class CajaService
             [$where, $params] = $this->buildWhere($filtros);
 
             $sql = "
-            SELECT 
-                c.id as cobro_id,
-                c.numero_completo,
-                c.total as monto,
-                c.fecha,
-                c.medio_pago,
-                c.estado,
-                c.tipo,
-                c.transferencia_tipo,
-                pr.nombre as prof_nom,
-                pr.apellido as prof_ape,
-                ed.nombre as emp_dest,
-                pa.nombre as pac_nom,
-pa.apellido as pac_ape,
-                GROUP_CONCAT(cd.nombre SEPARATOR ', ') AS practica_nombre
-            FROM cobros c
-            INNER JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
-            LEFT JOIN cobros_detalle cd ON cd.cobro_id = c.id
-            LEFT JOIN profesionales pr ON pr.id = c.profesional_id
-            LEFT JOIN empleados ed ON ed.id = c.empleado_destino_id
-            LEFT JOIN pacientes pa ON pa.id = c.paciente_id
-            $where AND c.turno_id IS NOT NULL
-            GROUP BY c.id
-            ORDER BY c.fecha DESC
+                SELECT 
+                    c.id              AS cobro_id,
+                    c.numero_completo,
+                    c.total           AS monto,
+                    c.fecha,
+                    c.medio_pago,
+                    c.estado,
+                    c.tipo,
+                    c.transferencia_tipo,
+                    pr.nombre         AS prof_nom,
+                    pr.apellido       AS prof_ape,
+                    ed.nombre         AS emp_dest,
+                    pa.nombre         AS pac_nom,
+                    pa.apellido       AS pac_ape,
+                    pr_dest.nombre   AS prof_dest_nom,
+pr_dest.apellido AS prof_dest_ape,
+                    GROUP_CONCAT(cd.nombre SEPARATOR ', ') AS practica_nombre
+                FROM cobros c
+                INNER JOIN caja_sesion cs       ON cs.id  = c.caja_sesion_id
+                LEFT JOIN cobros_detalle cd     ON cd.cobro_id    = c.id
+                LEFT JOIN profesionales pr      ON pr.Id          = c.profesional_id
+                LEFT JOIN empleados ed          ON ed.id          = c.empleado_destino_id
+                LEFT JOIN pacientes pa          ON pa.Id          = c.paciente_id
+                LEFT JOIN profesionales pr_dest
+    ON pr_dest.Id = c.profesional_destino_id
+                $where AND c.turno_id IS NOT NULL
+                GROUP BY c.id
+                ORDER BY c.fecha DESC
             ";
 
             $stmt = $this->pdo->prepare($sql);
@@ -372,6 +446,7 @@ pa.apellido as pac_ape,
 
     /* =========================================
         📋 EXTERNOS
+        FIX: pa.Id (mayúscula)
     ========================================= */
     public function getExternos(array $filtros): array
     {
@@ -380,29 +455,32 @@ pa.apellido as pac_ape,
             [$where, $params] = $this->buildWhere($filtros);
 
             $sql = "
-            SELECT 
-                c.id as cobro_id,
-                c.numero_completo,
-                c.total as monto,
-                c.fecha,
-                c.medio_pago,
-                c.estado,
-                c.tipo,
-                c.concepto,
-                c.transferencia_tipo,
-                ed.nombre as emp_dest,
-                pa.nombre as pac_nom,
-pa.apellido as pac_ape,
-                GROUP_CONCAT(dr.nombre SEPARATOR ', ') as destinos
-            FROM cobros c
-            INNER JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
-            LEFT JOIN empleados ed ON ed.id = c.empleado_destino_id
-            LEFT JOIN cobros_reparto cr ON cr.cobro_id = c.id
-            LEFT JOIN destinos_reparto dr ON dr.id = cr.destino_id
-            LEFT JOIN pacientes pa ON pa.id = c.paciente_id
-            $where AND c.turno_id IS NULL
-            GROUP BY c.id
-            ORDER BY c.fecha DESC
+                SELECT 
+                    c.id              AS cobro_id,
+                    c.numero_completo,
+                    c.total           AS monto,
+                    c.fecha,
+                    c.medio_pago,
+                    c.estado,
+                    c.tipo,
+                    c.concepto,
+                    c.transferencia_tipo,
+                    ed.nombre         AS emp_dest,
+                    pa.nombre         AS pac_nom,
+                    pa.apellido       AS pac_ape,
+                    pr.nombre   AS prof_nom,
+pr.apellido AS prof_ape,
+                    GROUP_CONCAT(dr.nombre SEPARATOR ', ') AS destinos
+                FROM cobros c
+                INNER JOIN caja_sesion cs       ON cs.id  = c.caja_sesion_id
+                LEFT JOIN empleados ed          ON ed.id          = c.empleado_destino_id
+                LEFT JOIN cobros_reparto cr     ON cr.cobro_id    = c.id
+                LEFT JOIN destinos_reparto dr   ON dr.id          = cr.destino_id
+                LEFT JOIN pacientes pa          ON pa.Id          = c.paciente_id
+                LEFT JOIN profesionales pr ON pr.Id = c.profesional_id
+                $where AND c.turno_id IS NULL
+                GROUP BY c.id
+                ORDER BY c.fecha DESC
             ";
 
             $stmt = $this->pdo->prepare($sql);
@@ -411,134 +489,89 @@ pa.apellido as pac_ape,
             return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         });
     }
-    public function getDeudaRecuperadaProfesional(array $filtros): float
-    {
-        return $this->remember(__FUNCTION__ . md5(json_encode($filtros)), function () use ($filtros) {
 
-            [$where, $params] = $this->buildWhere($filtros);
-
-            $sql = "
-        SELECT COALESCE(SUM(c.deuda_clinica),0)
-        FROM cobros c
-        INNER JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
-        $where
-        AND LOWER(c.medio_pago) = 'transferencia'
-        AND c.transferencia_tipo = 'profesional'
-        AND c.deuda_clinica > 0
-        AND c.estado = 'activo'
-        ";
-
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->execute($params);
-
-            return (float)$stmt->fetchColumn();
-        });
-    }
-    public function getDeudasProfesionales(array $filtros): array
-    {
-        return $this->remember(__FUNCTION__ . md5(json_encode($filtros)), function () use ($filtros) {
-
-            [$where, $params] = $this->buildWhere($filtros);
-
-            $sql = "
-        SELECT 
-            p.id,
-            p.nombre,
-            p.apellido,
-            COALESCE(SUM(c.deuda_clinica),0) as deuda_total
-        FROM cobros c
-        INNER JOIN profesionales p ON p.id = c.profesional_id
-        INNER JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
-        $where
-        AND LOWER(c.medio_pago) = 'transferencia'
-        AND c.transferencia_tipo = 'profesional'
-        AND c.deuda_clinica > 0
-        GROUP BY p.id
-        HAVING deuda_total > 0
-        ";
-
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->execute($params);
-
-            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-        });
-    }
-    public function getTransferenciasEmpleados(array $filtros): array
-    {
-        return $this->remember(__FUNCTION__ . md5(json_encode($filtros)), function () use ($filtros) {
-
-            [$where, $params] = $this->buildWhere($filtros);
-
-            $sql = "
-        SELECT 
-            e.id,
-            e.nombre,
-            SUM(c.total) as total_transferencias
-        FROM cobros c
-        INNER JOIN empleados e ON e.id = c.empleado_destino_id
-        INNER JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
-        $where
-        AND LOWER(c.medio_pago) = 'transferencia'
-        AND c.empleado_destino_id IS NOT NULL
-        GROUP BY e.id
-        HAVING total_transferencias > 0
-        ";
-
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->execute($params);
-
-            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
-        });
-    }
     /* =========================================
-        🧾 RESUMEN FINAL (TU LÓGICA EXACTA)
+        🧾 RESUMEN FINAL
+        FIX: balance de caja sin doble resta de comisión
     ========================================= */
     public function getResumen(array $filtros): array
     {
         $tot = $this->getTotales($filtros);
 
-        $egresosProfesionales = $this->getEgresosProfesionalesEfectivo($filtros);
-        $profAPagar = $this->getProfesionalesAPagar($filtros);
-        $comision = $this->getComisionClinicaTransferProfesional($filtros);
+        $egresosProfesionalesEfectivo = $this->getEgresosProfesionalesEfectivo($filtros);
+        $profAPagar                   = $this->getProfesionalesAPagar($filtros);
+        $comision                     = $this->getComisionClinicaTransferProfesional($filtros);
+        $deudaProfesional             = $this->getDeudaRecuperadaProfesional($filtros);
 
-        // 🔥 NUEVO
-        $deudaProfesional = $this->getDeudaRecuperadaProfesional($filtros);
+        $ingEfectivo = (float)($tot['ing_efectivo']      ?? 0);
+        $ingTransfer = (float)($tot['ing_transferencia']  ?? 0);
+        $egrEfectivo = (float)($tot['egr_efectivo']      ?? 0);
+        $egrTransfer = (float)($tot['egr_transferencia']  ?? 0);
 
-        $ingEfectivo = (float)($tot['ing_efectivo'] ?? 0);
-        $ingTransfer = (float)($tot['ing_transferencia'] ?? 0);
-        $egrEfectivo = (float)($tot['egr_efectivo'] ?? 0);
-        $egrTransfer = (float)($tot['egr_transferencia'] ?? 0);
+        /* =============================================
+       CAJA FÍSICA
 
-        $egresosCaja =
-            $egrEfectivo
-            + $egresosProfesionales
-            + $profAPagar
-            - $comision;
+       CASO 1 (efectivo):
+         + ingEfectivo (el total cobrado)
+         - egresosProfesionalesEfectivo (lo que se le paga al prof)
+         = queda la parte de la clínica ✅
+
+       CASO 2 (transf. clínica):
+         + 0 en ingEfectivo
+         - egresosProfesionalesEfectivo (se le paga al prof de caja)
+         = balance negativo en caja, positivo en banco ✅
+
+       CASO 3 (transf. profesional):
+         + 0 en ingEfectivo
+         - 0 en egresos (el prof ya cobró por transf, no se le paga de caja)
+         = balance 0 en caja ✅
+         la deuda se muestra informativa hasta que se descuente
+    ============================================= */
+        $ingresosEfectivoTotal = $ingEfectivo + $deudaProfesional;
+        $egresosCaja = $egrEfectivo + $egresosProfesionalesEfectivo + $profAPagar;
+
+        /* =============================================
+       BANCO
+
+       CASO 1: no entra nada al banco
+       CASO 2: entra el total cobrado, no sale nada
+               (el prof cobra de caja, no del banco)
+       CASO 3: no entra nada (el prof recibió la transf
+               directa, no pasó por el banco de la clínica)
+    ============================================= */
+        $ingBanco = $ingTransfer;   // solo transf. clínica directa
+        $egrBanco = $egrTransfer;   // egresos reales por banco
 
         return [
             'caja' => [
-                'ingresos' => $ingEfectivo,
+                'ingresos' => $ingresosEfectivoTotal,
                 'egresos'  => $egresosCaja,
-
-                // 🔥 SUMA LO RETENIDO AL PROFESIONAL
-                'balance'  => $ingEfectivo - $egresosCaja + ($deudaProfesional-$comision)
+                'balance'  => $ingresosEfectivoTotal - $egresosCaja,
             ],
 
             'banco' => [
-                'ingresos' => $ingTransfer,
-                'egresos'  => $egrTransfer,
-
-                // 🔥 BANCO PURO
-                'balance'  => $ingTransfer - $egrTransfer
+                'ingresos' => $ingBanco,
+                'egresos'  => $egrBanco,
+                'balance'  => $ingBanco - $egrBanco,
             ],
 
-            'destinos' => $this->getDestinos($filtros),
-            'turnos' => $this->getTurnos($filtros),
-            'externos' => $this->getExternos($filtros),
-            'deudas' => $this->getDeudasProfesionales($filtros),
-            'transferencias' => $this->getTransferenciasEmpleados($filtros)
+            // Informativo: lo que los profesionales deben
+            // compensar con efectivo en días futuros
+            'deuda_pendiente'  => $deudaProfesional,
+
+            'destinos'         => $this->getDestinos($filtros),
+            'turnos'           => $this->getTurnos($filtros),
+            'externos'         => $this->getExternos($filtros),
+            'deudas'           => $this->getDeudasProfesionales($filtros),
+            'transferencias'   => $this->getTransferenciasEmpleados($filtros),
         ];
     }
+
+    /* =========================================
+        🔢 CALCULAR SESIÓN
+        FIX: $diferencia contra $cajaEsperada,
+             no contra $totalSistema
+    ========================================= */
     public function calcularSesion(int $cajaSesionId): array
     {
         /* ======================
@@ -551,7 +584,6 @@ pa.apellido as pac_ape,
             LIMIT 1
         ");
         $stmt->execute([$cajaSesionId]);
-
         $sesion = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$sesion) {
@@ -561,33 +593,32 @@ pa.apellido as pac_ape,
         $montoInicial = (float)$sesion['monto_inicial'];
 
         /* ======================
-           🔥 REPARTO (REAL)
+           🔥 REPARTO POR CATEGORÍA
         ====================== */
         $stmt = $this->pdo->prepare("
             SELECT 
                 SUM(CASE 
                     WHEN d.categoria = 'caja' 
-                    THEN (CASE WHEN d.tipo='egreso' THEN -cr.monto ELSE cr.monto END)
+                    THEN (CASE WHEN d.tipo = 'egreso' THEN -cr.monto ELSE cr.monto END)
                     ELSE 0 
-                END) as total_caja,
+                END) AS total_caja,
 
                 SUM(CASE 
                     WHEN d.categoria = 'fondo' 
-                    THEN (CASE WHEN d.tipo='egreso' THEN -cr.monto ELSE cr.monto END)
+                    THEN (CASE WHEN d.tipo = 'egreso' THEN -cr.monto ELSE cr.monto END)
                     ELSE 0 
-                END) as total_fondo
+                END) AS total_fondo
 
             FROM cobros_reparto cr
-            INNER JOIN destinos_reparto d ON d.id = cr.destino_id
-            INNER JOIN cobros c ON c.id = cr.cobro_id
+            INNER JOIN destinos_reparto d ON d.id  = cr.destino_id
+            INNER JOIN cobros c           ON c.id  = cr.cobro_id
             WHERE c.caja_sesion_id = ?
             AND c.estado = 'activo'
         ");
         $stmt->execute([$cajaSesionId]);
-
         $totales = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        $totalCaja  = (float)($totales['total_caja'] ?? 0);
+        $totalCaja  = (float)($totales['total_caja']  ?? 0);
         $totalFondo = (float)($totales['total_fondo'] ?? 0);
 
         /* ======================
@@ -596,153 +627,153 @@ pa.apellido as pac_ape,
         $stmt = $this->pdo->prepare("
             SELECT 
                 COALESCE(SUM(CASE 
-                    WHEN tipo='ingreso' 
-                    AND medio_pago='efectivo'
-                    AND estado='activo'
-                THEN total END),0) as ingresos,
+                    WHEN tipo = 'ingreso' AND medio_pago = 'efectivo' AND estado = 'activo'
+                    THEN total 
+                END), 0) AS ingresos,
 
                 COALESCE(SUM(CASE 
-                    WHEN tipo='egreso' 
-                    AND medio_pago='efectivo'
-                    AND estado='activo'
-                THEN total END),0) as egresos
+                    WHEN tipo = 'egreso' AND medio_pago = 'efectivo' AND estado = 'activo'
+                    THEN total 
+                END), 0) AS egresos
             FROM cobros
             WHERE caja_sesion_id = ?
         ");
         $stmt->execute([$cajaSesionId]);
-
         $mov = $stmt->fetch(PDO::FETCH_ASSOC);
 
         $ingresos = (float)$mov['ingresos'];
         $egresos  = (float)$mov['egresos'];
 
         /* ======================
-           📊 PROFESIONALES
+           📊 EGRESOS PROFESIONALES
         ====================== */
         $stmt = $this->pdo->prepare("
-            SELECT COALESCE(SUM(cr.monto),0)
+            SELECT COALESCE(SUM(cr.monto), 0)
             FROM cobros_reparto cr
-            INNER JOIN destinos_reparto d ON d.id = cr.destino_id
-            INNER JOIN cobros c ON c.id = cr.cobro_id
+            INNER JOIN destinos_reparto d ON d.id  = cr.destino_id
+            INNER JOIN cobros c           ON c.id  = cr.cobro_id
             WHERE c.caja_sesion_id = ?
             AND d.categoria = 'profesional'
-            AND d.tipo = 'egreso'
-            AND c.estado = 'activo'
+            AND d.tipo      = 'egreso'
+            AND c.estado    = 'activo'
         ");
         $stmt->execute([$cajaSesionId]);
-
         $egresosProfesionales = (float)$stmt->fetchColumn();
 
+        $stmt = $this->pdo->prepare("
+    SELECT
+        medio_pago,
+        SUM(
+            CASE
+                WHEN tipo = 'egreso' THEN -total
+                ELSE total
+            END
+        ) total
+    FROM cobros
+    WHERE caja_sesion_id = ?
+    AND estado = 'activo'
+    GROUP BY medio_pago
+");
+        $stmt->execute([$cajaSesionId]);
+
+        $totalesMedioPago = [
+            'efectivo' => 0,
+            'transferencia' => 0,
+            'debito' => 0,
+            'credito' => 0
+        ];
+
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $medio = strtolower($row['medio_pago']);
+
+            if (isset($totalesMedioPago[$medio])) {
+                $totalesMedioPago[$medio] = (float)$row['total'];
+            }
+        }
         /* ======================
            📊 RESULTADOS
+           FIX: diferencia vs cajaEsperada (físico),
+                no vs totalSistema (incluye fondos)
         ====================== */
-
         $cajaEsperada = $montoInicial + $totalCaja;
-        $totalSistema =  $montoInicial + $totalCaja + $totalFondo;
+        $totalSistema = $montoInicial + $totalCaja + $totalFondo;
 
         return [
-            'caja_id' => $sesion['caja_id'],
-            'usuario_id' => $sesion['usuario_id'],
-
-            'monto_inicial' => $montoInicial,
-
-            'total_caja' => $totalCaja,
-            'total_fondo' => $totalFondo,
-            'total_sistema' => $totalSistema,
-
-            'caja_esperada' => $cajaEsperada,
-
-            'ingresos_efectivo' => $ingresos,
-            'egresos_efectivo' => $egresos,
-            'egresos_profesionales' => $egresosProfesionales
+            'caja_id'               => $sesion['caja_id'],
+            'usuario_id'            => $sesion['usuario_id'],
+            'monto_inicial'         => $montoInicial,
+            'total_caja'            => $totalCaja,
+            'total_fondo'           => $totalFondo,
+            'total_sistema'         => $totalSistema,
+            'caja_esperada'         => $cajaEsperada,
+            'ingresos_efectivo'     => $ingresos,
+            'egresos_efectivo'      => $egresos,
+            'egresos_profesionales' => $egresosProfesionales,
         ];
     }
 
     /* =========================================
-        🔒 CERRAR CAJA (USA EL CORE)
+        🔒 CERRAR CAJA
+        FIX: $diferencia contra $cajaEsperada
     ========================================= */
     public function cerrarCaja(int $cajaSesionId, float $montoReal, int $usuarioId): array
     {
-        if ($cajaSesionId <= 0) {
-            throw new Exception("Caja inválida");
-        }
-
-        if ($montoReal < 0) {
-            throw new Exception("Monto real inválido");
-        }
+        if ($cajaSesionId <= 0) throw new Exception("Caja inválida");
+        if ($montoReal < 0) throw new Exception("Monto inválido");
 
         try {
 
+            // 🔥 SOLO UNA TRANSACCIÓN (AQUÍ)
             $this->pdo->beginTransaction();
 
-            // ======================
-            // 🔎 SESIÓN
-            // ======================
+            /* ======================
+           🔎 SESIÓN
+        ====================== */
             $stmt = $this->pdo->prepare("
             SELECT *
             FROM caja_sesion
             WHERE id = ?
-            LIMIT 1
+            FOR UPDATE
         ");
             $stmt->execute([$cajaSesionId]);
             $sesion = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$sesion) {
-                throw new Exception("Sesión no encontrada");
-            }
+            if (!$sesion) throw new Exception("Sesión no encontrada");
+            if ($sesion['estado'] !== 'abierta') throw new Exception("Caja cerrada");
 
-            if ($sesion['estado'] !== 'abierta') {
-                throw new Exception("La caja ya está cerrada");
-            }
-
-            // ======================
-            // 🔒 CONTROL DE PERMISOS
-            // ======================
-            // $esAdmin = ($rol === 'Administrador');
-            // $esPropietario = ((int)$sesion['usuario_id'] === (int)$usuarioId);
-
-            // if (!$esAdmin && !$esPropietario) {
-            //     throw new Exception("No tenés permisos para cerrar esta caja");
-            // }
-
-            // ======================
-            // 🧠 CÁLCULO CENTRAL
-            // ======================
+            /* ======================
+           🧠 CÁLCULO
+        ====================== */
             $calc = $this->calcularSesion($cajaSesionId);
 
-            $montoInicial = $calc['monto_inicial'];
             $cajaEsperada = $calc['caja_esperada'];
             $totalSistema = $calc['total_sistema'];
-            $totalFondo = $calc['total_fondo'];
 
-            $diferencia = $montoReal - $totalSistema;
+            $diferencia = $montoReal - $cajaEsperada;
 
-            // ======================
-            // 🔒 CERRAR SESIÓN
-            // ======================
+            /* ======================
+           🔒 CERRAR SESIÓN
+        ====================== */
             $stmt = $this->pdo->prepare("
             UPDATE caja_sesion 
-            SET 
-                estado = 'cerrada',
+            SET estado = 'cerrada',
                 fecha_cierre = NOW(),
                 monto_cierre = ?
             WHERE id = ?
         ");
             $stmt->execute([$montoReal, $cajaSesionId]);
 
-            // ======================
-            // 🔒 CERRAR CAJA
-            // ======================
+            /* ======================
+           🔒 DESACTIVAR CAJA
+        ====================== */
             $stmt = $this->pdo->prepare("
-            UPDATE cajas 
-            SET activo = 0
-            WHERE id = ?
+            UPDATE cajas SET activo = 0 WHERE id = ?
         ");
             $stmt->execute([$sesion['caja_id']]);
 
-            // ======================
-            // 🧾 INSERT ARQUEO
-            // ======================
+            /* ======================
+           🧾 ARQUEO
+        ====================== */
             $stmt = $this->pdo->prepare("
             INSERT INTO arqueos_caja (
                 caja_id,
@@ -760,7 +791,7 @@ pa.apellido as pac_ape,
 
             $stmt->execute([
                 $sesion['caja_id'],
-                $montoInicial,
+                $calc['monto_inicial'],
                 $totalSistema,
                 $calc['total_caja'],
                 $calc['total_fondo'],
@@ -770,15 +801,13 @@ pa.apellido as pac_ape,
                 $cajaSesionId
             ]);
 
-            // ======================
-            // 📊 RESUMEN DIARIO
-            // ======================
-            $this->actualizarResumenFinanciero([
-                'fecha' => date('Y-m-d'),
-                'monto_inicial' => $montoInicial,
-                'total_caja' => $calc['total_caja'],
-                'total_fondo' => $calc['total_fondo']
-            ]);
+            /* ======================
+           🔁 RECONSTRUCCIÓN
+        ====================== */
+
+            $fechaAfectada = date('Y-m-d', strtotime($sesion['fecha_apertura']));
+
+            $this->actualizarResumenFinanciero(['fecha' => $fechaAfectada]);
 
             $this->pdo->commit();
 
@@ -786,8 +815,6 @@ pa.apellido as pac_ape,
                 'success' => true,
                 'caja_esperada' => $cajaEsperada,
                 'diferencia' => $diferencia,
-                'total_sistema' => $totalSistema,
-                'total_fondo' => $totalFondo
             ];
         } catch (Throwable $e) {
 
@@ -798,101 +825,155 @@ pa.apellido as pac_ape,
             throw $e;
         }
     }
-    private function actualizarResumenFinanciero(array $data): void
-    {
-        $fecha = $data['fecha'];
 
-        // ======================
-        // 🧱 CREAR SI NO EXISTE
-        // ======================
-        $stmt = $this->pdo->prepare("
-        SELECT id 
+    /* =========================================
+        📅 RESUMEN FINANCIERO DIARIO
+    ========================================= */
+    private function actualizarResumenFinanciero(array $data): void
+{
+    $fecha = $data['fecha'];
+
+    /* ======================
+       CREAR DÍA SI NO EXISTE
+       SIN HEREDAR SALDOS
+    ====================== */
+    $stmt = $this->pdo->prepare("
+        SELECT id
         FROM resumen_financiero_diario
         WHERE fecha = ?
+        LIMIT 1
     ");
-        $stmt->execute([$fecha]);
+    $stmt->execute([$fecha]);
 
-        if (!$stmt->fetchColumn()) {
+    if (!$stmt->fetchColumn()) {
 
-            // arrastre simple del día anterior (solo base)
-            $stmt = $this->pdo->prepare("
-            SELECT saldo_total
-            FROM resumen_financiero_diario
-            WHERE fecha < ?
-            ORDER BY fecha DESC
-            LIMIT 1
-        ");
-            $stmt->execute([$fecha]);
-
-            $saldoAnterior = (float)($stmt->fetchColumn() ?? 0);
-
-            $this->pdo->prepare("
-            INSERT INTO resumen_financiero_diario
-            (fecha, monto_inicial, saldo_total)
-            VALUES (?, ?, ?)
-        ")->execute([
-                $fecha,
-                $saldoAnterior,
-                $saldoAnterior
-            ]);
-        }
-
-        // ======================
-        // 📊 1. RECALCULAR MOVIMIENTOS
-        // ======================
         $this->pdo->prepare("
-        UPDATE resumen_financiero_diario r
-        SET 
-            total_cajas = (
-                SELECT COALESCE(SUM(a.total_caja),0)
-                FROM arqueos_caja a
-                WHERE a.fecha >= r.fecha
-                AND a.fecha < DATE_ADD(r.fecha, INTERVAL 1 DAY)
-            ),
-
-            total_fondos = (
-                SELECT COALESCE(SUM(a.total_fondo),0)
-                FROM arqueos_caja a
-                WHERE a.fecha >= r.fecha
-                AND a.fecha < DATE_ADD(r.fecha, INTERVAL 1 DAY)
-            ),
-
-            egresos_caja = (
-                SELECT COALESCE(SUM(e.monto),0)
-                FROM egresos e
-                WHERE e.tipo = 'caja'
-                AND e.creado_en >= r.fecha
-                AND e.creado_en < DATE_ADD(r.fecha, INTERVAL 1 DAY)
-            ),
-
-            egresos_fondos = (
-                SELECT COALESCE(SUM(e.monto),0)
-                FROM egresos e
-                WHERE e.tipo = 'fondo'
-                AND e.creado_en >= r.fecha
-                AND e.creado_en < DATE_ADD(r.fecha, INTERVAL 1 DAY)
+            INSERT INTO resumen_financiero_diario (
+                fecha,
+                monto_inicial,
+                fondo_inicial,
+                total_cajas,
+                total_fondos,
+                egresos_caja,
+                egresos_fondos,
+                saldo_caja,
+                saldo_fondo,
+                saldo_total
             )
-
-        WHERE r.fecha = ?
-    ")->execute([$fecha]);
-
-        // ======================
-        // 💰 2. RECALCULAR SALDOS (SEPARADO = SEGURO)
-        // ======================
-        $this->pdo->prepare("
-        UPDATE resumen_financiero_diario
-        SET 
-            saldo_caja =
-                total_cajas - egresos_caja,
-
-            saldo_fondo =
-                total_fondos - egresos_fondos,
-
-            saldo_total =
-                (monto_inicial + total_cajas - egresos_caja)
-                + (total_fondos - egresos_fondos)
-
-        WHERE fecha = ?
-    ")->execute([$fecha]);
+            VALUES (
+                ?, 0, 0,
+                0, 0,
+                0, 0,
+                0, 0,
+                0
+            )
+        ")->execute([$fecha]);
     }
+
+    /* ======================
+       ARQUEOS DEL DÍA
+    ====================== */
+    $stmt = $this->pdo->prepare("
+        SELECT
+            COALESCE(SUM(total_caja),0)  AS cajas,
+            COALESCE(SUM(total_fondo),0) AS fondos
+        FROM arqueos_caja
+        WHERE DATE(fecha) = ?
+    ");
+    $stmt->execute([$fecha]);
+    $ar = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    /* ======================
+       EGRESOS DEL DÍA
+    ====================== */
+    $stmt = $this->pdo->prepare("
+        SELECT
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN tipo='caja'
+                        THEN monto
+                        ELSE 0
+                    END
+                ),0
+            ) AS eg_caja,
+
+            COALESCE(
+                SUM(
+                    CASE
+                        WHEN tipo='fondo'
+                        THEN monto
+                        ELSE 0
+                    END
+                ),0
+            ) AS eg_fondo
+
+        FROM egresos
+        WHERE DATE(creado_en) = ?
+    ");
+    $stmt->execute([$fecha]);
+    $eg = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    /* ======================
+       INICIALES CARGADOS
+       MANUALMENTE
+    ====================== */
+    $stmt = $this->pdo->prepare("
+        SELECT
+            monto_inicial,
+            fondo_inicial
+        FROM resumen_financiero_diario
+        WHERE fecha = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$fecha]);
+
+    $base = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    $montoInicial = (float)($base['monto_inicial'] ?? 0);
+    $fondoInicial = (float)($base['fondo_inicial'] ?? 0);
+
+    /* ======================
+       SALDOS REALES
+    ====================== */
+
+    $saldoCaja =
+        $montoInicial
+        + (float)$ar['cajas']
+        - (float)$eg['eg_caja'];
+
+    $saldoFondo =
+        $fondoInicial
+        + (float)$ar['fondos']
+        - (float)$eg['eg_fondo'];
+
+    $saldoTotal =
+        $saldoCaja
+        + $saldoFondo;
+
+    /* ======================
+       GUARDAR RESUMEN
+    ====================== */
+    $this->pdo->prepare("
+        UPDATE resumen_financiero_diario
+        SET
+            total_cajas    = ?,
+            total_fondos   = ?,
+            egresos_caja   = ?,
+            egresos_fondos = ?,
+            saldo_caja     = ?,
+            saldo_fondo    = ?,
+            saldo_total    = ?
+        WHERE fecha = ?
+    ")->execute([
+        $ar['cajas'],
+        $ar['fondos'],
+        $eg['eg_caja'],
+        $eg['eg_fondo'],
+        $saldoCaja,
+        $saldoFondo,
+        $saldoTotal,
+        $fecha
+    ]);
+}
 }

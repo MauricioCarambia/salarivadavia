@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/services/afiliados.php';
 header('Content-Type: application/json');
 
 try {
@@ -48,46 +49,11 @@ try {
     /* =========================
        🧠 TIPO PACIENTE
     ========================= */
-    function obtenerTipoPaciente(PDO $pdo, int $paciente_id): string
-{
-    if ($paciente_id <= 0) return 'particular';
 
-    $stmt = $pdo->prepare("
-        SELECT 
-            p.tipo_socio, 
-            p.fecha_alta,
-            GREATEST(0, COALESCE(PERIOD_DIFF(
-                DATE_FORMAT(CURDATE(), '%Y%m'),
-                DATE_FORMAT(MAX(pa.fecha_correspondiente), '%Y%m')
-            ), 999)) AS meses_adeudados,
-            MAX(pa.fecha_correspondiente) AS ultimo_pago
-        FROM pacientes p
-        LEFT JOIN pagos_afiliados pa ON pa.paciente_id = p.Id
-        WHERE p.Id = ?
-        GROUP BY p.Id
-    ");
-    $stmt->execute([$paciente_id]);
-    $p = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$p) return 'particular';
+    $estadoAfiliado = obtenerEstadoAfiliado($pdo, $paciente_id);
 
-    // 🟣 Vitalicio
-    if (strtolower($p['tipo_socio']) === 'vitalicio') return 'socio';
-
-    // 🟡 Primeros 90 días → particular (ANTES que al día)
-    if (!empty($p['fecha_alta']) && $p['fecha_alta'] !== '0000-00-00') {
-        $dias = (new DateTime())->diff(new DateTime($p['fecha_alta']))->days;
-        if ($dias <= 90) return 'particular';
-    }
-
-    // ✅ Al día → socio
-    if ($p['ultimo_pago'] && (int)$p['meses_adeudados'] <= 1) return 'socio';
-
-    // 🔴 Nunca pagó o moroso
-    return 'particular';
-}
-
-    $tipoPaciente = obtenerTipoPaciente($pdo, $paciente_id);
+    $tipoPaciente = $estadoAfiliado['cobra_como'];
 
     $detalle = [];
     $totales = [

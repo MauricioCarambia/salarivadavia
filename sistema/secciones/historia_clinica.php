@@ -15,6 +15,7 @@ if (isset($_GET['accion']) && $_GET['accion'] === 'getHC') {
 $profesionalId = $_SESSION['user_id'] ?? 0;
 $tipoUsuario = $_SESSION['tipo'] ?? '';
 $id = (int) ($_GET['id'] ?? 0);
+$rand = $_GET['nc'] ?? '';
 
 if (!$id) {
     die('<div class="alert alert-danger">Paciente inválido</div>');
@@ -78,6 +79,10 @@ function mostrarCampo($label, $valor)
         <h3 class="card-title"><i class="fas fa-notes-medical"></i> Historia Clínica</h3>
         <div>
             <?php if ($tipoUsuario === 'profesional'): ?>
+                <a href="./?seccion=turnos_profesional&nc=<?= $rand ?>"
+                    class="btn btn-secondary btn-sm ml-2">
+                    Volver
+                </a>
                 <a href="./?seccion=historia_clinica_new&paciente_id=<?= $id ?>" class="btn btn-success btn-sm ml-2">
                     <i class="fa fa-plus"></i> Nueva HC
                 </a>
@@ -85,6 +90,7 @@ function mostrarCampo($label, $valor)
             <button class="btn btn-warning btn-sm ml-2" onclick="imprimirHC()">
                 <i class="fa fa-print"></i> Imprimir
             </button>
+
             <!-- <a class="btn btn-info btn-sm ml-2" href="secciones/pdf_historia_clinica.php?id=<?= $id ?>" target="_blank">
                 PDF
             </a> -->
@@ -135,6 +141,7 @@ function mostrarCampo($label, $valor)
                     <?php if (!empty($historias)): ?>
                         <?php foreach ($historias as $hc): ?>
                             <tr>
+
                                 <td>
                                     <div class="hc-item">
                                         <?= mostrarCampo('Motivo', $hc['motivo'] ?? '') ?>
@@ -146,13 +153,23 @@ function mostrarCampo($label, $valor)
                                         <?= mostrarCampo('Observaciones', $hc['texto'] ?? '') ?>
                                     </div>
                                 </td>
-                                <td class="text-center align-middle">
-                                    <span data-order="<?= $hc['fecha'] ?>">
-                                        <b><?= date('d/m/Y', strtotime($hc['fecha'])) ?></b>
-                                    </span><br>
+                                <td class="text-center align-middle"
+                                    data-order="<?= strtotime($hc['fecha']) ?>">
+
+                                    <b><?= date('d/m/Y', strtotime($hc['fecha'])) ?></b><br>
+
                                     <?= htmlspecialchars($hc['profesionalapellido'] . ' ' . $hc['profesionalnombre']) ?><br>
-                                    <span class="badge badge-info"><?= htmlspecialchars($hc['especialidad']) ?></span><br>
-                                    <small>MN: <?= $hc['matricula_nacional'] ?> | MP: <?= $hc['matricula_provincial'] ?></small>
+
+                                    <span class="badge badge-info">
+                                        <?= htmlspecialchars($hc['especialidad']) ?>
+                                    </span><br>
+
+                                    <small>
+                                        MN: <?= $hc['matricula_nacional'] ?>
+                                        |
+                                        MP: <?= $hc['matricula_provincial'] ?>
+                                    </small>
+
                                 </td>
                                 <td class="text-center align-middle">
                                     <?php if (!empty($hc['profesionalfirma'])): ?><img
@@ -265,16 +282,22 @@ function mostrarCampo($label, $valor)
 <script>
     let quillModal;
 
-    $('#hcModal').on('shown.bs.modal', function () {
+    $('#hcModal').on('shown.bs.modal', function() {
         if (!quillModal) {
             quillModal = new Quill('#editorHCModal', {
                 theme: 'snow',
                 placeholder: 'Escribir evolución clínica...',
                 modules: {
                     toolbar: [
-                        [{ header: [1, 2, false] }],
+                        [{
+                            header: [1, 2, false]
+                        }],
                         ['bold', 'italic', 'underline'],
-                        [{ list: 'ordered' }, { list: 'bullet' }],
+                        [{
+                            list: 'ordered'
+                        }, {
+                            list: 'bullet'
+                        }],
                         ['link'],
                         ['clean']
                     ]
@@ -297,18 +320,20 @@ function mostrarCampo($label, $valor)
             reader.readAsDataURL(blob);
         });
     }
-    
-    $(document).ready(function () {
+
+    $(document).ready(function() {
 
         $('#tablaHC').DataTable({
-            order: [[1, "desc"]],
+            order: [
+                [1, "desc"]
+            ],
             dom: 'Bfrtip', // 🔥 IMPORTANTE
             buttons: [
 
                 {
                     text: '<i class="fa fa-file-pdf"></i> PDF',
                     className: 'btn btn-danger btn-sm ml-2',
-                    action: function () {
+                    action: function() {
                         generarPDFHC();
                     }
                 }
@@ -320,7 +345,10 @@ function mostrarCampo($label, $valor)
     async function generarPDFHC() {
 
         let tabla = $('.datatable').DataTable();
-        let filas = tabla.rows({ order: 'applied', search: 'applied' }).nodes().toArray();
+        let filas = tabla.rows({
+            order: 'applied',
+            search: 'applied'
+        }).nodes().toArray();
 
         let paciente = "<?= addslashes($pacienteNombre) ?>";
         let dni = "<?= addslashes($pacienteData['documento']) ?>";
@@ -360,7 +388,7 @@ function mostrarCampo($label, $valor)
             if (firmaSrc) {
                 try {
                     firmaImg = await getBase64FromUrl(firmaSrc);
-                } catch { }
+                } catch {}
             }
 
             html += `
@@ -397,20 +425,33 @@ function mostrarCampo($label, $valor)
         html2pdf().set({
             margin: 10,
             filename: 'historia_clinica.pdf',
-            image: { type: 'jpeg', quality: 1 },
-            html2canvas: { scale: 2, useCORS: true },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            image: {
+                type: 'jpeg',
+                quality: 1
+            },
+            html2canvas: {
+                scale: 2,
+                useCORS: true
+            },
+            jsPDF: {
+                unit: 'mm',
+                format: 'a4',
+                orientation: 'portrait'
+            }
         }).from(element).save();
     }
+
     function abrirHCModal(id) {
         $('#hcModal').modal('show');
 
         $.ajax({
             url: 'ajax/hc_get.php',
             method: 'GET',
-            data: { id: id },
+            data: {
+                id: id
+            },
             dataType: 'json',
-            success: function (hc) {
+            success: function(hc) {
                 if (!hc || !hc.Id) {
                     Swal.fire('Error', 'No se pudo cargar la HC', 'error');
                     return;
@@ -441,7 +482,7 @@ function mostrarCampo($label, $valor)
                     $('#hc_fecha').val(hc.fecha.split(' ')[0]);
                 }
             },
-            error: function (xhr) {
+            error: function(xhr) {
                 console.log(xhr.responseText);
                 Swal.fire('Error', 'Error en la petición AJAX', 'error');
             }
@@ -449,7 +490,7 @@ function mostrarCampo($label, $valor)
     }
 
     // GUARDAR
-    $('#formEditarHC').on('submit', function (e) {
+    $('#formEditarHC').on('submit', function(e) {
         e.preventDefault();
 
         // Poner el contenido del editor en el input hidden
@@ -461,7 +502,7 @@ function mostrarCampo($label, $valor)
             method: 'POST',
             data: $(this).serialize(),
             dataType: 'json',
-            success: function (r) {
+            success: function(r) {
                 if (r.success) {
                     Swal.fire({
                         icon: 'success',
@@ -473,7 +514,7 @@ function mostrarCampo($label, $valor)
                     Swal.fire('Error', 'No se pudo guardar', 'error');
                 }
             },
-            error: function () {
+            error: function() {
                 Swal.fire('Error', 'Error en el servidor', 'error');
             }
         });
@@ -490,7 +531,9 @@ function mostrarCampo($label, $valor)
             cancelButtonText: 'Cancelar'
         }).then((r) => {
             if (r.isConfirmed) {
-                $.post('ajax/hc_delete.php', { id: id }, function (resp) {
+                $.post('ajax/hc_delete.php', {
+                    id: id
+                }, function(resp) {
                     if (resp.success) {
                         Swal.fire('Eliminado', '', 'success').then(() => location.reload());
                     } else {
@@ -500,10 +543,14 @@ function mostrarCampo($label, $valor)
             }
         });
     }
+
     function imprimirHC() {
 
         let tabla = $('.datatable').DataTable();
-        let filas = tabla.rows({ order: 'applied', search: 'applied' }).nodes().toArray();
+        let filas = tabla.rows({
+            order: 'applied',
+            search: 'applied'
+        }).nodes().toArray();
 
         let paciente = "<?= addslashes($pacienteNombre) ?>";
         let dni = "<?= addslashes($pacienteData['documento']) ?>";
@@ -636,7 +683,7 @@ function mostrarCampo($label, $valor)
 </div>
 `;
 
-        $(filas).each(function () {
+        $(filas).each(function() {
 
             let tds = $(this).find('td');
 

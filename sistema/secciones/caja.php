@@ -75,37 +75,43 @@ $deudasProfesionales = $data['deudas'];
 
 // 💳 TRANSFERENCIAS EMPLEADOS (🔥 lo que te faltaba)
 $transferenciasEmpleados = $data['transferencias'];
+function formatearMedioPago(
+    $medio,
+    $transferenciaTipo = '',
+    $empleadoDestino = '',
+    $profNombre = '',
+    $profApellido = ''
+) {
 
-function formatearMedioPago($medio, $tipoTransferencia = '', $empDestino = '', $profNom = '', $profApe = '')
-{
-    $medioLower = strtolower($medio ?? '');
-
-    if ($medioLower === 'efectivo') {
+    if ($medio === 'efectivo') {
         return '<span class="badge badge-success">Efectivo</span>';
     }
 
-    if ($medioLower === 'transferencia') {
+    if ($medio === 'transferencia') {
 
-        // profesional
-        if ($tipoTransferencia === 'profesional') {
-            $nombre = trim($profApe . ' ' . $profNom);
-            return '<span class="badge badge-primary">Transferencia → ' . htmlspecialchars($nombre) . '</span>';
+        $html = '<span class="badge badge-primary">Transferencia</span>';
+
+        if ($transferenciaTipo === 'clinica') {
+
+            $html .= '<br><small class="badge badge-info">'
+                . htmlspecialchars($empleadoDestino ?: '-')
+                . '</small>';
         }
 
-        // empleado / caja
-        if ($tipoTransferencia === 'empleado' || !empty($empDestino)) {
-            return '<span class="badge badge-info">Transferencia → ' . htmlspecialchars($empDestino) . '</span>';
+        if ($transferenciaTipo === 'profesional') {
+
+            $nombreCompleto = trim($profApellido . ' ' . $profNombre);
+
+            $html .= '<br><small class="badge badge-warning">'
+                . 'Cobrado por '
+                . htmlspecialchars($nombreCompleto ?: '-')
+                . '</small>';
         }
 
-        // clínica (fondo)
-        if ($tipoTransferencia === 'clinica') {
-            return '<span class="badge badge-primary">Transferencia → Clínica</span>';
-        }
-
-        return '<span class="badge badge-info">Transferencia</span>';
+        return $html;
     }
 
-    return '<span class="badge badge-secondary">' . htmlspecialchars($medio) . '</span>';
+    return '<span class="badge badge-secondary">-</span>';
 }
 ?>
 
@@ -466,89 +472,230 @@ function formatearMedioPago($medio, $tipoTransferencia = '', $empDestino = '', $
 
     });
     window.imprimirTicket = async function(data) {
+
         try {
+
             if (!qz.websocket.isActive()) {
                 await qz.websocket.connect();
             }
 
             const config = qz.configs.create("POS-80C", {
-                encoding: 'CP437'
+                encoding: "CP437"
             });
 
             let contenido = [];
 
-            function linea(nombre, precio) {
-                let left = nombre.substring(0, 30);
-                let right = "$" + parseFloat(precio).toFixed(2);
-
-                let spaces = 48 - (left.length + right.length);
-                if (spaces < 1) spaces = 1;
-
-                return left + " ".repeat(spaces) + right;
+            function center(txt) {
+                return "\x1B\x61\x01" + txt + "\n";
             }
 
-           /* ENCABEZADO CON LOGO */
-            contenido.push("\x1B\x61\x01"); // Centrado
+            function left(txt) {
+                return "\x1B\x61\x00" + txt + "\n";
+            }
 
-            // 1. Insertar la imagen (puede ser URL o Base64)
-            contenido.push({
-                type: 'pixel',
-                format: 'png', // o 'png'
-                flavor: 'file',
-                data: 'images/logo_blanco_negro.png', // Ruta relativa, absoluta o base64
-                options: {
-                    language: "ESCPOS",
-                    dotDensity: "double"
-                }
-            });
+            function right(txt) {
+                return "\x1B\x61\x02" + txt + "\n";
+            }
 
-            //             const logo = {
-            //    type: 'pixel',
-            //    format: 'png',
-            //    flavor: 'file',
-            //    data: 'https://tuweb.com/logo.png',
-            //    options: { 
-            //       language: "ESCPOS", 
-            //       dotDensity: "double",
-            //       width: 200 // Ajusta el tamaño en píxeles según tu papel de 80mm
-            //    }
-            // };
+            function separator() {
+                return "------------------------------------------------\n";
+            }
 
-            // // Luego en tu función:
-            // let contenido = [logo, "\x1B\x61\x01", "SALA RIVADAVIA\n", ...];
+            function linea(nombre, precio) {
 
-            contenido.push("\n"); // Salto de línea después del logo
-            // contenido.push("\x1B\x61\x01");
-            contenido.push("SALA RIVADAVIA\n");
-            contenido.push("Av. Eva Peron 695\n");
-            contenido.push("Temperley\n");
-            contenido.push("Fecha: " + new Date().toLocaleString() + "\n");
-            contenido.push("------------------------------------------------\n");
+                let izquierda = String(nombre || '').substring(0, 28);
 
-            contenido.push("\x1B\x61\x00");
-            contenido.push("Paciente: " + data.paciente + "\n");
-            contenido.push("Profesional: " + data.profesional + "\n");
-            contenido.push("------------------------------------------------\n");
+                let derecha =
+                    "$ " +
+                    parseFloat(precio || 0).toLocaleString(
+                        "es-AR", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        }
+                    );
 
-            data.detalle.forEach(d => {
-                contenido.push(linea(d.nombre, d.precio) + "\n");
-            });
+                let espacios =
+                    48 - (izquierda.length + derecha.length);
 
-            contenido.push("------------------------------------------------\n");
+                if (espacios < 1) espacios = 1;
 
-            contenido.push("\x1B\x61\x02");
-            contenido.push("TOTAL: $" + parseFloat(data.total).toFixed(2) + "\n");
+                return izquierda +
+                    " ".repeat(espacios) +
+                    derecha;
+            }
+
+            const ahora = new Date();
+
+            const fecha = ahora.toLocaleDateString("es-AR");
+            const hora = ahora.toLocaleTimeString("es-AR");
+
+            /* =====================================
+               LOGO
+            ===================================== */
 
             contenido.push("\x1B\x61\x01");
-            contenido.push("\nGracias por su visita\n");
 
-            contenido.push("\n\n\n");
+
+
+            /* =====================================
+               CLINICA
+            ===================================== */
+
+            // Negrita ON
+            contenido.push("\x1B\x45\x01");
+
+            // Tamaño doble ancho + doble alto
+            contenido.push("\x1D\x21\x11");
+
+            contenido.push(center("SALA RIVADAVIA"));
+
+            // Volver a tamaño normal
+            contenido.push("\x1D\x21\x00");
+
+            // Negrita OFF
+            contenido.push("\x1B\x45\x00");
+            contenido.push("\n");
+
+            contenido.push(center(
+                "COMPROBANTE N° " +
+                (data.comprobante || "")
+            ));
+
+            contenido.push(separator());
+
+            contenido.push(center("CUIT: 30-54589575-3"));
+            contenido.push(center("ING. BRUTOS: 30-54589575-3"));
+            contenido.push(center("IVA RESPONSABLE INSCRIPTO"));
+            contenido.push(center("INICIO ACTIVIDAD: 27/11/2013"));
+
+            contenido.push("\n");
+
+            contenido.push(center("AV. EVA PERON 695"));
+            contenido.push(center("TEMPERLEY (1834)"));
+            contenido.push(center("BUENOS AIRES"));
+
+            contenido.push("\n");
+
+            contenido.push(center("TEL: 3989-4325"));
+            contenido.push(center("TEL: 3991-2183"));
+            contenido.push(center("WHATSAPP: 11 2243-6786"));
+
+            contenido.push(separator());
+
+            /* =====================================
+               FECHA
+            ===================================== */
+
+            contenido.push(left("FECHA: " + fecha));
+            contenido.push(left("HORA : " + hora));
+
+            contenido.push("\n");
+
+            contenido.push(center("CONSUMIDOR FINAL"));
+
+            contenido.push(separator());
+
+            /* =====================================
+               PACIENTE
+            ===================================== */
+
+            contenido.push(left("PACIENTE:"));
+            contenido.push(left(data.paciente || "-"));
+
+            contenido.push("\n");
+
+            contenido.push(left("PROFESIONAL:"));
+            contenido.push(left(data.profesional || "-"));
+
+            contenido.push(separator());
+
+            /* =====================================
+               DETALLE
+            ===================================== */
+
+            contenido.push(left("DESCRIPCION"));
+
+            contenido.push("\n");
+
+            if (Array.isArray(data.detalle)) {
+
+                data.detalle.forEach(item => {
+
+                    contenido.push(
+                        left(
+                            linea(
+                                item.nombre,
+                                item.precio
+                            )
+                        )
+                    );
+
+                });
+
+            }
+
+            contenido.push(separator());
+
+            /* =====================================
+               TOTAL
+            ===================================== */
+
+            contenido.push("\x1B\x45\x01");
+            contenido.push("\x1D\x21\x11");
+
+            contenido.push(center("TOTAL"));
+
+            contenido.push(
+                right(
+                    "$ " +
+                    parseFloat(data.total || 0)
+                    .toLocaleString(
+                        "es-AR", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        }
+                    )
+                )
+            );
+
+            contenido.push("\x1D\x21\x00");
+            contenido.push("\x1B\x45\x00");
+
+            contenido.push(separator());
+
+            /* =====================================
+               PIE
+            ===================================== */
+
+            contenido.push("\n");
+
+            contenido.push(center(
+                "¡GRACIAS POR ELEGIRNOS!"
+            ));
+
+            contenido.push("\n");
+
+            contenido.push(separator());
+            contenido.push(separator());
+
+            contenido.push(center(
+                "DOCUMENTO NO VALIDO COMO FACTURA"
+            ));
+
+            contenido.push("\n\n\n\n");
+
+            /* =====================================
+               CORTE
+            ===================================== */
+
             contenido.push("\x1D\x56\x00");
 
             await qz.print(config, contenido);
 
         } catch (err) {
+
             console.error(err);
+
             throw err;
         }
     };
@@ -634,6 +781,7 @@ function formatearMedioPago($medio, $tipoTransferencia = '', $empDestino = '', $
                         try {
 
                             const data = {
+                                comprobante: cobro.numero || '-',
                                 paciente: cobro.paciente || '-',
                                 profesional: cobro.profesional || '-',
                                 total: cobro.total || 0,

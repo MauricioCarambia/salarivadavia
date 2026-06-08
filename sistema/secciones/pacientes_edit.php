@@ -6,6 +6,51 @@ $id = $_GET['id'] ?? null;
 $swalGuardado = false;
 $swalError = false;
 
+function normalizarCelularArgentina(string $numero): string
+{
+    $numero = preg_replace('/\D/', '', $numero);
+
+    if ($numero === '') {
+        return '';
+    }
+
+    // Ya está correcto
+    if (preg_match('/^549\d{10}$/', $numero)) {
+        return $numero;
+    }
+
+    // Quitar 54
+    if (strpos($numero, '54') === 0) {
+        $numero = substr($numero, 2);
+    }
+
+    // Quitar 0 inicial
+    if (strpos($numero, '0') === 0) {
+        $numero = substr($numero, 1);
+    }
+
+    // Casos con 15
+    if (preg_match('/^(11)15(\d{8})$/', $numero, $m)) {
+        $numero = '11' . $m[2];
+    }
+
+    if (preg_match('/^(2\d{2,3})15(\d{6,8})$/', $numero, $m)) {
+        $numero = $m[1] . $m[2];
+    }
+
+    // Si quedó un celular de AMBA de 10 dígitos
+    if (preg_match('/^11\d{8}$/', $numero)) {
+        return '549' . $numero;
+    }
+
+    // Interior
+    if (preg_match('/^(\d{10,12})$/', $numero)) {
+        return '549' . $numero;
+    }
+
+    return '549' . $numero;
+}
+
 // Provincias
 $provincias = [
     "Ciudad Autónoma de Buenos Aires",
@@ -54,7 +99,7 @@ if ($id && isset($_POST['guardar'])) {
         'domicilio' => $_POST['domicilio'] ?? '',
         'provincia' => $_POST['provincia'] ?? '',
         'localidad' => $_POST['localidad'] ?? '',
-        'celular' => $_POST['celular'] ?? '',
+        'celular' => normalizarCelularArgentina(trim($_POST['celular'] ?? '')),
         'fijo' => $_POST['fijo'] ?? '',
         'email' => $_POST['email'] ?? '',
         'tipo_documento' => $_POST['tipo_documento'] ?? '',

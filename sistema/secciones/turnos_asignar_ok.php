@@ -70,31 +70,44 @@ try {
 
     // ============================== PROFESIONAL ==============================
     $stmt = $conexion->prepare("
-        SELECT apellido, nombre 
-        FROM profesionales 
-        WHERE id = :id 
-        LIMIT 1
-    ");
-    $stmt->execute([':id' => $profesional]);
+    SELECT
+        p.apellido,
+        p.nombre,
+        e.especialidad
+    FROM profesionales p
+    LEFT JOIN especialidades e
+        ON e.Id = p.especialidad_id
+    WHERE p.Id = :id
+    LIMIT 1
+");
+
+    $stmt->execute([
+        ':id' => $profesional
+    ]);
 
     $p = $stmt->fetch(PDO::FETCH_ASSOC);
-    $nombreProfesional = $p ? $p['apellido'] . ' ' . $p['nombre'] : '';
+
+    $nombreProfesional = $p
+        ? trim($p['apellido'] . ' ' . $p['nombre'])
+        : '';
+
+    $especialidad = $p['especialidad'] ?? '';
 
     $conexion->commit();
 
     // ============================== RESPONSE ==============================
-    echo json_encode([
-        'success'       => true,
-        'id_turno'      => $last_id,
-        'sobreturno'    => $sobreturno,
-        'mensaje'       => $sobreturno
-            ? 'Sobreturno agregado satisfactoriamente.'
-            : 'Turno agregado satisfactoriamente.',
-        'fecha'         => $fecha,
-        'hora'          => date('H:i', $timestamp),
-        'profesional'   => $nombreProfesional
-    ]);
-
+echo json_encode([
+    'success'       => true,
+    'id_turno'      => $last_id,
+    'sobreturno'    => $sobreturno,
+    'mensaje'       => $sobreturno
+        ? 'Sobreturno agregado satisfactoriamente.'
+        : 'Turno agregado satisfactoriamente.',
+    'fecha'         => $fecha,
+    'hora'          => date('H:i', $timestamp),
+    'profesional'   => $nombreProfesional,
+    'especialidad'  => $especialidad
+]);
 } catch (Throwable $e) {
 
     if ($conexion->inTransaction()) {
