@@ -88,7 +88,7 @@ $egresos = $pdo->query("
     <div class="card-body">
         <h5>📊 Historial de Egresos</h5>
 
-        <table class="table table-striped">
+        <table id="tablaEgresosDT" class="table table-striped">
             <thead>
                 <tr>
                     <th>Fecha</th>
@@ -125,6 +125,30 @@ $egresos = $pdo->query("
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
+    $(document).ready(function() {
+    $('#tablaEgresosDT').DataTable({
+        pageLength: 25,
+        order: [[0, 'desc']],
+        responsive: true,
+        language: {
+            processing: "Procesando...",
+            search: "Buscar:",
+            lengthMenu: "Mostrar _MENU_ registros",
+            info: "Mostrando _START_ a _END_ de _TOTAL_ registros",
+            infoEmpty: "Mostrando 0 a 0 de 0 registros",
+            infoFiltered: "(filtrado de _MAX_ registros)",
+            loadingRecords: "Cargando...",
+            zeroRecords: "No se encontraron registros",
+            emptyTable: "No hay datos disponibles",
+            paginate: {
+                first: "Primero",
+                previous: "Anterior",
+                next: "Siguiente",
+                last: "Último"
+            }
+        }
+    });
+});
     function formatearNumero(valor) {
         return Number(valor || 0).toLocaleString('es-AR', {
             minimumFractionDigits: 2,

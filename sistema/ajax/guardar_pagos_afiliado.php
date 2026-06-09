@@ -29,7 +29,7 @@ if (empty($items)) {
 /* =========================
    CAJA ABIERTA
 ========================= */
-$stmtCaja = $conexion->prepare("
+$stmtCaja = $pdo->prepare("
     SELECT cs.id AS caja_sesion_id, cs.caja_id
     FROM caja_sesion cs
     INNER JOIN cajas c ON c.id = cs.caja_id
@@ -51,10 +51,25 @@ $caja_sesion_id = (int)$caja['caja_sesion_id'];
 /* =========================
    NRO AFILIADO DEL PACIENTE
 ========================= */
-$stmtNro = $conexion->prepare("SELECT nro_afiliado FROM pacientes WHERE Id = ?");
+$stmtNro = $pdo->prepare("SELECT nro_afiliado FROM pacientes WHERE Id = ?");
 $stmtNro->execute([$paciente_id]);
-$rowNro    = $stmtNro->fetch(PDO::FETCH_ASSOC);
-$nro_base  = trim(explode('/', $rowNro['nro_afiliado'] ?? '?')[0]);
+$rowNro   = $stmtNro->fetch(PDO::FETCH_ASSOC);
+$nro_base = trim(explode('/', $rowNro['nro_afiliado'] ?? '?')[0]);
+
+/* =========================
+   ¿YA TIENE PAGOS PREVIOS?
+   (antes de esta transacción)
+========================= */
+$stmtPrevios = $pdo->prepare("
+    SELECT COUNT(*) FROM pagos_afiliados pa
+    INNER JOIN pacientes p ON p.Id = pa.paciente_id
+    WHERE SUBSTRING_INDEX(SUBSTRING_INDEX(p.nro_afiliado, '/', 1), ' ', 1) = (
+        SELECT SUBSTRING_INDEX(SUBSTRING_INDEX(nro_afiliado, '/', 1), ' ', 1)
+        FROM pacientes WHERE Id = ?
+    )
+");
+$stmtPrevios->execute([$paciente_id]);
+$tenia_pagos_previos = (int)$stmtPrevios->fetchColumn() > 0;
 
 $meses_es = [
     '01'=>'enero','02'=>'febrero','03'=>'marzo','04'=>'abril',
@@ -62,13 +77,17 @@ $meses_es = [
     '09'=>'septiembre','10'=>'octubre','11'=>'noviembre','12'=>'diciembre'
 ];
 
+// Destinos fijos
+const DESTINO_CUOTA       = 6;   // ingreso / caja
+const DESTINO_CUOTA_INICIAL = 11;  // ingreso / fondo
+
 try {
-    $conexion->beginTransaction();
+    $pdo->beginTransaction();
 
     /* ---- Prepared statements ---- */
-    $stmtPago = $conexion->prepare("
+    $stmtPago = $pdo->prepare("
         INSERT INTO pagos_afiliados (paciente_id, monto, fecha_pago, fecha_correspondiente)
-        SELECT 
+        SELECT
             p.Id,
             :monto,
             CURDATE(),
@@ -81,7 +100,7 @@ try {
         )
     ");
 
-    $stmtCobro = $conexion->prepare("
+    $stmtCobro = $pdo->prepare("
         INSERT INTO cobros (
             turno_id, paciente_id, profesional_id,
             total, tipo, fecha,
@@ -103,7 +122,16 @@ try {
         )
     ");
 
-    foreach ($items as $item) {
+    $stmtReparto = $pdo->prepare("
+        INSERT INTO cobros_reparto (cobro_id, destino_id, monto)
+        VALUES (?, ?, ?)
+    ");
+
+    // El primer ítem del carrito es la primera cuota nueva que se paga.
+    // Si el afiliado no tenía pagos previos, ese primer ítem genera fondo jorge.
+    $es_primer_pago = !$tenia_pagos_previos;
+
+    foreach ($items as $idx => $item) {
         $monto = (float)($item['monto'] ?? 0);
         $fecha = ($item['fecha'] ?? '') . '-01';   // YYYY-MM-01
         $ym    = $item['fecha'] ?? '';             // YYYY-MM
@@ -117,8 +145,8 @@ try {
             ':fecha'       => $fecha,
         ]);
 
-        // 2. Número con lock (igual que los otros endpoints)
-        $stmtNum = $conexion->prepare("SELECT MAX(numero) FROM cobros WHERE punto_venta = ? FOR UPDATE");
+        // 2. Número con lock
+        $stmtNum = $pdo->prepare("SELECT MAX(numero) FROM cobros WHERE punto_venta = ? FOR UPDATE");
         $stmtNum->execute([$caja_id]);
         $ultimo = (int)$stmtNum->fetchColumn();
         $nuevo  = $ultimo ? $ultimo + 1 : 1;
@@ -126,28 +154,41 @@ try {
         $numeroCompleto = str_pad($caja_id, 4, '0', STR_PAD_LEFT) . '-' .
                           str_pad($nuevo,   8, '0', STR_PAD_LEFT);
 
-        // 3. Concepto: "cuota junio socio 90000"
+        // 3. Concepto
         [$anio, $mes_num] = explode('-', $ym);
         $mes_nombre = $meses_es[$mes_num] ?? $mes_num;
         $concepto   = "cuota {$mes_nombre} socio {$nro_base}";
 
-        // 4. cobros — orden: total, usuario_id, caja_id, caja_sesion_id, punto_venta, numero, numero_completo, concepto
+        // 4. cobro
         $stmtCobro->execute([
             $monto,
             $usuario_id,
-            $caja_id,          // caja_id
-            $caja_sesion_id,   // caja_sesion_id (FK que fallaba — estaba invertido)
-            $caja_id,          // punto_venta = caja_id
+            $caja_id,
+            $caja_sesion_id,
+            $caja_id,          // punto_venta
             $nuevo,
             $numeroCompleto,
             $concepto,
         ]);
+        $cobro_id = (int)$pdo->lastInsertId();
+
+        // 5. reparto
+        //    - siempre: destino 6 (cuota / caja)
+        //    - solo primer mes nuevo: destino 11 (cuota inicial / fondo)
+        
+
+        if ($es_primer_pago) {
+            $stmtReparto->execute([$cobro_id, DESTINO_CUOTA_INICIAL, $monto]);
+            $es_primer_pago = false;   // solo aplica al primer ítem
+        }else{
+            $stmtReparto->execute([$cobro_id, DESTINO_CUOTA, $monto]);
+        }
     }
 
-    $conexion->commit();
+    $pdo->commit();
 
     /* ---- Afiliados para el ticket ---- */
-    $stmtAf = $conexion->prepare("
+    $stmtAf = $pdo->prepare("
         SELECT apellido, nombre, nro_afiliado
         FROM pacientes
         WHERE SUBSTRING_INDEX(SUBSTRING_INDEX(nro_afiliado, '/', 1), ' ', 1) = (
@@ -166,6 +207,6 @@ try {
     ]);
 
 } catch (Exception $e) {
-    $conexion->rollBack();
+    $pdo->rollBack();
     echo json_encode(['ok' => false, 'msg' => 'Error al guardar: ' . $e->getMessage()]);
 }

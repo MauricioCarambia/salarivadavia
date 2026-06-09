@@ -25,6 +25,7 @@ $stmt = $pdo->prepare("
     LEFT JOIN profesionales pr 
         ON pr.Id = t.profesional_id
 
+
     WHERE t.paciente_id = :id
 
     ORDER BY t.fecha DESC
@@ -37,7 +38,9 @@ $stmt->execute([
 ]);
 
 $turnos = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
+$especialidadProfesional = htmlspecialchars(
+    $prof['especialidad'] ?? ''
+);
 /* =========================================
    CONTADORES
 ========================================= */
@@ -250,8 +253,7 @@ foreach ($turnos as $t) {
 
                                     <button
                                         class="btn btn-warning btn-sm rounded-circle btnImprimirTurno"
-                                        data-id="<?= $t['id'] ?>"
-                                        >
+                                        data-id="<?= $t['id'] ?>">
 
                                         <i class="fas fa-print text-white"></i>
 
@@ -401,7 +403,11 @@ foreach ($turnos as $t) {
                 data.profesional_nombre
             )
         );
-
+        if (data.profesional_especialidad) {
+            contenido.push("\n");
+            contenido.push(left("ESPECIALIDAD:"));
+            contenido.push(left(data.profesional_especialidad));
+        }
         contenido.push("\n");
 
         const fechaTurno = new Date(data.fecha);

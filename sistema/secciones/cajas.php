@@ -466,7 +466,7 @@ function obtenerCajaSesionActiva($pdo, $usuarioId)
                 </div>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label>Monto Real</label>
+                        <label>Efectivo en caja</label>
                         <div class="input-group">
                             <div class="input-group-prepend"><span class="input-group-text">$</span></div>
                             <input type="number" class="form-control" id="montoReal" step="0.01"
@@ -545,7 +545,7 @@ function obtenerCajaSesionActiva($pdo, $usuarioId)
             let color = "secondary";
 
             if (montoReal !== null && !isNaN(montoReal)) {
-                diff = montoReal - (cajaEsperadaGlobal + totalFondoGlobal);
+                diff = montoReal - cajaEsperadaGlobal;
 
                 if (diff > 0) color = "success";
                 if (diff < 0) color = "danger";
@@ -554,29 +554,16 @@ function obtenerCajaSesionActiva($pdo, $usuarioId)
             $("#diferencia").html(`
         <div class="mb-2">
             <strong>Caja</strong><br>
-            Inicial: <strong>$${montoInicialGlobal.toFixed(2)}</strong><br>
+            Monto Inicial: <strong>$${montoInicialGlobal.toFixed(2)}</strong><br>
            
-            Caja: 
-            <strong class="text-primary">
+            Total Sistema: 
+            <strong class="text-success">
                 $${cajaEsperadaGlobal.toFixed(2)}
             </strong>
         </div>
 
-        <div class="mb-2">
-            Fondo: 
-            <strong class="text-info">
-                $${totalFondoGlobal.toFixed(2)}
-            </strong>
-        </div>
-
-        <div class="mb-2">
-            Total:
-            <strong class="text-success">
-                $${(cajaEsperadaGlobal + totalFondoGlobal).toFixed(2)}
-            </strong><br>
-
-         
-        </div>
+        
+        
 
         ${
             montoReal !== null

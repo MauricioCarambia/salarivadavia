@@ -48,14 +48,17 @@ try {
     if (!$stmt->fetchColumn()) {
 
         $stmt = $pdo->prepare("
-            SELECT saldo_total, saldo_caja, saldo_fondo
+            SELECT saldo_caja, saldo_fondo
             FROM resumen_financiero_diario
             WHERE fecha < ?
             ORDER BY fecha DESC
             LIMIT 1
         ");
         $stmt->execute([$hoy]);
-        $ant = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['saldo_total' => 0, 'saldo_caja' => 0, 'saldo_fondo' => 0];
+        $ant = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['saldo_caja' => 0, 'saldo_fondo' => 0];
+
+        $saldoCajaInicial  = (float)$ant['saldo_caja'];
+        $saldoFondoInicial = (float)$ant['saldo_fondo'];
 
         $pdo->prepare("
             INSERT INTO resumen_financiero_diario (
@@ -66,10 +69,10 @@ try {
             ) VALUES (?, ?, 0, 0, 0, 0, ?, ?, ?)
         ")->execute([
             $hoy,
-            (float)$ant['saldo_total'],
-            (float)$ant['saldo_caja'],
-            (float)$ant['saldo_fondo'],
-            (float)$ant['saldo_total'],
+            $saldoCajaInicial + $saldoFondoInicial,   // monto_inicial = referencia histórica
+            $saldoCajaInicial,
+            $saldoFondoInicial,
+            $saldoCajaInicial + $saldoFondoInicial,   // saldo_total = caja + fondo
         ]);
     }
 
@@ -101,7 +104,7 @@ try {
     ========================= */
     $pdo->prepare("
         UPDATE resumen_financiero_diario
-        SET saldo_total = monto_inicial + saldo_caja + saldo_fondo
+        SET saldo_total = saldo_caja + saldo_fondo
         WHERE fecha = ?
     ")->execute([$hoy]);
 

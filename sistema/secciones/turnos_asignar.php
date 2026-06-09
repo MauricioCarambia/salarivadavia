@@ -466,7 +466,7 @@ $fechaCompleta = $dt->format('d/m/Y');
             contenido.push("\n");
 
             contenido.push(left("PROFESIONAL:"));
-            contenido.push(left(data.profesional || "-"));
+            contenido.push(left("Dr/Dra " + (data.profesional || "-")));
 
             if (data.especialidad) {
                 contenido.push("\n");

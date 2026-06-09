@@ -186,10 +186,9 @@ $profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <small>
                         <strong>Importante:</strong>
                         Para ingresos utilizar únicamente
-                        <strong>Ingresos Sala</strong>,
-                        <strong>Cuotas</strong> o
-                        <strong>Cuota Inicial(Primera Cuota)</strong>.
-                        <strong>El resto no usar</strong>.
+                        <strong>Ingresos Sala</strong> /
+                        <strong>Cardiologia del sur - En profesional->Cardiologia del sur->Llenar practica y paciente</strong>,
+                       
                     </small>
                 </div>
             </div>
@@ -549,6 +548,7 @@ $profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 </div>
 <script>
+    const esAdmin = <?= $esAdmin ? 'true' : 'false' ?>;
     document.addEventListener("DOMContentLoaded", function() {
 
         if (typeof qz === "undefined") {
@@ -855,18 +855,22 @@ $profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
         function filtrarDestinos() {
-
             let tipo = $('select[name="tipo"]').val();
 
             $('#destino option').each(function() {
-
                 let t = $(this).data('tipo');
                 let categoria = $(this).data('categoria');
 
                 if (!t) return;
 
-                // Ocultar fondos siempre
+                // Ocultar profesional siempre
                 if (categoria === 'profesional') {
+                    $(this).hide();
+                    return;
+                }
+
+                // Ocultar fondo si no es admin
+                if (categoria === 'fondo' && !esAdmin) {
                     $(this).hide();
                     return;
                 }
@@ -877,24 +881,17 @@ $profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 } else {
                     $(this).toggle(t === tipo);
                 }
-
             });
 
             $('#destino').val('');
         }
         $('#destino option').each(function() {
-
-            let categoria = $(this).data('categoria');
-
-            if (categoria === 'fondo') {
-
+            if ($(this).data('categoria') === 'fondo' && esAdmin) {
                 $(this).css({
                     'font-weight': 'bold',
                     'background': '#40c4f8'
                 });
-
             }
-
         });
 
         $('#practicas').on('change', toggleDestino);
@@ -1009,7 +1006,7 @@ $profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             function linea(nombre, valor) {
 
-                let izquierda = nombre.substring(0, 28);
+                let izquierda = nombre.substring(0, 70);
                 let derecha = "$" + parseFloat(valor).toLocaleString(
                     "es-AR", {
                         minimumFractionDigits: 2,

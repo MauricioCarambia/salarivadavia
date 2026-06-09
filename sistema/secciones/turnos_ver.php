@@ -183,7 +183,7 @@ $mensaje = urlencode($mensaje);
 
 ?>
 
-<div class="row mb-3">
+<div class="row mb-1">
 
     <!-- PACIENTE ARRIBA -->
     <div class="col-12">
@@ -202,7 +202,7 @@ $mensaje = urlencode($mensaje);
                 </h3>
 
                 <div class="card-tools">
-                    <a href="./?seccion=pacientes_edit&id=<?= $r['pacienteId'] ?>&turno_id=<?= $r['Id'] ?>"  class="btn btn-success btn-sm">
+                    <a href="./?seccion=pacientes_edit&id=<?= $r['pacienteId'] ?>&turno_id=<?= $r['Id'] ?>" class="btn btn-success btn-sm">
                         Editar paciente
                     </a>
                     <button type="button"
@@ -295,22 +295,22 @@ $mensaje = urlencode($mensaje);
                 <!-- ================= DATOS ================= -->
                 <div class="row mb-3">
 
-                    <div class="col-md-6">
+                    <div class="col-md-3 border-right">
                         <b>Profesional:</b><br>
                         <?= htmlspecialchars($profesional) ?>
                     </div>
 
-                    <div class="col-md-6">
+                    <div class="col-md-3 border-right">
                         <b>Paciente:</b><br>
                         <?= htmlspecialchars($paciente) ?>
                     </div>
 
-                    <div class="col-md-6 mt-2">
+                    <div class="col-md-3 border-right">
                         <b>Fecha:</b><br>
                         <?= $fecha ?> <?= $hora ?>
                     </div>
 
-                    <div class="col-md-6 mt-2">
+                    <div class="col-md-3">
                         <b>Sobreturno:</b><br>
                         <?php if ($r['sobreturno']): ?>
                             <span class="badge badge-warning">Sí</span>
@@ -325,7 +325,7 @@ $mensaje = urlencode($mensaje);
 
                 <!-- ================= ASISTENCIA ================= -->
                 <div class="row mb-3">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
 
                         <div class="custom-control custom-switch">
                             <input type="checkbox" class="custom-control-input" id="asistioSwitch" name="asistio"
@@ -338,21 +338,21 @@ $mensaje = urlencode($mensaje);
                     </div>
 
 
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label>Medio de pago</label>
                         <select name="medio_pago" id="medio_pago" class="form-control" required>
                             <option value="efectivo">Efectivo</option>
                             <option value="transferencia">Transferencia</option>
                         </select>
                     </div>
-                    <div class="col-md-4" id="boxTipoTransferencia" style="display:none;">
+                    <div class="col-md-3" id="boxTipoTransferencia" style="display:none;">
                         <label>Tipo transferencia</label>
                         <select name="transferencia_tipo" id="transferencia_tipo" class="form-control">
                             <option value="clinica">A clínica</option>
                             <option value="profesional">Directo al profesional</option>
                         </select>
                     </div>
-                    <div class="col-md-4" id="boxDestino" style="display:none;">
+                    <div class="col-md-3" id="boxDestino" style="display:none;">
                         <label>Destino transferencia</label>
                         <select name="empleado_destino_id" class="form-control">
                             <option value="">Seleccionar</option>
@@ -370,16 +370,20 @@ $mensaje = urlencode($mensaje);
 
                 <hr>
 
-                <div class="form-group">
-                    <label>Agregar práctica</label>
-                    <select id="selectPractica" class="form-control">
-                        <option value="">Seleccionar...</option>
-                    </select>
-                </div>
+                <div class="form-row align-items-end mb-3">
+                    <div class="col">
+                        <label>Agregar práctica</label>
+                        <select id="selectPractica" class="form-control">
+                            <option value="">Seleccionar...</option>
+                        </select>
+                    </div>
 
-                <button type="button" class="btn btn-success btn-sm mb-3" id="agregarPractica">
-                    <i class="fas fa-plus"></i> Agregar
-                </button>
+                    <div class="col-auto">
+                        <button type="button" class="btn btn-success" id="agregarPractica">
+                            <i class="fas fa-plus"></i> Agregar
+                        </button>
+                    </div>
+                </div>
 
                 <table class="table table-sm " id="tablaCobro">
                     <thead class="thead-dark">

@@ -13,12 +13,15 @@ $stmt = $pdo->prepare("
         p.nombre AS paciente_nombre,
         p.documento,
         pr.apellido AS profesional_apellido,
-        pr.nombre AS profesional_nombre
+        pr.nombre AS profesional_nombre,
+        e.especialidad AS profesional_especialidad
     FROM turnos t
     INNER JOIN pacientes p
         ON p.Id = t.paciente_id
     INNER JOIN profesionales pr
         ON pr.Id = t.profesional_id
+    INNER JOIN especialidades e
+        ON e.Id = pr.especialidad_id
     WHERE t.Id = :id
 ");
 

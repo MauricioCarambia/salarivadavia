@@ -381,7 +381,7 @@ $laboratorio = $pdo->query("
                 contenido.push(center("PRESUPUESTO DE LABORATORIO"));
                 contenido.push(center("LABORATORIO MESSINA"));
                 contenido.push(center("Garibaldi 176, Temperley"));
-                contenido.push(center("TEL: 011-4244-4939"));
+                contenido.push(center("TEL: 11-2871-6602"));
 
 
                 contenido.push("\n");
