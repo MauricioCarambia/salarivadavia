@@ -176,7 +176,20 @@ try {
 
             foreach ($porc as $r) {
                 $dest = strtolower($r['destino']);
-                $reparto[$dest]['monto'] += ($base * $r['valor']) / 100;
+                $reparto[$dest]['monto'] += round(($base * $r['valor']) / 100, 2);
+            }
+
+            // Compensar diferencia de centavos para que el reparto cierre exacto
+            $sumaReparto = array_sum(array_column($reparto, 'monto'));
+            $diferencia  = round($precio - $sumaReparto, 2);
+            if ($diferencia != 0.0) {
+                $destMayor = null;
+                foreach ($reparto as $k => $v) {
+                    if ($destMayor === null || $v['monto'] > $reparto[$destMayor]['monto']) {
+                        $destMayor = $k;
+                    }
+                }
+                $reparto[$destMayor]['monto'] = round($reparto[$destMayor]['monto'] + $diferencia, 2);
             }
         }
 
@@ -234,7 +247,7 @@ try {
 ");
 
     $concepto = implode(', ', array_column($detalle, 'nombre'));
-    $tipoCobro = 'INGRESO';
+    $tipoCobro = 'ingreso';
 
     $stmt->execute([
         $turno_id,

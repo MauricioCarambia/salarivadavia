@@ -829,25 +829,38 @@ pr.apellido AS prof_ape,
     /* =========================================
         📅 RESUMEN FINANCIERO DIARIO
     ========================================= */
-    private function actualizarResumenFinanciero(array $data): void
-    {
-        $fecha = $data['fecha'];
+ private function actualizarResumenFinanciero(array $data): void
+{
+    $fecha = $data['fecha'];
 
-        /* ======================
+    /* ======================
        CREAR DÍA SI NO EXISTE
-       SIN HEREDAR SALDOS
+       HEREDANDO SALDOS DEL DÍA ANTERIOR
     ====================== */
-        $stmt = $this->pdo->prepare("
+    $stmt = $this->pdo->prepare("
         SELECT id
         FROM resumen_financiero_diario
         WHERE fecha = ?
         LIMIT 1
     ");
+    $stmt->execute([$fecha]);
+
+    if (!$stmt->fetchColumn()) {
+
+        $stmt = $this->pdo->prepare("
+            SELECT saldo_caja, saldo_fondo
+            FROM resumen_financiero_diario
+            WHERE fecha < ?
+            ORDER BY fecha DESC
+            LIMIT 1
+        ");
         $stmt->execute([$fecha]);
+        $anterior = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$stmt->fetchColumn()) {
+        $montoInicialHeredado = (float)($anterior['saldo_caja']  ?? 0);
+        $fondoInicialHeredado = (float)($anterior['saldo_fondo'] ?? 0);
 
-            $this->pdo->prepare("
+        $this->pdo->prepare("
             INSERT INTO resumen_financiero_diario (
                 fecha,
                 monto_inicial,
@@ -860,101 +873,84 @@ pr.apellido AS prof_ape,
                 saldo_fondo,
                 saldo_total
             )
-            VALUES (
-                ?, 0, 0,
-                0, 0,
-                0, 0,
-                0, 0,
-                0
-            )
-        ")->execute([$fecha]);
-        }
+            VALUES (?, ?, ?, 0, 0, 0, 0, ?, ?, ?)
+        ")->execute([
+            $fecha,
+            $montoInicialHeredado,
+            $fondoInicialHeredado,
+            $montoInicialHeredado,
+            $fondoInicialHeredado,
+            $montoInicialHeredado + $fondoInicialHeredado,
+        ]);
+    }
 
-        /* ======================
+    /* ======================
        ARQUEOS DEL DÍA
     ====================== */
-        $stmt = $this->pdo->prepare("
+    $stmt = $this->pdo->prepare("
         SELECT
             COALESCE(SUM(total_caja),0)  AS cajas,
             COALESCE(SUM(total_fondo),0) AS fondos
         FROM arqueos_caja
         WHERE DATE(fecha) = ?
     ");
-        $stmt->execute([$fecha]);
-        $ar = $stmt->fetch(PDO::FETCH_ASSOC);
+    $stmt->execute([$fecha]);
+    $ar = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        /* ======================
+    /* ======================
        EGRESOS DEL DÍA
     ====================== */
-        $stmt = $this->pdo->prepare("
+    $stmt = $this->pdo->prepare("
         SELECT
-            COALESCE(
-                SUM(
-                    CASE
-                        WHEN tipo='caja'
-                        THEN monto
-                        ELSE 0
-                    END
-                ),0
-            ) AS eg_caja,
-
-            COALESCE(
-                SUM(
-                    CASE
-                        WHEN tipo='fondo'
-                        THEN monto
-                        ELSE 0
-                    END
-                ),0
-            ) AS eg_fondo
-
+            COALESCE(SUM(CASE WHEN tipo='caja'  THEN monto ELSE 0 END), 0) AS eg_caja,
+            COALESCE(SUM(CASE WHEN tipo='fondo' THEN monto ELSE 0 END), 0) AS eg_fondo
         FROM egresos
         WHERE DATE(creado_en) = ?
     ");
-        $stmt->execute([$fecha]);
-        $eg = $stmt->fetch(PDO::FETCH_ASSOC);
+    $stmt->execute([$fecha]);
+    $eg = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        /* ======================
-       INICIALES CARGADOS
-       MANUALMENTE
+    /* ======================
+       ARRASTRE DEL DÍA ANTERIOR
     ====================== */
-        $stmt = $this->pdo->prepare("
-        SELECT
-            monto_inicial,
-            fondo_inicial
+    $stmt = $this->pdo->prepare("
+        SELECT saldo_caja, saldo_fondo
         FROM resumen_financiero_diario
-        WHERE fecha = ?
+        WHERE fecha < ?
+        ORDER BY fecha DESC
         LIMIT 1
     ");
+    $stmt->execute([$fecha]);
+    $anterior = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    // Si es el primer día, usar monto_inicial cargado manualmente
+    if ($anterior) {
+        $arrastre_caja  = (float)$anterior['saldo_caja'];
+        $arrastre_fondo = (float)$anterior['saldo_fondo'];
+    } else {
+        $stmt = $this->pdo->prepare("
+            SELECT monto_inicial, fondo_inicial
+            FROM resumen_financiero_diario
+            WHERE fecha = ?
+            LIMIT 1
+        ");
         $stmt->execute([$fecha]);
-
         $base = $stmt->fetch(PDO::FETCH_ASSOC);
+        $arrastre_caja  = (float)($base['monto_inicial'] ?? 0);
+        $arrastre_fondo = (float)($base['fondo_inicial'] ?? 0);
+    }
 
-        $montoInicial = (float)($base['monto_inicial'] ?? 0);
-        $fondoInicial = (float)($base['fondo_inicial'] ?? 0);
-
-        /* ======================
-       SALDOS REALES
+    /* ======================
+       SALDOS ACUMULADOS
     ====================== */
+    $saldoCaja  = $arrastre_caja  + (float)$ar['cajas']  - (float)$eg['eg_caja'];
+    $saldoFondo = $arrastre_fondo + (float)$ar['fondos'] - (float)$eg['eg_fondo'];
+    $saldoTotal = $saldoCaja + $saldoFondo;
 
-        $saldoCaja =
-            $montoInicial
-            + (float)$ar['cajas']
-            - (float)$eg['eg_caja'];
-
-        $saldoFondo =
-            $fondoInicial
-            + (float)$ar['fondos']
-            - (float)$eg['eg_fondo'];
-
-        $saldoTotal =
-            $saldoCaja
-            + $saldoFondo;
-
-        /* ======================
+    /* ======================
        GUARDAR RESUMEN
     ====================== */
-        $this->pdo->prepare("
+    $this->pdo->prepare("
         UPDATE resumen_financiero_diario
         SET
             total_cajas    = ?,
@@ -966,14 +962,14 @@ pr.apellido AS prof_ape,
             saldo_total    = ?
         WHERE fecha = ?
     ")->execute([
-            $ar['cajas'],
-            $ar['fondos'],
-            $eg['eg_caja'],
-            $eg['eg_fondo'],
-            $saldoCaja,
-            $saldoFondo,
-            $saldoTotal,
-            $fecha
-        ]);
-    }
+        $ar['cajas'],
+        $ar['fondos'],
+        $eg['eg_caja'],
+        $eg['eg_fondo'],
+        $saldoCaja,
+        $saldoFondo,
+        $saldoTotal,
+        $fecha,
+    ]);
+}
 }

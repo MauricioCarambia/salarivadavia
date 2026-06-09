@@ -1,3 +1,57 @@
+<?php
+require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/services/afiliados.php';
+$stmt = $pdo->query("
+    SELECT COUNT(*) total
+    FROM pacientes
+    WHERE tipo_socio = 'vitalicio'
+");
+
+$totalVitalicios = (int)$stmt->fetchColumn();
+$stmt = $pdo->query("
+    SELECT COUNT(*) total
+    FROM pacientes p
+
+    LEFT JOIN (
+        SELECT
+            paciente_id,
+            MAX(fecha_correspondiente) ultimo_pago
+        FROM pagos_afiliados
+        GROUP BY paciente_id
+    ) pa ON pa.paciente_id = p.Id
+
+    WHERE
+        p.tipo_socio <> 'vitalicio'
+
+        AND pa.ultimo_pago IS NOT NULL
+
+        AND PERIOD_DIFF(
+            DATE_FORMAT(
+                DATE_SUB(CURDATE(), INTERVAL 1 MONTH),
+                '%Y%m'
+            ),
+            DATE_FORMAT(
+                pa.ultimo_pago,
+                '%Y%m'
+            )
+        ) <= 2
+");
+
+$totalActivos = (int)$stmt->fetchColumn();
+?>
+<div class="mb-3">
+
+    <span class="badge badge-success p-2 mr-2">
+        Socios activos:
+        <?= number_format($totalActivos, 0, ',', '.') ?>
+    </span>
+
+    <span class="badge badge-info p-2">
+        Vitalicios:
+        <?= number_format($totalVitalicios, 0, ',', '.') ?>
+    </span>
+
+</div>
 <div class="card card-success card-outline mb-3">
     <div class="card-body">
         <h5>Arrastre de Caja</h5>

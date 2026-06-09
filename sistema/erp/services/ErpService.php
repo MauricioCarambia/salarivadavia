@@ -16,120 +16,54 @@ class ErpService
              como monto_inicial
     ============================== */
     public function getKpis(): array
-    {
-        /* ==========================
-       CAPITAL INICIAL
+{
+    /* ==========================
+       TOMAR EL ÚLTIMO DÍA DEL RESUMEN
     ========================== */
-        $capitalInicial = (float)$this->pdo
-            ->query("
-        SELECT COALESCE(monto_inicial,0)
+    $stmt = $this->pdo->query("
+        SELECT
+            monto_inicial,
+            fondo_inicial,
+            total_cajas,
+            total_fondos,
+            egresos_caja,
+            egresos_fondos,
+            saldo_caja,
+            saldo_fondo,
+            saldo_total
         FROM resumen_financiero_diario
-        WHERE monto_inicial > 0
         ORDER BY fecha DESC
         LIMIT 1
-    ")
-            ->fetchColumn();
-
-        $fondoInicial = (float)$this->pdo
-            ->query("
-        SELECT COALESCE(fondo_inicial,0)
-        FROM resumen_financiero_diario
-        WHERE fondo_inicial > 0
-        ORDER BY fecha DESC
-        LIMIT 1
-    ")
-            ->fetchColumn();
-
-        /* ==========================
-       INGRESOS ACUMULADOS
-    ========================== */
-        $stmt = $this->pdo->query("
-        SELECT
-            COALESCE(SUM(total_caja),0)  AS ingresos_caja,
-            COALESCE(SUM(total_fondo),0) AS ingresos_fondo
-        FROM arqueos_caja
     ");
 
-        $ingresos = $stmt->fetch(PDO::FETCH_ASSOC);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        $cajaIngresos  = (float)$ingresos['ingresos_caja'];
-        $fondoIngresos = (float)$ingresos['ingresos_fondo'];
-
-        /* ==========================
-       EGRESOS ACUMULADOS
-    ========================== */
-        $stmt = $this->pdo->query("
-        SELECT
-            COALESCE(
-                SUM(
-                    CASE
-                        WHEN tipo = 'caja'
-                        THEN monto
-                        ELSE 0
-                    END
-                ),
-            0) AS eg_caja,
-
-            COALESCE(
-                SUM(
-                    CASE
-                        WHEN tipo = 'fondo'
-                        THEN monto
-                        ELSE 0
-                    END
-                ),
-            0) AS eg_fondo
-
-        FROM egresos
-    ");
-
-        $egresos = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        $egresosCaja  = (float)$egresos['eg_caja'];
-        $egresosFondo = (float)$egresos['eg_fondo'];
-
-        /* ==========================
-       DISPONIBLES REALES
-    ========================== */
-
-        $cajaDisponible =
-            $capitalInicial
-            + $cajaIngresos
-            - $egresosCaja;
-
-        $fondoDisponible =
-            $fondoInicial
-            + $fondoIngresos
-            - $egresosFondo;
-
-        $totalDisponible =
-            $cajaDisponible
-            + $fondoDisponible;
-
-        /* ==========================
-       RETORNO
-    ========================== */
+    if (!$row) {
         return [
-
-            // Capitales base
-            'monto_inicial' => $capitalInicial,
-            'fondo_inicial' => $fondoInicial,
-
-            // Movimientos
-            'ingresos_caja'  => $cajaIngresos,
-            'egresos_caja'   => $egresosCaja,
-
-            'ingresos_fondo' => $fondoIngresos,
-            'egresos_fondo'  => $egresosFondo,
-
-            // Disponibles reales
-            'caja'  => $cajaDisponible,
-            'fondo' => $fondoDisponible,
-
-            // Total clínica
-            'total' => $totalDisponible
+            'monto_inicial'  => 0,
+            'fondo_inicial'  => 0,
+            'ingresos_caja'  => 0,
+            'egresos_caja'   => 0,
+            'ingresos_fondo' => 0,
+            'egresos_fondo'  => 0,
+            'caja'           => 0,
+            'fondo'          => 0,
+            'total'          => 0,
         ];
     }
+
+    return [
+        'monto_inicial'  => (float)$row['monto_inicial'],
+        'fondo_inicial'  => (float)$row['fondo_inicial'],
+        'ingresos_caja'  => (float)$row['total_cajas'],
+        'egresos_caja'   => (float)$row['egresos_caja'],
+        'ingresos_fondo' => (float)$row['total_fondos'],
+        'egresos_fondo'  => (float)$row['egresos_fondos'],
+        'caja'           => (float)$row['saldo_caja'],
+        'fondo'          => (float)$row['saldo_fondo'],
+        'total'          => (float)$row['saldo_total'],
+    ];
+}
 
     /* ==============================
         📅 LIBRO DIARIO

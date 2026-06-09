@@ -63,10 +63,11 @@ $stmt = $pdo->prepare("
     SELECT 
         t.*, 
         p.Id AS pacienteId, p.nombre AS pacienteNombre, p.apellido AS pacienteApellido, p.celular AS pacienteCelular,
-        pr.Id AS profesionalId, pr.nombre AS profesionalNombre, pr.apellido AS profesionalApellido
+        pr.Id AS profesionalId, pr.nombre AS profesionalNombre, pr.apellido AS profesionalApellido, e.especialidad AS especialidad
     FROM turnos t
     LEFT JOIN pacientes p ON p.Id = t.paciente_id
     LEFT JOIN profesionales pr ON pr.Id = t.profesional_id
+    LEFT JOIN especialidades e ON e.Id = pr.especialidad_id
     WHERE t.Id = :id
 ");
 $stmt->execute([':id' => $id]);
@@ -165,15 +166,13 @@ function normalizarCelularArgentina(string $numero): string
 }
 $cel = normalizarCelularArgentina($r['pacienteCelular']);
 
-$mensaje = "Recordatorio de turno
+$mensaje = "Buenos dias, le recordamos que tiene un turno en Sala Rivadavia - Av Eva Peron 695 - Temperley
 
 Paciente: $paciente
 Profesional: $profesional
+Especialidad: {$r['especialidad']}
 Fecha: $fecha
 Hora: $hora
-
-Sala Rivadavia
-Av. Eva Perón 695 - Temperley
 
 Se abona únicamente en efectivo
 
@@ -664,23 +663,43 @@ $mensaje = urlencode($mensaje);
     });
 
 
+    // Después:
     $('#agregarPractica').click(function() {
         if (!$('#asistioSwitch').is(':checked')) {
             return Swal.fire('Error', 'Primero marcar que asistió', 'error');
         }
 
         let practica_id = $('#selectPractica').val();
-
         if (!practica_id) return;
 
-        // 🔥 evitar duplicados
+        const fechaTurno = '<?= date('Y-m-d', strtotime($r['fecha'])) ?>';
+        const hoy = new Date().toISOString().slice(0, 10);
+
+        if (fechaTurno !== hoy) {
+            const [at, ah] = [fechaTurno, hoy];
+            const fechaLegible = at.split('-').reverse().join('/');
+            Swal.fire({
+                icon: 'warning',
+                title: 'Fecha diferente',
+                html: `El turno es del <b>${fechaLegible}</b> y hoy es <b>${ah.split('-').reverse().join('/')}</b>.<br>¿Querés cobrar igual?`,
+                showCancelButton: true,
+                confirmButtonText: 'Sí, cobrar igual',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#e67e22',
+            }).then(result => {
+                if (result.isConfirmed) agregarPractica(practica_id);
+            });
+            return;
+        }
+
+        agregarPractica(practica_id);
+    });
+
+    function agregarPractica(practica_id) {
+        // evitar duplicados
         let existe = false;
-
         $('#tablaCobro tbody tr').each(function() {
-            if ($(this).data('id') == practica_id) {
-                existe = true;
-            }
-
+            if ($(this).data('id') == practica_id) existe = true;
         });
         if (existe) {
             return Swal.fire('Error', 'La práctica ya fue agregada', 'error');
@@ -690,11 +709,7 @@ $mensaje = urlencode($mensaje);
             practica_id: practica_id,
             paciente_id: <?= $r['pacienteId'] ?>
         }, function(res) {
-
-            console.log(res); // 👈 CLAVE
-
             if (res.success) {
-
                 let fila = `
             <tr data-id="${practica_id}">
                 <td>${res.nombre}</td>
@@ -705,15 +720,11 @@ $mensaje = urlencode($mensaje);
                     </button>
                 </td>
             </tr>`;
-
                 $('#tablaCobro tbody').append(fila);
-
                 calcularTotal();
             }
-
         }, 'json');
-
-    });
+    }
 
     function calcularTotal() {
 

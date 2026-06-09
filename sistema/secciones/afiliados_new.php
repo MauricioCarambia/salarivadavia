@@ -116,7 +116,15 @@ $meses = [
                 </div>
                 <div class="form-group">
                     <label>Mes a abonar</label>
-                    <input type="month" id="fecha" class="form-control" value="<?= date('Y-m') ?>">
+                    <?php
+                    if ($ultimoPago) {
+                        $siguiente = mktime(0, 0, 0, $ultimoPago['mes'] + 1, 1, $ultimoPago['anio']);
+                        $valorFecha = date('Y-m', $siguiente);
+                    } else {
+                        $valorFecha = date('Y-m');
+                    }
+                    ?>
+                    <input type="month" id="fecha" class="form-control" value="<?= $valorFecha ?>">
                 </div>
                 <button type="button" id="agregarMes" class="btn btn-primary btn-block">
                     <i class="fas fa-plus mr-1"></i> Agregar al carrito
