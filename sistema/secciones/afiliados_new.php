@@ -76,7 +76,7 @@ $meses = [
                 </div>
                 <div class="col-md-2">
                     <small class="text-muted d-block">Obra social</small>
-                    <?= htmlspecialchars($paciente['obra_social']) ?>
+                    <?= htmlspecialchars($paciente['obra_social'] ?? '') ?>
                 </div>
                 <div class="col-md-1">
                     <small class="text-muted d-block">Localidad</small>
@@ -705,7 +705,8 @@ $meses = [
                         fetch('ajax/guardar_pagos_afiliado.php?paciente_id=<?= $id ?>', {
                                 method: 'POST',
                                 headers: {
-                                    'Content-Type': 'application/json'
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content')
                                 },
                                 body: JSON.stringify({
                                     items: carrito
