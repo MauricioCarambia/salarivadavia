@@ -41,7 +41,7 @@ $rand = rand(1000, 9999);
                         foreach ($turnos as $r):
                             ?>
                             <tr <?= $r['sobreturno'] ? 'style="border-left: 4px solid #ffc107;"' : '' ?>>
-                                <td><?= strftime('%H:%M hs', strtotime($r['fecha'])) ?></td>
+                                <td><?= date('H:i', strtotime($r['fecha'])) ?> hs</td>
                                 <td><?= htmlspecialchars($r['profesionalApellido'] . ' ' . $r['profesionalNombre']) ?></td>
                                 <td>
                                     <div class="d-flex align-items-center justify-content-between">

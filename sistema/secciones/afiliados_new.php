@@ -537,7 +537,7 @@ $meses = [
                         nombre = nombre.substring(0, 40);
                     }
 
-                    c.push(left("• " + nombre));
+                    c.push(left(nombre));
                 });
 
                 c.push(sep());
@@ -715,17 +715,22 @@ $meses = [
                                 if (!r.ok) throw new Error('HTTP ' + r.status);
                                 return r.json();
                             })
-                            .then(async data => {
+                            .then(data => {
                                 if (data.ok) {
-                                    if (debeImprimir) {
-                                        await imprimirTicketAfiliado(data.afiliados || [], carrito, totalCarrito);
-                                    }
                                     Swal.fire({
                                         icon: 'success',
                                         title: data.msg,
                                         timer: 2000,
                                         showConfirmButton: false
-                                    }).then(() => location.reload());
+                                    });
+
+                                    if (debeImprimir) {
+                                        imprimirTicketAfiliado(data.afiliados || [], carrito, totalCarrito)
+                                            .catch(err => console.error(err))
+                                            .finally(() => location.reload());
+                                    } else {
+                                        setTimeout(() => location.reload(), 1500);
+                                    }
                                 } else {
                                     Swal.fire({
                                         icon: 'error',
