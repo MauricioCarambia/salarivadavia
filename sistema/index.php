@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/inc/session.php';
 require_once __DIR__ . '/inc/db.php';
+require_once __DIR__ . '/inc/csrf.php';
 $cajas = [];
 $stmt = $pdo->query("SELECT * FROM cajas ORDER BY nombre");
 if ($stmt) {
@@ -72,6 +73,7 @@ $meses = [
 
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="<?= htmlspecialchars(csrf_token(), ENT_QUOTES) ?>">
     <link rel="icon" type="image/x-icon" href="images/sala.ico">
 
     <title>Sistema de Turnos</title>
@@ -80,6 +82,11 @@ $meses = [
     <link rel="stylesheet" href="adminlte/dist/css/adminlte.min.css">
     <link rel="stylesheet" href="vendor/sweetalert/sweetalert2.min.css">
     <script src="adminlte/plugins/jquery/jquery.min.js"></script>
+    <script>
+        $.ajaxSetup({
+            headers: { 'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content') }
+        });
+    </script>
     <link rel="stylesheet" href="vendor/datatables/dataTables.bootstrap4.min.css">
     <link rel="stylesheet" href="vendor/datatables/buttons.bootstrap4.min.css">
     <link rel="stylesheet" href="vendor/datatables/jquery.dataTables.min.css">

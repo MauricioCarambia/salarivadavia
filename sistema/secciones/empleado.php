@@ -87,7 +87,7 @@ $accesos = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <?php
                                 $disabled = !$emp['activo'] ? 'disabled' : '';
                                 $rolNombre = !empty($emp['rol']) ? $emp['rol'] : null;
-                                $esAdminFila = strtolower($rolNombre) === 'administrador';
+                                $esAdminFila = strtolower($rolNombre ?? '') === 'administrador';
                                 ?>
 
                                 <tr class="<?= !$emp['activo'] ? 'table-danger' : '' ?>">

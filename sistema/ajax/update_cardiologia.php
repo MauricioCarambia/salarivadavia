@@ -7,6 +7,9 @@ if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
     echo json_encode(['success' => false, 'message' => 'No autenticado']);
     exit;
 }
+
+require_once __DIR__ . '/../inc/csrf.php';
+requerirCsrf();
 require_once __DIR__ . '/../inc/db.php';
 
 $id = $_POST['id'] ?? 0;
@@ -50,8 +53,11 @@ try {
 
 } catch (PDOException $e) {
 
+    error_log($e->getMessage());
+    http_response_code(500);
+
     echo json_encode([
         'ok' => false,
-        'error' => $e->getMessage()
+        'error' => 'Error en base de datos'
     ]);
 }

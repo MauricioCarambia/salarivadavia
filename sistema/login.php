@@ -7,6 +7,8 @@ session_cache_limiter("private");
 session_start();
 
 require_once __DIR__ . '/inc/db.php';
+require_once __DIR__ . '/inc/rate_limit.php';
+require_once __DIR__ . '/inc/csrf.php';
 
 $rand = mt_rand();
 $mensaje = '';
@@ -15,8 +17,18 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
 
   $usuario = trim($_POST['usuario']);
   $contrasenia = trim($_POST['contrasenia']);
+  $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 
-  if (strlen($usuario) < 3 || strlen($contrasenia) < 3) {
+  if (!csrf_validate()) {
+
+    $mensaje = '<div class="alert alert-danger">Sesión expirada, por favor reintentá.</div>';
+
+  } elseif (($bloqueoSegundos = loginEstaBloqueado($pdo, $usuario, $ip)) !== null) {
+
+    $minutos = (int) ceil($bloqueoSegundos / 60);
+    $mensaje = '<div class="alert alert-danger">Demasiados intentos fallidos. Probá de nuevo en ' . $minutos . ' minuto(s).</div>';
+
+  } elseif (strlen($usuario) < 3 || strlen($contrasenia) < 3) {
 
     $mensaje = '<div class="alert alert-warning">El usuario y la contraseña deben tener al menos 3 caracteres.</div>';
 
@@ -39,11 +51,13 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
 
       // 👉 EXISTE COMO EMPLEADO → validar contraseña
       if (!password_verify($contrasenia, $empleado['contrasenia'])) {
+        registrarIntentoFallido($pdo, $usuario, $ip);
         $mensaje = '<div class="alert alert-danger">Contraseña incorrecta.</div>';
       } elseif (!$empleado['activo']) {
         $mensaje = '<div class="alert alert-danger">Usuario inactivo</div>';
       } else {
 
+        limpiarIntentosLogin($pdo, $usuario, $ip);
         session_regenerate_id(true);
         $_SESSION = [];
 
@@ -111,6 +125,7 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
 
       if ($passwordOk){
 
+        limpiarIntentosLogin($pdo, $usuario, $ip);
         session_regenerate_id(true);
         $_SESSION = [];
 
@@ -131,6 +146,7 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
         exit;
 
       } else {
+        registrarIntentoFallido($pdo, $usuario, $ip);
         $mensaje = '<div class="alert alert-danger">Usuario o contraseña incorrectos.</div>';
       }
     }
@@ -176,6 +192,7 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
         <?= $mensaje ?>
 
         <form method="post">
+          <?= csrf_field() ?>
 
           <div class="input-group mb-3">
             <input type="text" name="usuario" class="form-control" placeholder="Usuario" required>

@@ -7,6 +7,9 @@ if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
     echo json_encode(['success' => false, 'message' => 'No autenticado']);
     exit;
 }
+
+require_once __DIR__ . '/../inc/csrf.php';
+requerirCsrf();
 require_once __DIR__ . '/../inc/db.php';
 
 $id = $_GET['id'];

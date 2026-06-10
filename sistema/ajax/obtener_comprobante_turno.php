@@ -8,6 +8,9 @@ if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
     exit;
 }
 
+require_once __DIR__ . '/../inc/csrf.php';
+requerirCsrf();
+
 require_once __DIR__ . '/../inc/db.php';
 
 $id = (int)($_GET['id'] ?? 0);

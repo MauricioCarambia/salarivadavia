@@ -5,15 +5,18 @@ if (session_status() === PHP_SESSION_NONE) {
 
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/errors.php';
+
 /* ==========================================
    CONEXION PDO PROFESIONAL
 ========================================== */
 
-$host = "localhost";
-$db   = "sala";
-$user = "root";
-$pass = "";
-$charset = "utf8mb4";
+$host    = env('DB_HOST', 'localhost');
+$db      = env('DB_NAME', 'sala');
+$user    = env('DB_USER', 'root');
+$pass    = env('DB_PASS', '');
+$charset = env('DB_CHARSET', 'utf8mb4');
 
 $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
 

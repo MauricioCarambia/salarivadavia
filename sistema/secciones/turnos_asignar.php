@@ -297,31 +297,6 @@ $fechaCompleta = $dt->format('d/m/Y');
 
                 if (res.success) {
 
-                    // 🔥 SOLO IMPRIME SI EL CHECK ESTÁ ACTIVO
-                    if (imprimir) {
-                        try {
-
-                            await imprimirTicketTurno({
-                                paciente: nombre,
-                                profesional: res.profesional,
-                                especialidad: res.especialidad,
-                                fecha: res.fecha.split(' ')[0],
-                                hora: res.hora,
-                                sobreturno: res.sobreturno
-                            });
-
-                        } catch (e) {
-
-                            console.error(e);
-
-                            parent.Swal.fire({
-                                icon: 'warning',
-                                title: 'Turno guardado',
-                                text: 'No se pudo imprimir el comprobante'
-                            });
-                        }
-                    }
-
                     parent.$('#modalTurno').modal('hide');
 
                     parent.Swal.fire({
@@ -338,6 +313,27 @@ $fechaCompleta = $dt->format('d/m/Y');
                         }
 
                     });
+
+                    // 🔥 SOLO IMPRIME SI EL CHECK ESTÁ ACTIVO (en segundo plano, no bloquea la confirmación)
+                    if (imprimir) {
+                        imprimirTicketTurno({
+                            paciente: nombre,
+                            profesional: res.profesional,
+                            especialidad: res.especialidad,
+                            fecha: res.fecha.split(' ')[0],
+                            hora: res.hora,
+                            sobreturno: res.sobreturno
+                        }).catch(e => {
+
+                            console.error(e);
+
+                            parent.Swal.fire({
+                                icon: 'warning',
+                                title: 'Turno guardado',
+                                text: 'No se pudo imprimir el comprobante'
+                            });
+                        });
+                    }
 
                 } else {
 

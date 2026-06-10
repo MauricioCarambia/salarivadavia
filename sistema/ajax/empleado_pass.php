@@ -8,7 +8,11 @@ if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
     exit;
 }
 
+require_once __DIR__ . '/../inc/csrf.php';
+requerirCsrf();
+
 require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/permisos.php';
 
 header('Content-Type: application/json');
 
@@ -32,7 +36,7 @@ try {
     // =============================
     // PERMISOS
     // =============================
-    if (empty($_SESSION['es_admin']) && !in_array('gestionar_roles', $_SESSION['accesos'] ?? [])) {
+    if (!tieneAcceso('gestionar_roles')) {
         throw new Exception('No tenés permisos');
     }
 
@@ -68,6 +72,16 @@ try {
     echo json_encode([
         'ok' => true,
         'mensaje' => 'Contraseña actualizada correctamente'
+    ]);
+
+} catch (PDOException $e) {
+
+    error_log($e->getMessage());
+    http_response_code(500);
+
+    echo json_encode([
+        'ok' => false,
+        'error' => 'Error en base de datos'
     ]);
 
 } catch (Exception $e) {

@@ -8,7 +8,11 @@ if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
     exit;
 }
 
+require_once __DIR__ . '/../inc/csrf.php';
+requerirCsrf();
+
 require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/permisos.php';
 header('Content-Type: application/json');
 
 try {
@@ -24,16 +28,10 @@ try {
         throw new Exception('ID inválido');
     }
 
-    // 🔥 PERMISOS
-    function tieneAcceso($permiso) {
-    if (!empty($_SESSION['es_admin'])) return true;
-    return in_array($permiso, $_SESSION['accesos'] ?? []);
-}
-
-// 🔥 VALIDAR PERMISOS
-if (!tieneAcceso('gestionar_roles')) {
-    throw new Exception('No tenés permisos para eliminar empleados');
-}
+    // 🔥 VALIDAR PERMISOS
+    if (!tieneAcceso('gestionar_roles')) {
+        throw new Exception('No tenés permisos para eliminar empleados');
+    }
 
     // 🔥 NO BORRARSE A SÍ MISMO
     if ($id === $user_id) {
@@ -51,6 +49,16 @@ if (!tieneAcceso('gestionar_roles')) {
     echo json_encode([
         'ok' => true,
         'mensaje' => 'Empleado eliminado correctamente'
+    ]);
+
+} catch (PDOException $e) {
+
+    error_log($e->getMessage());
+    http_response_code(500);
+
+    echo json_encode([
+        'ok' => false,
+        'error' => 'Error en base de datos'
     ]);
 
 } catch (Exception $e) {
