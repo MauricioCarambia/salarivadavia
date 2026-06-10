@@ -38,7 +38,7 @@ try {
         ];
     }
 
-    $stmt = $conexion->prepare($sql);
+    $stmt = $pdo->prepare($sql);
     $resultado = $stmt->execute($params);
 
     if ($resultado) {

@@ -8,7 +8,7 @@ $id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
 /* =============================
    PROFESIONAL
 =============================*/
-$stmt = $conexion->prepare("
+$stmt = $pdo->prepare("
     SELECT p.*, e.especialidad
     FROM profesionales p
     LEFT JOIN especialidades e ON e.Id = p.especialidad_id
@@ -27,7 +27,7 @@ $duracion = max(5, (int) ($profesional['duracion_turnos'] ?? 15));
 /* =============================
    HORARIOS (UNA SOLA QUERY)
 =============================*/
-$stmt = $conexion->prepare("
+$stmt = $pdo->prepare("
     SELECT dia, hora_inicio, hora_fin
     FROM profesionales_horarios
     WHERE profesional_id = :id
@@ -94,7 +94,7 @@ $dias_ocultos = array_values(array_diff(range(0, 6), $dias_prof));
 /* =============================
    DIAS ANULADOS
 =============================*/
-$stmt = $conexion->prepare("
+$stmt = $pdo->prepare("
     SELECT fecha
     FROM dias_anulados
     WHERE profesional_id = :id

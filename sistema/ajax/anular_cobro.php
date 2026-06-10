@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../inc/session.php';
 require_once __DIR__ . '/../inc/db.php';
 
 header('Content-Type: application/json');
@@ -7,6 +8,10 @@ try {
 
     $cobro_id = (int)($_POST['cobro_id'] ?? 0);
     $usuarioId = $_SESSION['user_id'] ?? 0;
+
+    if (!$usuarioId) {
+        throw new Exception('Usuario no autenticado');
+    }
 
     if ($cobro_id <= 0) {
         throw new Exception('ID inválido');

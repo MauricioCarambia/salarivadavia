@@ -1,9 +1,10 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
+require_once __DIR__ . '/../inc/session.php';
 require_once __DIR__ . '/../inc/db.php';
+
+if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
+    die('<div class="alert alert-danger">Usuario no autenticado</div>');
+}
 
 $idHC = (int) ($_GET['id'] ?? 0);
 $pacienteId = (int) ($_GET['paciente_id'] ?? 0);

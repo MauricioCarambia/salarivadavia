@@ -1,20 +1,6 @@
 <?php
 
-// =============================
-// FUNCIÓN DE PERMISOS
-// =============================
-function tieneAcceso($permiso)
-{
-
-    if (!empty($_SESSION['es_admin']))
-        return true;
-
-    if (in_array('*', $_SESSION['accesos'] ?? []))
-        return true;
-
-    return in_array($permiso, $_SESSION['accesos'] ?? []);
-}
-
+require_once __DIR__ . '/../inc/permisos.php';
 
 // =============================
 // RENDER MENU

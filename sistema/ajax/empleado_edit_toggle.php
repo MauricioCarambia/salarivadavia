@@ -1,4 +1,16 @@
 <?php
+require_once __DIR__ . '/../inc/session.php';
+require_once __DIR__ . '/../inc/permisos.php';
+
+if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
+    header('Content-Type: application/json');
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'No autenticado']);
+    exit;
+}
+
+requerirAcceso('administrar empleados');
+
 require_once __DIR__ . '/../inc/db.php';
 
 header('Content-Type: application/json');
@@ -34,7 +46,7 @@ try {
     // =============================
     // UPDATE
     // =============================
-    $stmt = $conexion->prepare("
+    $stmt = $pdo->prepare("
         UPDATE empleado 
         SET activo = :activo 
         WHERE id = :id

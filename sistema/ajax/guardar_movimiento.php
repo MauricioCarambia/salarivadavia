@@ -1,6 +1,5 @@
 <?php
-session_name("turnos");
-session_start();
+require_once __DIR__ . '/../inc/session.php';
 require_once __DIR__ . '/../inc/db.php';
 require_once __DIR__ . '/../inc/services/afiliados.php';
 header('Content-Type: application/json');

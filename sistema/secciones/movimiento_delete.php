@@ -29,15 +29,15 @@
                         if ($confirmar === 'si') {
                             // Usar transacción para asegurar integridad
                             try {
-                                $conexion->beginTransaction();
+                                $pdo->beginTransaction();
 
 
 
                                 // Eliminar paciente
-                                $stmtPaciente = $conexion->prepare("DELETE FROM caja WHERE id = ?");
+                                $stmtPaciente = $pdo->prepare("DELETE FROM caja WHERE id = ?");
                                 $stmtPaciente->execute([$id]);
 
-                                $conexion->commit();
+                                $pdo->commit();
 
                                 echo '
         <div class="alert alert-info">Se eliminó el registro.</div>
@@ -45,7 +45,7 @@
           <a href="?seccion=caja&nc=' . $rand . '" class="btn btn-info">Aceptar</a>
         </div>';
                             } catch (Exception $e) {
-                                $conexion->rollBack();
+                                $pdo->rollBack();
                                 echo '<div class="alert alert-danger">Error al eliminar: ' . $e->getMessage() . '</div>';
                             }
                         } else {

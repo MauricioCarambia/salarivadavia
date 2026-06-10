@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && strpos($_SERVER['CONTENT_TYPE'] ?? 
 
     if ($turno_id) {
 
-        $stmt = $conexion->prepare("UPDATE turnos SET atendido = :atendido WHERE Id = :id");
+        $stmt = $pdo->prepare("UPDATE turnos SET atendido = :atendido WHERE Id = :id");
         $stmt->execute([
             'atendido' => $atendido ? 1 : 0,
             'id' => $turno_id
@@ -48,7 +48,7 @@ $sql = "SELECT t.*,
           AND t.fecha BETWEEN :inicio AND :fin
         ORDER BY t.fecha ASC";
 
-$stmt = $conexion->prepare($sql);
+$stmt = $pdo->prepare($sql);
 $stmt->execute([
     'pid' => $profesionalId,
     'inicio' => $inicioDia,

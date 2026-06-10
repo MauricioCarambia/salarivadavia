@@ -35,7 +35,7 @@ $rand = rand(1000,9999);
                             LEFT JOIN especialidades AS e ON e.Id = p.especialidad_id
                             ORDER BY e.especialidad, p.apellido, p.nombre
                         ";
-                        $stmt = $conexion->prepare($sqlProfesionales);
+                        $stmt = $pdo->prepare($sqlProfesionales);
                         $stmt->execute();
                         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)):
                         ?>

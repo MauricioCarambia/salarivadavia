@@ -7,7 +7,7 @@ $fecha  = $_GET['fecha'] ?? date('Y-m-d');
 /* ===============================
    PROFESIONAL
 ================================*/
-$stmt = $conexion->prepare("
+$stmt = $pdo->prepare("
 SELECT p.apellido,
        p.nombre,
        e.especialidad
@@ -24,7 +24,7 @@ $prof = $stmt->fetch(PDO::FETCH_ASSOC);
 /* ===============================
    TURNOS DEL DIA
 ================================*/
-$stmt = $conexion->prepare("
+$stmt = $pdo->prepare("
 SELECT
 t.fecha,
 pa.nombre,

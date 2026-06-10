@@ -1,8 +1,8 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
-function obtenerListaEspera(PDO $conexion, string $especialidad): array
+function obtenerListaEspera(PDO $pdo, string $especialidad): array
 {
-    $stmt = $conexion->prepare("
+    $stmt = $pdo->prepare("
         SELECT *
         FROM lista_espera
         WHERE especialidad = :especialidad
@@ -37,7 +37,7 @@ function badgeEstado(?string $estado): string
     };
 }
 
-$registros = obtenerListaEspera($conexion, $especialidad);
+$registros = obtenerListaEspera($pdo, $especialidad);
 ?>
 
 <div class="card card-info card-outline">

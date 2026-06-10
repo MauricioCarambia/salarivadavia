@@ -68,7 +68,7 @@ ORDER BY p.apellido ASC
 LIMIT 25
     ";
 
-    $stmt = $conexion->prepare($sql);
+    $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $pacientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }

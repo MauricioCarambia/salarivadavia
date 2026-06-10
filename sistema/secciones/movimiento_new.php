@@ -9,7 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $descripcion = $_POST['descripcion'];
     $monto = floatval($_POST['monto']);
     $fecha_actual = date('Y-m-d H:i:s');
-    $stmt = $conexion->prepare("
+    $stmt = $pdo->prepare("
     INSERT INTO caja (tipo, descripcion, monto, fecha) 
     VALUES (:tipo, :descripcion, :monto, :fecha)
 ");

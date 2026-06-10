@@ -25,7 +25,7 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
     // =============================
 // BUSCAR EMPLEADO
 // =============================
-    $stmt = $conexion->prepare("
+    $stmt = $pdo->prepare("
     SELECT e.Id, e.usuario, e.contrasenia, e.nombre, e.rol_id, e.activo, r.nombre AS rol_nombre
     FROM empleados e
     LEFT JOIN roles r ON e.rol_id = r.id
@@ -63,7 +63,7 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
           $_SESSION['accesos'] = ['*'];
         } else {
 
-          $stmtAccesos = $conexion->prepare("
+          $stmtAccesos = $pdo->prepare("
                 SELECT a.nombre
                 FROM roles_accesos ra
                 INNER JOIN accesos a ON a.id = ra.acceso_id
@@ -86,7 +86,7 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
       // =============================
       // BUSCAR PROFESIONAL
       // =============================
-      $stmt = $conexion->prepare("
+      $stmt = $pdo->prepare("
         SELECT Id, nombre, apellido, usuario, contrasenia
         FROM profesionales
         WHERE usuario = ?
@@ -95,7 +95,21 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
       $stmt->execute([$usuario]);
       $profesional = $stmt->fetch(PDO::FETCH_ASSOC);
 
-      if ($profesional && $contrasenia === $profesional['contrasenia']){
+      $passwordOk = false;
+
+      if ($profesional) {
+        if (password_verify($contrasenia, $profesional['contrasenia'])) {
+          $passwordOk = true;
+        } elseif ($contrasenia === $profesional['contrasenia']) {
+          // Contraseña antigua en texto plano: validar y migrar a hash
+          $passwordOk = true;
+          $nuevoHash = password_hash($contrasenia, PASSWORD_DEFAULT);
+          $pdo->prepare("UPDATE profesionales SET contrasenia = ? WHERE Id = ?")
+            ->execute([$nuevoHash, $profesional['Id']]);
+        }
+      }
+
+      if ($passwordOk){
 
         session_regenerate_id(true);
         $_SESSION = [];

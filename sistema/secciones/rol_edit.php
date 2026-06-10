@@ -6,7 +6,7 @@ $rand = rand();
 $rol_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
 // Obtener rol
-$stmt = $conexion->prepare("SELECT * FROM roles WHERE id = :id");
+$stmt = $pdo->prepare("SELECT * FROM roles WHERE id = :id");
 $stmt->execute([':id' => $rol_id]);
 $rol = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -17,12 +17,12 @@ if (!$rol) {
 $nombre = $rol['nombre'];
 
 // Accesos disponibles
-$stmt = $conexion->prepare("SELECT * FROM accesos ORDER BY nombre ASC");
+$stmt = $pdo->prepare("SELECT * FROM accesos ORDER BY nombre ASC");
 $stmt->execute();
 $accesos_disponibles = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Accesos actuales
-$stmt = $conexion->prepare("SELECT acceso_id FROM roles_accesos WHERE rol_id = :rol_id");
+$stmt = $pdo->prepare("SELECT acceso_id FROM roles_accesos WHERE rol_id = :rol_id");
 $stmt->execute([':rol_id' => $rol_id]);
 $accesos_actuales = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
@@ -36,23 +36,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $mensaje = '<div class="alert alert-danger">Debe ingresar un nombre.</div>';
     } else {
 
-        $conexion->beginTransaction();
+        $pdo->beginTransaction();
 
         try {
             // Actualizar nombre
-            $stmt = $conexion->prepare("UPDATE roles SET nombre = :nombre WHERE id = :id");
+            $stmt = $pdo->prepare("UPDATE roles SET nombre = :nombre WHERE id = :id");
             $stmt->execute([
                 ':nombre' => $nuevo_nombre,
                 ':id' => $rol_id
             ]);
 
             // Borrar accesos
-            $stmt = $conexion->prepare("DELETE FROM roles_accesos WHERE rol_id = :rol_id");
+            $stmt = $pdo->prepare("DELETE FROM roles_accesos WHERE rol_id = :rol_id");
             $stmt->execute([':rol_id' => $rol_id]);
 
             // Insertar nuevos accesos
             if (!empty($accesos)) {
-                $stmt = $conexion->prepare("
+                $stmt = $pdo->prepare("
                     INSERT INTO roles_accesos (rol_id, acceso_id)
                     VALUES (:rol_id, :acceso_id)
                 ");
@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            $conexion->commit();
+            $pdo->commit();
 
             echo '<script>
                 window.location.href = "./?seccion=empleado&v=ok&nc=' . rand() . '";
@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
 
         } catch (Exception $e) {
-            $conexion->rollBack();
+            $pdo->rollBack();
             $mensaje = '<div class="alert alert-danger">Error al actualizar el rol.</div>';
         }
     }

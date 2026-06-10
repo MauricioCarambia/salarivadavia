@@ -6,7 +6,7 @@ $nombre = '';
 $rand = rand();
 
 // Traer accesos
-$stmt = $conexion->prepare("SELECT * FROM accesos ORDER BY nombre ASC");
+$stmt = $pdo->prepare("SELECT * FROM accesos ORDER BY nombre ASC");
 $stmt->execute();
 $accesos_disponibles = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -19,18 +19,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $mensaje = '<div class="alert alert-danger">Debe ingresar un nombre para el rol.</div>';
     } else {
 
-        $conexion->beginTransaction();
+        $pdo->beginTransaction();
 
         try {
             // Insertar rol
-            $stmt = $conexion->prepare("INSERT INTO roles (nombre) VALUES (:nombre)");
+            $stmt = $pdo->prepare("INSERT INTO roles (nombre) VALUES (:nombre)");
             $stmt->execute([':nombre' => $nombre]);
 
-            $rol_id = $conexion->lastInsertId();
+            $rol_id = $pdo->lastInsertId();
 
             // Insertar accesos
             if (!empty($accesos)) {
-                $stmt = $conexion->prepare("
+                $stmt = $pdo->prepare("
                     INSERT INTO roles_accesos (rol_id, acceso_id) 
                     VALUES (:rol_id, :acceso_id)
                 ");
@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            $conexion->commit();
+            $pdo->commit();
 
             echo '<script>
                 window.location.href = "./?seccion=empleado&v=ok&nc=' . rand() . '";
@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
 
         } catch (Exception $e) {
-            $conexion->rollBack();
+            $pdo->rollBack();
             $mensaje = '<div class="alert alert-danger">Error al guardar el rol.</div>';
         }
     }

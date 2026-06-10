@@ -98,7 +98,7 @@ if (isset($_POST['guardar'])) {
                 ':porcentaje' => $campos['porcentaje'],
                 ':duracion_turnos' => $campos['duracion_turnos'],
                 ':usuario' => $campos['usuario'],
-                ':contrasenia' => $campos['contrasenia'],
+                ':contrasenia' => password_hash($campos['contrasenia'], PASSWORD_DEFAULT),
                 ':sexo' => $campos['sexo'],
                 ':vacaciones_desde' => $campos['vacaciones_desde'] ?: null,
                 ':vacaciones_hasta' => $campos['vacaciones_hasta'] ?: null,
@@ -302,7 +302,7 @@ $provincias = [
                     </div>
                     <div class="form-group col-md-6">
                         <label>Contraseña</label>
-                        <input type="text" name="contrasenia" class="form-control"
+                        <input type="password" name="contrasenia" class="form-control" autocomplete="new-password"
                             value="<?= htmlspecialchars($campos['contrasenia']) ?>">
                     </div>
                 </div>

@@ -4,14 +4,14 @@ $rand = rand(1000, 9999);
 $fechaSeleccionada = isset($_POST['fecha']) ? $_POST['fecha'] : date('Y-m-d');
 // ---------------------- INGRESOS ----------------------
 $sqlIngresos = "SELECT id, descripcion, monto, fecha FROM caja WHERE tipo = 'Ingreso' AND DATE(fecha) = :fecha";
-$stmtIngresos = $conexion->prepare($sqlIngresos);
+$stmtIngresos = $pdo->prepare($sqlIngresos);
 $stmtIngresos->execute(['fecha' => $fechaSeleccionada]);
 $ingresos = $stmtIngresos->fetchAll(PDO::FETCH_ASSOC);
 $totalIngresos = array_sum(array_column($ingresos, 'monto'));
 
 // ---------------------- EGRESOS ----------------------
 $sqlEgresos = "SELECT id, descripcion, monto, fecha FROM caja WHERE tipo = 'Egreso' AND DATE(fecha) = :fecha";
-$stmtEgresos = $conexion->prepare($sqlEgresos);
+$stmtEgresos = $pdo->prepare($sqlEgresos);
 $stmtEgresos->execute(['fecha' => $fechaSeleccionada]);
 $egresos = $stmtEgresos->fetchAll(PDO::FETCH_ASSOC);
 $totalEgresos = array_sum(array_column($egresos, 'monto'));
@@ -26,7 +26,7 @@ $sqlProf = "
     WHERE DATE(p.fecha) = :fecha
     GROUP BY p.id_profesional
 ";
-$stmtProf = $conexion->prepare($sqlProf);
+$stmtProf = $pdo->prepare($sqlProf);
 $stmtProf->execute(['fecha' => $fechaSeleccionada]);
 $pagosProf = $stmtProf->fetchAll(PDO::FETCH_ASSOC);
 

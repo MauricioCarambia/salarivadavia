@@ -19,7 +19,7 @@ $rand = mt_rand(1000, 9999);
 // =============================
 // EMPLEADOS
 // =============================
-$stmt = $conexion->prepare("
+$stmt = $pdo->prepare("
     SELECT e.Id, e.usuario, e.activo,e.nombre, e.rol_id, r.nombre AS rol 
     FROM empleados e 
     LEFT JOIN roles r ON e.rol_id = r.id
@@ -31,7 +31,7 @@ $empleados = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // =============================
 // ROLES
 // =============================
-$stmt = $conexion->prepare("
+$stmt = $pdo->prepare("
     SELECT 
         r.id, 
         r.nombre AS rol_nombre,
@@ -44,7 +44,7 @@ $stmt = $conexion->prepare("
 ");
 $stmt->execute();
 $roles_con_accesos = $stmt->fetchAll(PDO::FETCH_ASSOC);
-$stmt = $conexion->prepare("SELECT Id, nombre FROM accesos ORDER BY nombre ASC");
+$stmt = $pdo->prepare("SELECT Id, nombre FROM accesos ORDER BY nombre ASC");
 $stmt->execute();
 $accesos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>

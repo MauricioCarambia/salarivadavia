@@ -1,6 +1,13 @@
 <?php
-session_name("turnos");
-session_start();
+require_once __DIR__ . '/../inc/session.php';
+
+if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
+    header('Content-Type: application/json');
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'No autenticado']);
+    exit;
+}
+
 require_once __DIR__ . '/../inc/db.php';
 header('Content-Type: application/json');
 
@@ -34,7 +41,7 @@ if (!tieneAcceso('gestionar_roles')) {
     }
 
     // 🔥 DELETE
-    $stmt = $conexion->prepare("DELETE FROM empleados WHERE Id = ?");
+    $stmt = $pdo->prepare("DELETE FROM empleados WHERE Id = ?");
     $stmt->execute([$id]);
 
     if ($stmt->rowCount() === 0) {

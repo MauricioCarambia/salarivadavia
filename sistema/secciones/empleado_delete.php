@@ -27,12 +27,12 @@
 
                         if ($confirmar === 'si') {
                             try {
-                                $conexion->beginTransaction();
+                                $pdo->beginTransaction();
 
-                                $stmtempleado = $conexion->prepare("DELETE FROM empleados WHERE Id = ?");
+                                $stmtempleado = $pdo->prepare("DELETE FROM empleados WHERE Id = ?");
                                 $stmtempleado->execute([$id]);
 
-                                $conexion->commit();
+                                $pdo->commit();
 
                                 echo '
                 <div class="alert alert-info">Se eliminó el empleado.</div>
@@ -40,7 +40,7 @@
                   <a href="?seccion=empleado&nc=' . $rand . '" class="btn btn-info">Aceptar</a>
                 </div>';
                             } catch (Exception $e) {
-                                $conexion->rollBack();
+                                $pdo->rollBack();
                                 echo '<div class="alert alert-danger">Error al eliminar: ' . htmlspecialchars($e->getMessage()) . '</div>';
                             }
                         } else {
