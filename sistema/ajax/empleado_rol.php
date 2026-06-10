@@ -9,6 +9,7 @@ if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
 }
 
 require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/permisos.php';
 
 header('Content-Type: application/json');
 
@@ -43,16 +44,11 @@ try {
     $accesos  = $_SESSION['accesos'] ?? [];
 
     // =============================
-    // 🔥 PERMISOS
+    // 🔥 VALIDAR PERMISOS
     // =============================
-   function tieneAcceso($permiso) {
-    if (!empty($_SESSION['es_admin'])) return true;
-    return in_array($permiso, $_SESSION['accesos'] ?? []);
-}
-
-if (!tieneAcceso('gestionar_roles')) {
-    throw new Exception('No tenés permisos para cambiar roles');
-}
+    if (!tieneAcceso('gestionar_roles')) {
+        throw new Exception('No tenés permisos para cambiar roles');
+    }
     // =============================
     // 🔥 NO CAMBIARSE A SÍ MISMO
     // =============================

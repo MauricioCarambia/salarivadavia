@@ -43,8 +43,11 @@ try {
 
 } catch (Throwable $e) {
 
+    error_log($e->getMessage());
+    http_response_code(500);
+
     echo json_encode([
         'success' => false,
-        'error' => $e->getMessage()
+        'error' => 'Error al obtener los datos'
     ]);
 }

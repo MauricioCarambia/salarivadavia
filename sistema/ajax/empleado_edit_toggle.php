@@ -47,9 +47,9 @@ try {
     // UPDATE
     // =============================
     $stmt = $pdo->prepare("
-        UPDATE empleado 
-        SET activo = :activo 
-        WHERE id = :id
+        UPDATE empleados
+        SET activo = :activo
+        WHERE Id = :id
     ");
 
     $stmt->execute([
@@ -65,6 +65,16 @@ try {
         'mensaje' => 'Estado actualizado correctamente'
     ]);
 
+} catch (PDOException $e) {
+
+    error_log($e->getMessage());
+    http_response_code(500);
+
+    echo json_encode([
+        'ok' => false,
+        'error' => 'Error en base de datos'
+    ]);
+
 } catch (Exception $e) {
 
     http_response_code(400);
@@ -72,14 +82,5 @@ try {
     echo json_encode([
         'ok' => false,
         'error' => $e->getMessage()
-    ]);
-
-} catch (PDOException $e) {
-
-    http_response_code(500);
-
-    echo json_encode([
-        'ok' => false,
-        'error' => 'Error en base de datos'
     ]);
 }
