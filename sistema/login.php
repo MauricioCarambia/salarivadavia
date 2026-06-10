@@ -8,6 +8,7 @@ session_start();
 
 require_once __DIR__ . '/inc/db.php';
 require_once __DIR__ . '/inc/rate_limit.php';
+require_once __DIR__ . '/inc/csrf.php';
 
 $rand = mt_rand();
 $mensaje = '';
@@ -18,9 +19,11 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
   $contrasenia = trim($_POST['contrasenia']);
   $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 
-  $bloqueoSegundos = loginEstaBloqueado($pdo, $usuario, $ip);
+  if (!csrf_validate()) {
 
-  if ($bloqueoSegundos !== null) {
+    $mensaje = '<div class="alert alert-danger">Sesión expirada, por favor reintentá.</div>';
+
+  } elseif (($bloqueoSegundos = loginEstaBloqueado($pdo, $usuario, $ip)) !== null) {
 
     $minutos = (int) ceil($bloqueoSegundos / 60);
     $mensaje = '<div class="alert alert-danger">Demasiados intentos fallidos. Probá de nuevo en ' . $minutos . ' minuto(s).</div>';
@@ -189,6 +192,7 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
         <?= $mensaje ?>
 
         <form method="post">
+          <?= csrf_field() ?>
 
           <div class="input-group mb-3">
             <input type="text" name="usuario" class="form-control" placeholder="Usuario" required>

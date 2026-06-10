@@ -1,6 +1,8 @@
 <?php
 
 require_once __DIR__ . '/../inc/session.php';
+require_once __DIR__ . '/../inc/csrf.php';
+requerirCsrf();
 require_once __DIR__ . '/../inc/db.php';
 header('Content-Type: application/json');
 

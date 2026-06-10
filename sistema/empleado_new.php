@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once __DIR__ . '/inc/csrf.php';
 $mensaje = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -10,7 +11,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $contrasenia = trim($_POST['contrasenia']);
     $repite = trim($_POST['repite']);
 
-    if (strlen($usuario) < 3 || strlen($contrasenia) < 3) {
+    if (!csrf_validate()) {
+        $mensaje = '<div class="alert alert-danger">Sesión expirada, por favor reintentá.</div>';
+    } elseif (strlen($usuario) < 3 || strlen($contrasenia) < 3) {
         $mensaje = '<div class="alert alert-danger">Usuario y contraseña deben tener al menos 3 caracteres.</div>';
     } elseif ($contrasenia !== $repite) {
         $mensaje = '<div class="alert alert-danger">Las contraseñas no coinciden.</div>';
@@ -60,6 +63,7 @@ $deshabilitar = strpos($mensaje, 'Cuenta creada correctamente') !== false ? 'dis
       <?= $mensaje ?>
 
       <form method="post">
+        <?= csrf_field() ?>
 
         <div class="input-group mb-4">
           <input type="text" name="nombre" class="form-control" placeholder="Nombre completo" <?= $deshabilitar ?> required>

@@ -1,5 +1,7 @@
 <?php
 require_once __DIR__ . '/../inc/session.php';
+require_once __DIR__ . '/../inc/csrf.php';
+requerirCsrf();
 require_once "../inc/db.php";
 
 $usuarioId = $_SESSION['user_id'];
