@@ -17,12 +17,12 @@ header('Content-Type: application/json');
 
 
 // 📥 Validar ID
-$id = $_POST['id'] ?? null;
+$id = (int) ($_POST['id'] ?? 0);
 
-if (!$id) {
+if ($id <= 0) {
     echo json_encode([
         'success' => false,
-        'message' => 'ID requerido'
+        'message' => 'ID inválido'
     ]);
     exit;
 }
@@ -30,7 +30,7 @@ if (!$id) {
 try {
 
     $stmt = $pdo->prepare("
-        DELETE FROM practicas_precios 
+        DELETE FROM practicas_precios
         WHERE id = ?
     ");
 
@@ -39,6 +39,12 @@ try {
     echo json_encode([
         'success' => true
     ]);
+
+} catch (PDOException $e) {
+
+    error_log($e->getMessage());
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Error en base de datos']);
 
 } catch (Exception $e) {
 

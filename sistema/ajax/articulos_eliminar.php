@@ -14,7 +14,12 @@ require_once __DIR__ . '/../inc/db.php';
 
 header('Content-Type: application/json');
 
-$id = $_POST['id'] ?? 0;
+$id = (int) ($_POST['id'] ?? 0);
+
+if ($id <= 0) {
+    echo json_encode(['success' => false, 'message' => 'ID inválido']);
+    exit;
+}
 
 try {
 
@@ -24,5 +29,7 @@ try {
     echo json_encode(['success' => true]);
 
 } catch (Throwable $e) {
-    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    error_log($e->getMessage());
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Error al eliminar']);
 }

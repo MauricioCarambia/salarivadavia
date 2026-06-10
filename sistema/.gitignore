@@ -2,3 +2,4 @@ error_log
 *.iml
 .idea/
 .env
+.phpunit.result.cache

@@ -69,6 +69,34 @@ empleados/roles**, por ser las únicas operaciones reservadas a Administrador:
 - `ajax/empleado_edit_toggle.php` → revisar (ver tarea de mapeo)
 - `ajax/empleado_pass.php` → revisar (ver tarea de mapeo)
 
+## Revisión de queries N+1 (listados)
+
+Se revisaron los listados principales (`socios.php`, `pacientes.php`,
+`turnos_dia.php`, `turnos_profesional.php`, `historia_pacientes.php`,
+`estadisticas.php`, `pagos_view.php`, `agenda_imprimir.php`,
+`paciente_turnos_ver.php`, `pagos_fechas.php`, `cobrar_turno.php`,
+`cobro_preview.php`).
+
+- En `cobrar_turno.php`/`cobro_preview.php` hay queries dentro de un
+  `foreach`, pero iteran sobre `$practicas`, el array de prácticas
+  seleccionadas en un único cobro (típicamente 1-10 ítems). No es un
+  "listado", es procesamiento de una transacción puntual: no amerita
+  refactor.
+- En `secciones/socios.php` (línea ~138), por cada fila del resultado se
+  llama a `obtenerEstadoAfiliado($pdo, $r['Id'])`
+  (`inc/services/afiliados.php`), que ejecuta una query adicional con
+  `GROUP BY`/`PERIOD_DIFF`. Esto es un N+1 real, pero está acotado por el
+  `LIMIT 25` de la query principal (máx. 25 queries extra por búsqueda).
+  `obtenerEstadoAfiliado()` además aplica reglas de negocio (vitalicio,
+  período de gracia de 90 días, clasificación "moroso") que no están
+  replicadas en el SQL de `socios.php`. Convertir esto a una sola query
+  batched requeriría reimplementar esa lógica de fechas en SQL, con riesgo
+  de introducir diferencias sutiles en el cálculo de cuotas adeudadas. Dado
+  que el impacto está acotado a 25 queries extra (no escala con la cantidad
+  total de socios), se deja sin tocar por ahora.
+- El resto de los listados no ejecuta queries dentro de los `foreach` de
+  renderizado.
+
 ## Próximos pasos (tarea "Mapear permisos por rol")
 
 Dado que con solo 2 roles, y que Recepcionista ya tiene casi todos los
