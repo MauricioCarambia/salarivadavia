@@ -1,6 +1,13 @@
 <?php
-session_name("turnos");
-session_start();
+require_once __DIR__ . '/../inc/session.php';
+
+if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
+    header('Content-Type: application/json');
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'No autenticado']);
+    exit;
+}
+
 require_once __DIR__ . '/../inc/db.php';
 header('Content-Type: application/json');
 
@@ -28,7 +35,7 @@ if (!tieneAcceso('gestionar_roles')) {
 }
 
     // 🔥 VER SI EL ROL ESTÁ EN USO
-    $stmt = $conexion->prepare("SELECT COUNT(*) FROM empleados WHERE rol_id = ?");
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM empleados WHERE rol_id = ?");
     $stmt->execute([$id]);
     $enUso = $stmt->fetchColumn();
 
@@ -37,11 +44,11 @@ if (!tieneAcceso('gestionar_roles')) {
     }
 
     // 🔥 BORRAR ACCESOS PRIMERO
-    $stmt = $conexion->prepare("DELETE FROM roles_accesos WHERE rol_id = ?");
+    $stmt = $pdo->prepare("DELETE FROM roles_accesos WHERE rol_id = ?");
     $stmt->execute([$id]);
 
     // 🔥 BORRAR ROL
-    $stmt = $conexion->prepare("DELETE FROM roles WHERE Id = ?");
+    $stmt = $pdo->prepare("DELETE FROM roles WHERE Id = ?");
     $stmt->execute([$id]);
 
     echo json_encode([

@@ -12,7 +12,7 @@ if (!is_numeric($id)) {
 $rol_id = (int)$id;
 
 // Verificar empleados asociados
-$stmt = $conexion->prepare("SELECT COUNT(*) FROM empleados WHERE rol_id = :rol_id");
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM empleados WHERE rol_id = :rol_id");
 $stmt->execute([':rol_id' => $rol_id]);
 $empleados_con_rol = $stmt->fetchColumn();
 ?>
@@ -55,17 +55,17 @@ $empleados_con_rol = $stmt->fetchColumn();
 
                             <?php
                             try {
-                                $conexion->beginTransaction();
+                                $pdo->beginTransaction();
 
                                 // Eliminar accesos
-                                $stmt = $conexion->prepare("DELETE FROM roles_accesos WHERE rol_id = :rol_id");
+                                $stmt = $pdo->prepare("DELETE FROM roles_accesos WHERE rol_id = :rol_id");
                                 $stmt->execute([':rol_id' => $rol_id]);
 
                                 // Eliminar rol
-                                $stmt = $conexion->prepare("DELETE FROM roles WHERE id = :id");
+                                $stmt = $pdo->prepare("DELETE FROM roles WHERE id = :id");
                                 $stmt->execute([':id' => $rol_id]);
 
-                                $conexion->commit();
+                                $pdo->commit();
                                 ?>
 
                                 <div class="alert alert-success">
@@ -79,7 +79,7 @@ $empleados_con_rol = $stmt->fetchColumn();
 
                             <?php
                             } catch (Exception $e) {
-                                $conexion->rollBack();
+                                $pdo->rollBack();
                                 ?>
 
                                 <div class="alert alert-danger">

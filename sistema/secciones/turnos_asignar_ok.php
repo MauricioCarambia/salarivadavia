@@ -31,10 +31,10 @@ $fecha = date('Y-m-d H:i:s', $timestamp);
 // ============================== PROCESO ==============================
 try {
 
-    $conexion->beginTransaction();
+    $pdo->beginTransaction();
 
     // 🔒 BLOQUEO PARA EVITAR DOBLE TURNO
-    $stmt = $conexion->prepare("
+    $stmt = $pdo->prepare("
         SELECT id 
         FROM turnos 
         WHERE profesional_id = :p 
@@ -51,7 +51,7 @@ try {
     $sobreturno = $stmt->fetchColumn() ? 1 : 0;
 
     // ============================== INSERT ==============================
-    $stmt = $conexion->prepare("
+    $stmt = $pdo->prepare("
         INSERT INTO turnos 
         (profesional_id, fecha, paciente_id, sobreturno, pago, asistio, usuario_id, fecha_actual, atendido)
         VALUES
@@ -66,10 +66,10 @@ try {
         ':u'  => $id_usuario
     ]);
 
-    $last_id = $conexion->lastInsertId();
+    $last_id = $pdo->lastInsertId();
 
     // ============================== PROFESIONAL ==============================
-    $stmt = $conexion->prepare("
+    $stmt = $pdo->prepare("
     SELECT
         p.apellido,
         p.nombre,
@@ -93,7 +93,7 @@ try {
 
     $especialidad = $p['especialidad'] ?? '';
 
-    $conexion->commit();
+    $pdo->commit();
 
     // ============================== RESPONSE ==============================
 echo json_encode([
@@ -110,8 +110,8 @@ echo json_encode([
 ]);
 } catch (Throwable $e) {
 
-    if ($conexion->inTransaction()) {
-        $conexion->rollBack();
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
     }
 
     echo json_encode([

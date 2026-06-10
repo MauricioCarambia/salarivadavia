@@ -24,7 +24,7 @@ $sql = "SELECT
         WHERE p.afiliado_id = :id
         ORDER BY p.fecha_correspondiente ASC";
 
-$stmt = $conexion->prepare($sql);
+$stmt = $pdo->prepare($sql);
 $stmt->execute(['id' => $id]);
 $pagos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>

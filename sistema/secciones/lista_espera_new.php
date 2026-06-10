@@ -11,7 +11,7 @@ $nota = $profesional = $asignado = '';
 /* =========================
    ESPECIALIDADES (DB)
 ========================= */
-$stmt = $conexion->query("SELECT especialidad FROM especialidades ORDER BY especialidad ASC");
+$stmt = $pdo->query("SELECT especialidad FROM especialidades ORDER BY especialidad ASC");
 $especialidades = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
 /* =========================
@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($nombre && $apellido && $documento && $especialidad) {
 
-        $stmt = $conexion->prepare("
+        $stmt = $pdo->prepare("
     INSERT INTO lista_espera
     (nombre, apellido, documento, especialidad, derivacion, horario, celular, edad, profesional, asignado, nota, created_date)
     VALUES

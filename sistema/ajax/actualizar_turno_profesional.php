@@ -1,4 +1,12 @@
 <?php
+require_once __DIR__ . '/../inc/session.php';
+
+if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
+    header('Content-Type: application/json');
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'No autenticado']);
+    exit;
+}
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 require_once __DIR__ . '/../inc/db.php';
 
@@ -11,7 +19,7 @@ $atendido = $data['atendido'] ?? false;
 
 if ($turno_id) {
 
-    $stmt = $conexion->prepare("UPDATE turnos SET atendido = :atendido WHERE Id = :id");
+    $stmt = $pdo->prepare("UPDATE turnos SET atendido = :atendido WHERE Id = :id");
     $stmt->execute([
         'atendido' => $atendido ? 1 : 0,
         'id' => $turno_id

@@ -1,8 +1,14 @@
 <?php
+require_once __DIR__ . '/../inc/session.php';
 require_once __DIR__ . '/../inc/db.php';
 header('Content-Type: application/json');
 
-session_start();
+if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'Usuario no autenticado']);
+    exit;
+}
+
 $tipoUsuario = $_SESSION['tipo'] ?? '';
 $profesionalId = $_SESSION['user_id'] ?? 0;
 

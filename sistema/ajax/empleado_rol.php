@@ -1,6 +1,12 @@
 <?php
-session_name("turnos"); // 🔥 ESTO FALTABA
-session_start();
+require_once __DIR__ . '/../inc/session.php';
+
+if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
+    header('Content-Type: application/json');
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'No autenticado']);
+    exit;
+}
 
 require_once __DIR__ . '/../inc/db.php';
 
@@ -57,7 +63,7 @@ if (!tieneAcceso('gestionar_roles')) {
     // =============================
     // VALIDAR EMPLEADO
     // =============================
-    $stmt = $conexion->prepare("SELECT Id FROM empleados WHERE Id = ?");
+    $stmt = $pdo->prepare("SELECT Id FROM empleados WHERE Id = ?");
     $stmt->execute([$id]);
 
     if (!$stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -67,7 +73,7 @@ if (!tieneAcceso('gestionar_roles')) {
     // =============================
     // VALIDAR ROL
     // =============================
-    $stmt = $conexion->prepare("SELECT Id FROM roles WHERE Id = ?");
+    $stmt = $pdo->prepare("SELECT Id FROM roles WHERE Id = ?");
     $stmt->execute([$rol]);
 
     if (!$stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -78,7 +84,7 @@ if (!tieneAcceso('gestionar_roles')) {
     // 🔥 EVITAR TOCAR ADMIN (SI NO SOS ADMIN)
     // =============================
     if (!$es_admin) {
-        $stmt = $conexion->prepare("
+        $stmt = $pdo->prepare("
             SELECT r.nombre 
             FROM empleados e
             LEFT JOIN roles r ON e.rol_id = r.Id
@@ -95,7 +101,7 @@ if (!tieneAcceso('gestionar_roles')) {
     // =============================
     // UPDATE
     // =============================
-    $stmt = $conexion->prepare("
+    $stmt = $pdo->prepare("
         UPDATE empleados
         SET rol_id = :rol 
         WHERE Id = :id

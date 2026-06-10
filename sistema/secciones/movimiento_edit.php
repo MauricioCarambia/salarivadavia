@@ -16,7 +16,7 @@ if (empty($id)) {
 $tipo = $descripcion = $monto = '';
 $fecha_actual = date('Y-m-d H:i:s');
 // Obtener datos existentes
-$stmt = $conexion->prepare("SELECT * FROM caja WHERE id = :id");
+$stmt = $pdo->prepare("SELECT * FROM caja WHERE id = :id");
 $stmt->execute([':id' => $id]);
 $registro = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $descripcion = $_POST['descripcion'];
     $monto = floatval($_POST['monto']);
 
-    $stmt = $conexion->prepare("
+    $stmt = $pdo->prepare("
     UPDATE caja 
     SET tipo = :tipo, descripcion = :descripcion, monto = :monto, fecha = :fecha 
     WHERE id = :id

@@ -8,7 +8,7 @@ $rand = uniqid();
 /* ===============================
    PACIENTE
 ================================ */
-$stmtPaciente = $conexion->prepare("
+$stmtPaciente = $pdo->prepare("
     SELECT *
     FROM pacientes
     WHERE Id = :id
@@ -19,7 +19,7 @@ $paciente = $stmtPaciente->fetch(PDO::FETCH_ASSOC);
 /* ===============================
    ESTADO SOCIO (MOROSO > 3 MESES)
 ================================ */
-$stmtEstado = $conexion->prepare("
+$stmtEstado = $pdo->prepare("
     SELECT MAX(fecha_correspondiente) as ultima_fecha
     FROM pagos_afiliados
     WHERE paciente_id = :id
@@ -50,7 +50,7 @@ if ($ultimaFecha) {
 /* ===============================
    PAGOS
 ================================ */
-$stmtPagos = $conexion->prepare("
+$stmtPagos = $pdo->prepare("
     SELECT *,
            MONTH(fecha_correspondiente) AS mes,
            YEAR(fecha_correspondiente) AS anio

@@ -1,6 +1,12 @@
 <?php
-session_name("turnos");
-session_start();
+require_once __DIR__ . '/../inc/session.php';
+
+if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
+    header('Content-Type: application/json');
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'No autenticado']);
+    exit;
+}
 require_once __DIR__ . '/../inc/db.php';
 
 header('Content-Type: application/json');
@@ -12,15 +18,15 @@ $accesos = $_POST['accesos'] ?? [];
 try {
 
     // actualizar nombre
-    $stmt = $conexion->prepare("UPDATE roles SET nombre=? WHERE Id=?");
+    $stmt = $pdo->prepare("UPDATE roles SET nombre=? WHERE Id=?");
     $stmt->execute([$nombre, $id]);
 
     // eliminar accesos actuales
-    $stmt = $conexion->prepare("DELETE FROM roles_accesos WHERE rol_id=?");
+    $stmt = $pdo->prepare("DELETE FROM roles_accesos WHERE rol_id=?");
     $stmt->execute([$id]);
 
     // insertar nuevos accesos
-    $stmt = $conexion->prepare("INSERT INTO roles_accesos (rol_id, acceso_id) VALUES (?, ?)");
+    $stmt = $pdo->prepare("INSERT INTO roles_accesos (rol_id, acceso_id) VALUES (?, ?)");
 
     foreach ($accesos as $acc_id) {
         $stmt->execute([$id, $acc_id]);

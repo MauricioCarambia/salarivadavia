@@ -15,7 +15,7 @@ if (!$id) {
 /* =============================
    PROFESIONAL
 =============================*/
-$stmt = $conexion->prepare("
+$stmt = $pdo->prepare("
     SELECT duracion_turnos 
     FROM profesionales 
     WHERE Id = :id
@@ -57,7 +57,7 @@ WHERE t.profesional_id = :id
 AND t.fecha BETWEEN :start AND :end
 ";
 
-$stmt = $conexion->prepare($sql);
+$stmt = $pdo->prepare($sql);
 $stmt->bindValue(':dur', $dur, PDO::PARAM_INT);
 $stmt->bindValue(':id', $id, PDO::PARAM_INT);
 $stmt->bindValue(':start', substr($start, 0, 19));

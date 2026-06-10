@@ -7,14 +7,14 @@ $mes = date('m', strtotime($mesSeleccionado));
 // ---------------------- INGRESOS ----------------------
 // INGRESOS
 $sqlIngresos = "SELECT id, descripcion, monto, fecha FROM caja WHERE tipo = 'Ingreso' AND YEAR(fecha) = ? AND MONTH(fecha) = ?";
-$stmtIngresos = $conexion->prepare($sqlIngresos);
+$stmtIngresos = $pdo->prepare($sqlIngresos);
 $stmtIngresos->execute([$anio, $mes]);
 $ingresos = $stmtIngresos->fetchAll(PDO::FETCH_ASSOC);
 $totalIngresos = array_sum(array_column($ingresos, 'monto'));
 
 // EGRESOS
 $sqlEgresos = "SELECT id, descripcion, monto, fecha FROM caja WHERE tipo = 'Egreso' AND YEAR(fecha) = ? AND MONTH(fecha) = ?";
-$stmtEgresos = $conexion->prepare($sqlEgresos);
+$stmtEgresos = $pdo->prepare($sqlEgresos);
 $stmtEgresos->execute([$anio, $mes]);
 $egresos = $stmtEgresos->fetchAll(PDO::FETCH_ASSOC);
 $totalEgresos = array_sum(array_column($egresos, 'monto'));
@@ -29,7 +29,7 @@ $sqlProf = "
     WHERE YEAR(p.fecha) = ? AND MONTH(p.fecha) = ?
     GROUP BY p.id_profesional
 ";
-$stmtProf = $conexion->prepare($sqlProf);
+$stmtProf = $pdo->prepare($sqlProf);
 $stmtProf->execute([$anio, $mes]);
 $pagosProf = $stmtProf->fetchAll(PDO::FETCH_ASSOC);
 

@@ -34,7 +34,7 @@ $campos = [
     'porcentaje' => $_POST['porcentaje'] ?? $rArray['porcentaje'],
     'duracion_turnos' => $_POST['duracion_turnos'] ?? $rArray['duracion_turnos'],
     'usuario' => $_POST['usuario'] ?? $rArray['usuario'],
-    'contrasenia' => $_POST['contrasenia'] ?? $rArray['contrasenia'],
+    'contrasenia' => $_POST['contrasenia'] ?? '',
     'sexo' => $_POST['sexo'] ?? $rArray['sexo'],
     'vacaciones_desde' => $_POST['vacaciones_desde'] ?? $rArray['vacaciones_desde'],
     'vacaciones_hasta' => $_POST['vacaciones_hasta'] ?? $rArray['vacaciones_hasta'],
@@ -86,7 +86,11 @@ if (isset($_POST['guardar'])) {
         // Update Profesional
         $sql = "UPDATE profesionales SET nombre=?, apellido=?, provincia=?, localidad=?, celular=?, fijo=?, email=?, tipo_documento=?, documento=?, nacimiento=?, especialidad_id=?, matricula_nacional=?, matricula_provincial=?, porcentaje=?, duracion_turnos=?, usuario=?, contrasenia=?, sexo=?, vacaciones_desde=?, vacaciones_hasta=?, comentario=?, firma=? WHERE Id=?";
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([$campos['nombre'], $campos['apellido'], $campos['provincia'], $campos['localidad'], $campos['celular'], $campos['fijo'], $campos['email'], $campos['tipo_documento'], $campos['documento'], $campos['nacimiento'], $campos['especialidad_id'], $campos['matricula_nacional'], $campos['matricula_provincial'], $campos['porcentaje'], $campos['duracion_turnos'], $campos['usuario'], $campos['contrasenia'], $campos['sexo'], $campos['vacaciones_desde'], $campos['vacaciones_hasta'], $campos['comentario'], $rutaImagen, $id]);
+                $contraseniaFinal = $campos['contrasenia'] !== ''
+            ? password_hash($campos['contrasenia'], PASSWORD_DEFAULT)
+            : $rArray['contrasenia'];
+
+        $stmt->execute([$campos['nombre'], $campos['apellido'], $campos['provincia'], $campos['localidad'], $campos['celular'], $campos['fijo'], $campos['email'], $campos['tipo_documento'], $campos['documento'], $campos['nacimiento'], $campos['especialidad_id'], $campos['matricula_nacional'], $campos['matricula_provincial'], $campos['porcentaje'], $campos['duracion_turnos'], $campos['usuario'], $contraseniaFinal, $campos['sexo'], $campos['vacaciones_desde'], $campos['vacaciones_hasta'], $campos['comentario'], $rutaImagen, $id]);
 
         // Update Horarios (Borrar e insertar de nuevo)
         $pdo->prepare("DELETE FROM profesionales_horarios WHERE profesional_id=?")->execute([$id]);
@@ -253,7 +257,7 @@ if (isset($_POST['guardar'])) {
                     </div>
                     <div class="form-group col-md-6">
                         <label>Contraseña</label>
-                        <input type="text" name="contrasenia" class="form-control" value="<?= htmlspecialchars($campos['contrasenia']) ?>">
+                        <input type="password" name="contrasenia" class="form-control" placeholder="Dejar en blanco para no modificarla" value="<?= htmlspecialchars($campos['contrasenia']) ?>" autocomplete="new-password">
                     </div>
                 </div>
 

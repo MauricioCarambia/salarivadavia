@@ -1,9 +1,17 @@
 <?php
+require_once __DIR__ . '/../inc/session.php';
+
+if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
+    header('Content-Type: application/json');
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'No autenticado']);
+    exit;
+}
 require_once __DIR__ . '/../inc/db.php';
 
 $id = (int) $_GET['paciente_id'];
 
-$stmt = $conexion->prepare("
+$stmt = $pdo->prepare("
     SELECT 
         Id,
         apellido,

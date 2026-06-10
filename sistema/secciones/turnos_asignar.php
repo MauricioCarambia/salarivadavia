@@ -19,7 +19,7 @@ $fechaHora = $dt->format('Y-m-d H:i:00');
 $horaSeleccionada = $dt->format('H:i');
 
 // ============================== PROFESIONAL ==============================
-$stmt = $conexion->prepare("
+$stmt = $pdo->prepare("
     SELECT
         p.apellido,
         p.nombre,
@@ -46,7 +46,7 @@ $duracionTurno = max(5, (int) $prof['duracion_turnos']);
 // ============================== HORARIOS ==============================
 $diasemana = (int) $dt->format('w');
 
-$stmt = $conexion->prepare("
+$stmt = $pdo->prepare("
     SELECT hora_inicio, hora_fin 
     FROM profesionales_horarios 
     WHERE profesional_id = :p AND dia = :d
@@ -133,7 +133,7 @@ $fechaCompleta = $dt->format('d/m/Y');
 
                 <?php if ($busqueda !== ''):
 
-                    $stmtPac = $conexion->prepare("
+                    $stmtPac = $pdo->prepare("
     SELECT Id, apellido, nombre, tipo_documento, documento, nro_afiliado
     FROM pacientes
     WHERE apellido LIKE :b1

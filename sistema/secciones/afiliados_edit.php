@@ -15,7 +15,7 @@ if(isset($_POST['monto'])){
     $monto = $_POST['monto'];
     $fecha = $_POST['fecha'].'-01';
 
-    $stmt = $conexion->prepare("
+    $stmt = $pdo->prepare("
         UPDATE pagos_afiliados 
         SET monto = :monto,
             fecha_correspondiente = :fecha
@@ -40,7 +40,7 @@ if(isset($_POST['monto'])){
 
 $meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-$stmt = $conexion->prepare("
+$stmt = $pdo->prepare("
     SELECT 
         MONTH(fecha_correspondiente) AS mes,
         YEAR(fecha_correspondiente) AS anio
@@ -58,7 +58,7 @@ $rArray = $stmt->fetch(PDO::FETCH_ASSOC);
    PAGO ACTUAL
 ===================================== */
 
-$stmt2 = $conexion->prepare("
+$stmt2 = $pdo->prepare("
     SELECT *,
            MONTH(fecha_correspondiente) AS mes,
            YEAR(fecha_correspondiente) AS anio
@@ -118,7 +118,7 @@ $rArray2 = $stmt2->fetch(PDO::FETCH_ASSOC);
         <div class="panel-body">
           <?php
 
-$stmtPaciente = $conexion->prepare("
+$stmtPaciente = $pdo->prepare("
     SELECT 
         obras_sociales.obra_social,
         pacientes.*

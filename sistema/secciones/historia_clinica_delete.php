@@ -20,7 +20,7 @@
 
                         if($confirmar == 'si') {
                             $sEliminar = "DELETE FROM historias_clinicas WHERE Id='$id'";
-                            $rEliminar = mysql_query($sEliminar, $conexion);
+                            $rEliminar = mysql_query($sEliminar, $pdo);
 
                             echo '
                             <div class="alert alert-info">Se elimin&oacute; el registro.</div>
