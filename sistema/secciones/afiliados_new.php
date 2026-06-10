@@ -6,7 +6,7 @@ $id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
 /* =========================
    ULTIMO MES PAGADO
 ========================= */
-$stmt = $conexion->prepare("
+$stmt = $pdo->prepare("
     SELECT 
         MONTH(fecha_correspondiente) AS mes,
         YEAR(fecha_correspondiente)  AS anio
@@ -21,7 +21,7 @@ $ultimoPago = $stmt->fetch(PDO::FETCH_ASSOC);
 /* =========================
    DATOS PACIENTE
 ========================= */
-$stmtPaciente = $conexion->prepare("
+$stmtPaciente = $pdo->prepare("
     SELECT 
         os.obra_social,
         p.*
