@@ -248,29 +248,62 @@ ksort($totalesDestinos);
 ============================== -->
                 <div class="row mb-3">
 
-                    <div class="col-md-4">
+                    <div class="col-md-4 col-sm-6">
                         <div class="small-box bg-info">
                             <div class="inner">
                                 <h3>$<?= number_format($totalFacturado, 0, ',', '.') ?></h3>
                                 <p>Total Facturado</p>
                             </div>
+                            <div class="icon">
+                                <i class="fas fa-file-invoice-dollar"></i>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="col-md-4">
+                    <div class="col-md-4 col-sm-6">
                         <div class="small-box bg-success">
                             <div class="inner">
                                 <h3>$<?= number_format($totalEfectivo, 0, ',', '.') ?></h3>
                                 <p>Efectivo</p>
                             </div>
+                            <div class="icon">
+                                <i class="fas fa-money-bill-wave"></i>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="col-md-4">
+                    <div class="col-md-4 col-sm-6">
                         <div class="small-box bg-primary">
                             <div class="inner">
                                 <h3>$<?= number_format($totalTransferencia, 0, ',', '.') ?></h3>
                                 <p>Transferencias</p>
+                            </div>
+                            <div class="icon">
+                                <i class="fas fa-exchange-alt"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3 col-sm-6">
+                        <div class="small-box bg-warning">
+                            <div class="inner">
+                                <h3>$<?= number_format($totalGananciaClinica, 0, ',', '.') ?></h3>
+                                <p>Ganancia Clínica</p>
+                            </div>
+                            <div class="icon">
+                                <i class="fas fa-clinic-medical"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3 col-sm-6">
+                        <div class="small-box bg-secondary">
+                            <div class="inner">
+                                <h3>$<?= number_format($totalPagoProfesional, 0, ',', '.') ?></h3>
+                                <p>Pago Profesional</p>
+                            </div>
+                            <div class="icon">
+                                <i class="fas fa-user-md"></i>
                             </div>
                         </div>
                     </div>

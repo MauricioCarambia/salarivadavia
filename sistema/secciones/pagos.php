@@ -187,52 +187,12 @@ $stmt->execute($paramsReporte);
 $reporte = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 /* ==============================
-   📊 2. DESTINOS
+   📊 TOTALES (a partir del reporte por profesional)
 ============================== */
-$sqlDestinos = "
-SELECT 
-    dr.nombre,
-    dr.tipo,
-    dr.categoria,
-    SUM(cr.monto) AS total
-FROM cobros_reparto cr
-INNER JOIN destinos_reparto dr ON dr.id = cr.destino_id
-INNER JOIN cobros c ON c.id = cr.cobro_id
-LEFT JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
-WHERE c.estado = 'activo'
-AND c.turno_id IS NOT NULL
-AND c.fecha BETWEEN ? AND ?
-$filtros
-GROUP BY dr.id
-";
-
-$paramsDestinos = array_merge($paramsBase, $paramsFiltros);
-
-$stmtDestinos = $pdo->prepare($sqlDestinos);
-$stmtDestinos->execute($paramsDestinos);
-$destinos = $stmtDestinos->fetchAll(PDO::FETCH_ASSOC);
-
-/* ==============================
-   📊 TOTALES
-============================== */
-$totalIngresos = 0;
-$totalFondos = 0;
-$totalEgresos = 0;
-
-foreach ($destinos as $d) {
-
-    if ($d['tipo'] === 'egreso') {
-        $totalEgresos += $d['total'];
-    }
-
-    if ($d['tipo'] === 'ingreso' && $d['categoria'] !== 'fondo') {
-        $totalIngresos += $d['total'];
-    }
-
-    if ($d['categoria'] === 'fondo') {
-        $totalFondos += $d['total'];
-    }
-}
+// Pago real a profesionales: descuenta lo ya transferido directo y la deuda con la clínica
+$totalPagoProfesional = array_sum(array_column($reporte, 'total_profesional'));
+$totalFondos = array_sum(array_column($reporte, 'Total_Fondo'));
+$totalGananciaClinica = array_sum(array_column($reporte, 'Ganancia_Real'));
 
 /* ==============================
    💰 TOTAL FACTURADO
@@ -252,11 +212,6 @@ $paramsTotal = array_merge($paramsBase, $paramsFiltros);
 $stmtTotal = $pdo->prepare($sqlTotal);
 $stmtTotal->execute($paramsTotal);
 $totalFacturado = (float)$stmtTotal->fetchColumn();
-
-/* ==============================
-   ⚫ BALANCE
-============================== */
-$balance = $totalIngresos;
 
 /* ==============================
    📦 AUX
@@ -330,55 +285,53 @@ $rand = rand(1000, 9999);
     </div>
 </div>
 
-<!-- 
 <div class="row mb-3">
-    <div class="col-md-3">
-        <div class="small-box bg-info p-2 text-center">
-            <h4>$<?= number_format($totalFacturado, 2, ',', '.') ?></h4>
-            <p>Total Facturado</p>
+    <div class="col-md-3 col-sm-6">
+        <div class="small-box bg-info">
+            <div class="inner">
+                <h3>$<?= number_format($totalFacturado, 0, ',', '.') ?></h3>
+                <p>Total Facturado</p>
+            </div>
+            <div class="icon">
+                <i class="fas fa-file-invoice-dollar"></i>
+            </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="small-box bg-danger p-2 text-center">
-            <h4>$<?= number_format($totalEgresos, 2, ',', '.') ?></h4>
-            <p>Total Egresos</p>
+    <div class="col-md-3 col-sm-6">
+        <div class="small-box bg-danger">
+            <div class="inner">
+                <h3>$<?= number_format($totalPagoProfesional, 0, ',', '.') ?></h3>
+                <p>Pago a Profesionales</p>
+            </div>
+            <div class="icon">
+                <i class="fas fa-user-md"></i>
+            </div>
         </div>
     </div>
 
-    <div class="col-md-3">
-        <div class="small-box bg-primary p-2 text-center">
-            <h4>$<?= number_format($totalFondos, 2, ',', '.') ?></h4>
-            <p>Fondo Acumulado</p>
+    <div class="col-md-3 col-sm-6">
+        <div class="small-box bg-primary">
+            <div class="inner">
+                <h3>$<?= number_format($totalFondos, 0, ',', '.') ?></h3>
+                <p>Fondo Acumulado</p>
+            </div>
+            <div class="icon">
+                <i class="fas fa-piggy-bank"></i>
+            </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="small-box bg-success p-2 text-center">
-            <h4>$<?= number_format($totalIngresos - $totalFondos, 2, ',', '.') ?></h4>
-            <p>Ganancia Clínica</p>
+    <div class="col-md-3 col-sm-6">
+        <div class="small-box bg-success">
+            <div class="inner">
+                <h3>$<?= number_format($totalGananciaClinica, 0, ',', '.') ?></h3>
+                <p>Ganancia Clínica</p>
+            </div>
+            <div class="icon">
+                <i class="fas fa-chart-line"></i>
+            </div>
         </div>
     </div>
 </div>
-
-<div class="row mb-3 d-flex justify-content-center">
-    <?php foreach ($destinos as $d): ?>
-        <?php if ($d['categoria'] == 'profesional') {
-            $color = 'danger';
-        } elseif ($d['categoria'] == 'fondo') {
-            $color = 'primary';
-        } else {
-            $color = 'success';
-        } ?>
-        <div class="col-md-2">
-            <div class="card p-2 text-center border-<?= $color ?>">
-                <h6>$<?= number_format($d['total'], 2, ',', '.') ?></h6>
-                <small>
-                    <?= ucfirst($d['nombre']) ?>
-                    <span class="badge badge-secondary"><?= $d['categoria'] ?></span>
-                </small>
-            </div>
-        </div>
-    <?php endforeach; ?>
-</div> -->
 
 <!-- TABLA -->
 <div class="card card-outline card-primary">
@@ -412,6 +365,9 @@ $rand = rand(1000, 9999);
 
                         <td class="text-danger text-center">
                             $<?= number_format($fila['total_profesional'], 2, ',', '.') ?>
+                            <?php if ($fila['total_profesional'] < 0): ?>
+                                <br><small class="text-muted">(profesional debe)</small>
+                            <?php endif; ?>
                         </td>
 
                         <td class="text-primary text-center">
