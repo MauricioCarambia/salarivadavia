@@ -544,15 +544,17 @@ pr.apellido AS prof_ape,
 
         return [
             'caja' => [
-                'ingresos' => $ingresosEfectivoTotal,
-                'egresos'  => $egresosCaja,
-                'balance'  => $ingresosEfectivoTotal - $egresosCaja,
+                'ingresos'             => $ingresosEfectivoTotal,
+                'egresos'              => $egresosCaja,
+                'egresos_profesional'  => $egresosProfesionalesEfectivo + $profAPagar,
+                'balance'              => $ingresosEfectivoTotal - $egresosCaja,
             ],
 
             'banco' => [
-                'ingresos' => $ingBanco,
-                'egresos'  => $egrBanco,
-                'balance'  => $ingBanco - $egrBanco,
+                'ingresos'             => $ingBanco,
+                'egresos'              => $egrBanco,
+                'egresos_profesional'  => $profAPagar,
+                'balance'              => $ingBanco - $egrBanco,
             ],
 
             // Informativo: lo que los profesionales deben
@@ -656,6 +658,10 @@ pr.apellido AS prof_ape,
             AND d.categoria = 'profesional'
             AND d.tipo      = 'egreso'
             AND c.estado    = 'activo'
+            AND (
+                LOWER(c.medio_pago) = 'efectivo'
+                OR (LOWER(c.medio_pago) = 'transferencia' AND c.transferencia_tipo = 'clinica')
+            )
         ");
         $stmt->execute([$cajaSesionId]);
         $egresosProfesionales = (float)$stmt->fetchColumn();
@@ -691,6 +697,69 @@ pr.apellido AS prof_ape,
             }
         }
         /* ======================
+           💵 / 🏦 REPARTO POR MEDIO DE PAGO
+           (caja + fondo, separado efectivo vs transferencia)
+
+           - Si el cobro fue por transferencia al profesional, la
+             parte de la clínica (comisión) el profesional la entrega
+             en efectivo, por lo que cuenta como efectivo.
+           - Si el cobro fue por transferencia a la clínica, lo que
+             se le paga al profesional se le da en efectivo desde la
+             caja, así que también se descuenta del efectivo.
+        ====================== */
+        $stmt = $this->pdo->prepare("
+            SELECT
+                SUM(CASE
+                    WHEN LOWER(c.medio_pago) = 'efectivo'
+                      OR (LOWER(c.medio_pago) = 'transferencia' AND c.transferencia_tipo = 'profesional')
+                    THEN (CASE WHEN d.tipo = 'egreso' THEN -cr.monto ELSE cr.monto END)
+
+                    WHEN LOWER(c.medio_pago) = 'transferencia'
+                     AND c.transferencia_tipo = 'clinica'
+                     AND d.categoria = 'profesional'
+                     AND d.tipo = 'egreso'
+                    THEN -cr.monto
+
+                    ELSE 0
+                END) AS total_efectivo,
+
+                SUM(CASE
+                    WHEN LOWER(c.medio_pago) = 'transferencia'
+                     AND c.transferencia_tipo != 'profesional'
+                     AND d.categoria IN ('caja', 'fondo')
+                    THEN (CASE WHEN d.tipo = 'egreso' THEN -cr.monto ELSE cr.monto END)
+
+                    WHEN LOWER(c.medio_pago) = 'transferencia'
+                     AND c.transferencia_tipo = 'clinica'
+                     AND d.categoria = 'profesional'
+                     AND d.tipo = 'egreso'
+                    THEN cr.monto
+
+                    ELSE 0
+                END) AS total_transferencia
+
+            FROM cobros_reparto cr
+            INNER JOIN destinos_reparto d ON d.id = cr.destino_id
+            INNER JOIN cobros c           ON c.id = cr.cobro_id
+            WHERE c.caja_sesion_id = ?
+            AND c.estado = 'activo'
+            AND (
+                d.categoria IN ('caja', 'fondo')
+                OR (
+                    d.categoria = 'profesional'
+                    AND d.tipo = 'egreso'
+                    AND LOWER(c.medio_pago) = 'transferencia'
+                    AND c.transferencia_tipo = 'clinica'
+                )
+            )
+        ");
+        $stmt->execute([$cajaSesionId]);
+        $repartoPorMedio = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        $totalRepartoEfectivo      = (float)($repartoPorMedio['total_efectivo']      ?? 0);
+        $totalRepartoTransferencia = (float)($repartoPorMedio['total_transferencia'] ?? 0);
+
+        /* ======================
            📊 RESULTADOS
            FIX: diferencia vs cajaEsperada (físico),
                 no vs totalSistema (incluye fondos)
@@ -698,17 +767,22 @@ pr.apellido AS prof_ape,
         $cajaEsperada = $montoInicial + $totalCaja + $totalFondo;  // era: $montoInicial + $totalCaja
         $totalSistema = $montoInicial + $totalCaja + $totalFondo;  // igual que caja_esperada ahora
 
+        $cajaEsperadaEfectivo      = $montoInicial + $totalRepartoEfectivo;
+        $cajaEsperadaTransferencia = $totalRepartoTransferencia;
+
         return [
-            'caja_id'               => $sesion['caja_id'],
-            'usuario_id'            => $sesion['usuario_id'],
-            'monto_inicial'         => $montoInicial,
-            'total_caja'            => $totalCaja,
-            'total_fondo'           => $totalFondo,
-            'total_sistema'         => $totalSistema,
-            'caja_esperada'         => $cajaEsperada,
-            'ingresos_efectivo'     => $ingresos,
-            'egresos_efectivo'      => $egresos,
-            'egresos_profesionales' => $egresosProfesionales,
+            'caja_id'                     => $sesion['caja_id'],
+            'usuario_id'                  => $sesion['usuario_id'],
+            'monto_inicial'               => $montoInicial,
+            'total_caja'                  => $totalCaja,
+            'total_fondo'                 => $totalFondo,
+            'total_sistema'               => $totalSistema,
+            'caja_esperada'               => $cajaEsperada,
+            'caja_esperada_efectivo'      => $cajaEsperadaEfectivo,
+            'caja_esperada_transferencia' => $cajaEsperadaTransferencia,
+            'ingresos_efectivo'           => $ingresos,
+            'egresos_efectivo'            => $egresos,
+            'egresos_profesionales'       => $egresosProfesionales,
         ];
     }
 
@@ -749,7 +823,10 @@ pr.apellido AS prof_ape,
             $cajaEsperada = $calc['caja_esperada'];
             $totalSistema = $calc['total_sistema'];
 
-            $diferencia = $montoReal - $totalSistema;  // era: $montoReal - $cajaEsperada
+            // El monto real ingresado es solo efectivo, se compara
+            // contra lo que debería quedar en efectivo (no incluye
+            // lo que quedó por transferencia)
+            $diferencia = $montoReal - $calc['caja_esperada_efectivo'];
 
             /* ======================
            🔒 CERRAR SESIÓN
@@ -953,6 +1030,7 @@ pr.apellido AS prof_ape,
     $this->pdo->prepare("
         UPDATE resumen_financiero_diario
         SET
+            fondo_inicial  = ?,
             total_cajas    = ?,
             total_fondos   = ?,
             egresos_caja   = ?,
@@ -962,6 +1040,7 @@ pr.apellido AS prof_ape,
             saldo_total    = ?
         WHERE fecha = ?
     ")->execute([
+        $arrastre_fondo,
         $ar['cajas'],
         $ar['fondos'],
         $eg['eg_caja'],

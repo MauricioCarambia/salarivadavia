@@ -26,6 +26,8 @@ $stmt = $pdo->prepare("
     WHERE Id = :id
 ");
 
+$ok = $stmt->execute([':id'=>$id]);
+
 echo json_encode([
-    'success' => $stmt->execute([':id'=>$id])
+    'success' => $ok
 ]);

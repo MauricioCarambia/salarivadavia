@@ -64,6 +64,10 @@ $resumen = $cajaService->getResumen($filtros);
 $efectivoFinal = $resumen['caja']['balance'];
 $transferenciaFinal = $resumen['banco']['balance'];
 
+// 📊 subtotales sin egresos por profesional
+$subtotalEfectivo = $resumen['caja']['ingresos'] - $resumen['caja']['egresos_profesional'];
+$subtotalTransferencia = $resumen['banco']['ingresos'] - $resumen['banco']['egresos_profesional'];
+
 // 📦 destinos (ya vienen bien calculados)
 $destinos = $resumen['destinos'];
 
@@ -162,6 +166,10 @@ $usuarios = $pdo->query("SELECT id, nombre FROM empleados")->fetchAll(PDO::FETCH
                     Ingresos: $<?= number_format($resumen['caja']['ingresos'], 2, ',', '.') ?> |
                     Egresos: $<?= number_format($resumen['caja']['egresos'], 2, ',', '.') ?>
                 </small>
+                <br>
+                <small class="text-muted">
+                    Subtotal (ingresos - egresos profesionales): $<?= number_format($subtotalEfectivo, 2, ',', '.') ?>
+                </small>
 
             </div>
         </div>
@@ -182,6 +190,10 @@ $usuarios = $pdo->query("SELECT id, nombre FROM empleados")->fetchAll(PDO::FETCH
                 <small class="text-muted">
                     Ingresos: $<?= number_format($resumen['banco']['ingresos'], 2, ',', '.') ?> |
                     Egresos: $<?= number_format($resumen['banco']['egresos'], 2, ',', '.') ?>
+                </small>
+                <br>
+                <small class="text-muted">
+                    Subtotal (transferencia sala - egresos profesionales): $<?= number_format($subtotalTransferencia, 2, ',', '.') ?>
                 </small>
 
             </div>

@@ -100,7 +100,7 @@ try {
         $precio = (float) $stmt->fetchColumn();
 
         if (!$precio) {
-            throw new Exception("Falta precio para práctica ID $practica_id");
+            throw new Exception("Práctica mal configurada, revisa precio o reparto");
         }
 
         /* =========================
@@ -124,6 +124,10 @@ try {
         ");
         $stmt->execute([$practica_id, $profesional_id, $tipoPaciente]);
         $rep_id = $stmt->fetchColumn();
+
+        if (!$rep_id) {
+            throw new Exception("Práctica mal configurada, revisa precio o reparto");
+        }
 
         $repartoFormateado = [];
 
@@ -166,12 +170,17 @@ try {
             $base = $precio - $totalFijos;
 
             if ($base < 0) {
-                throw new Exception("Error reparto práctica $practica_id");
+                throw new Exception("Práctica mal configurada, revisa precio o reparto");
             }
 
             foreach ($porcentajes as $r) {
                 $dest = $r['destino'];
                 $reparto[$dest]['monto'] += ($base * $r['valor']) / 100;
+            }
+
+            $sumaReparto = array_sum(array_column($reparto, 'monto'));
+            if (round($precio - $sumaReparto, 2) !== 0.0) {
+                throw new Exception("Práctica mal configurada, revisa precio o reparto");
             }
 
             foreach ($reparto as $dest => $info) {

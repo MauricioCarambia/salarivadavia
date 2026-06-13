@@ -76,11 +76,13 @@ $fechaCompleta = $dt->format('d/m/Y');
     <div class="card card-info card-outline">
 
         <!-- HEADER -->
-        <div class="card-header">
-            <h3 class="card-title">
+        <div class="card-header d-flex align-items-center justify-content-between flex-wrap">
+            <h3 class="card-title mb-0">
                 <i class="fas fa-user-md"></i>
                 <?= $nombreProfesional ?>
-
+                <?php if ($especialidadProfesional): ?>
+                    <span class="badge badge-light ml-2"><?= $especialidadProfesional ?></span>
+                <?php endif; ?>
             </h3>
             <div class="card-tools">
                 <button class="btn btn-danger btn-sm" onclick="cerrar()">
@@ -92,22 +94,32 @@ $fechaCompleta = $dt->format('d/m/Y');
         <!-- BODY -->
         <div class="card-body">
 
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <strong>Fecha:</strong> <?= $fechaCompleta ?>
+            <!-- FECHA / HORA -->
+            <div class="form-row align-items-center mb-3">
+                <div class="col-md-6 mb-2 mb-md-0">
+                    <div class="p-2 px-3 bg-light border rounded d-flex align-items-center">
+                        <i class="fas fa-calendar-alt text-info mr-2"></i>
+                        <strong class="mr-1">Fecha:</strong> <?= $fechaCompleta ?>
+                    </div>
                 </div>
 
                 <div class="col-md-6">
-                    <label><strong>Hora</strong></label>
-                    <select id="select-hora-turnos" class="form-control form-control-sm">
-                        <?php foreach ($horas as $h): ?>
-                            <option value="<?= $h ?>" <?= $h === $horaSeleccionada ? 'selected' : '' ?>>
-                                <?= $h ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text"><i class="fas fa-clock text-info"></i></span>
+                        </div>
+                        <select id="select-hora-turnos" class="form-control">
+                            <?php foreach ($horas as $h): ?>
+                                <option value="<?= $h ?>" <?= $h === $horaSeleccionada ? 'selected' : '' ?>>
+                                    <?= $h ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
                 </div>
             </div>
+
+            <hr class="mt-0">
 
             <!-- BUSCADOR -->
             <form id="form-busqueda">
@@ -115,18 +127,35 @@ $fechaCompleta = $dt->format('d/m/Y');
                 <input type="hidden" name="fecha" value="<?= $fechaHora ?>">
                 <input type="hidden" id="fecha-completa" value="<?= $dt->format('Y-m-d') ?>">
 
-                <div class="input-group mb-3">
+                <div class="input-group mb-2">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    </div>
                     <input type="text" class="form-control" name="busqueda" id="busqueda"
-                        value="<?= htmlspecialchars($busqueda) ?>" placeholder="Buscar paciente (nombre, apellido, DNI)"
+                        value="<?= htmlspecialchars($busqueda) ?>" placeholder="Buscar paciente por nombre, apellido o DNI..."
                         autofocus>
 
                     <div class="input-group-append">
                         <button type="submit" class="btn btn-success">
-                            <i class="fas fa-search"></i>
+                            <i class="fas fa-search"></i> Buscar
+                        </button>
+                        <button type="button" class="btn btn-info" onclick="nuevoPaciente()">
+                            <i class="fas fa-user-plus"></i> Nuevo paciente
                         </button>
                     </div>
                 </div>
             </form>
+
+            <!-- FILTRO DE RESULTADOS -->
+            <div class="form-group mb-2" id="filtro-resultados-wrapper" style="display:none;">
+                <div class="input-group input-group-sm">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text"><i class="fas fa-filter"></i></span>
+                    </div>
+                    <input type="text" class="form-control" id="filtroResultados"
+                        placeholder="Filtrar resultados por nombre o apellido...">
+                </div>
+            </div>
 
             <!-- RESULTADOS -->
             <div id="resultados">
@@ -147,36 +176,65 @@ $fechaCompleta = $dt->format('d/m/Y');
                         ':b2' => "%$busqueda%",
                         ':b3' => "%$busqueda%"
                     ]);
+
+                    $pacientes = $stmtPac->fetchAll(PDO::FETCH_ASSOC);
                 ?>
 
-                    <div class="table-responsive">
-                        <table class="table table-hover table-sm">
-                            <thead class="thead-light">
-                                <tr>
-                                    <th>Apellido</th>
-                                    <th>Nombre</th>
-                                    <th>Documento</th>
-                                    <th>Socio</th>
-                                    <th width="50"></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php while ($p = $stmtPac->fetch(PDO::FETCH_ASSOC)): ?>
+                    <?php if (!empty($pacientes)): ?>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <small class="text-muted">
+                                <?= count($pacientes) ?> resultado<?= count($pacientes) === 1 ? '' : 's' ?>
+                                <?= count($pacientes) >= 200 ? ' (mostrando los primeros 200)' : '' ?>
+                            </small>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm align-middle">
+                                <thead class="thead-light">
                                     <tr>
-                                        <td><?= htmlspecialchars($p['apellido']) ?></td>
-                                        <td><?= htmlspecialchars($p['nombre']) ?></td>
-                                        <td><?= htmlspecialchars($p['tipo_documento'] . ' ' . $p['documento']) ?></td>
-                                        <td><?= htmlspecialchars($p['nro_afiliado']) ?></td>
-                                        <td>
-                                            <button class="btn btn-primary btn-sm"
-                                                onclick="asignarTurno(<?= $p['Id'] ?>, this)">
-                                                <i class="fas fa-check"></i>
-                                            </button>
-                                        </td>
+                                        <th>Apellido</th>
+                                        <th>Nombre</th>
+                                        <th>Documento</th>
+                                        <th>Socio</th>
+                                        <th width="50"></th>
                                     </tr>
-                                <?php endwhile; ?>
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($pacientes as $p): ?>
+                                        <tr>
+                                            <td><?= htmlspecialchars($p['apellido']) ?></td>
+                                            <td><?= htmlspecialchars($p['nombre']) ?></td>
+                                            <td><?= htmlspecialchars($p['tipo_documento'] . ' ' . $p['documento']) ?></td>
+                                            <td>
+                                                <?php if (!empty($p['nro_afiliado'])): ?>
+                                                    <span class="badge badge-info"><?= htmlspecialchars($p['nro_afiliado']) ?></span>
+                                                <?php else: ?>
+                                                    <span class="text-muted">-</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <button class="btn btn-primary btn-sm" title="Asignar turno"
+                                                    onclick="asignarTurno(<?= $p['Id'] ?>, this)">
+                                                    <i class="fas fa-check"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php else: ?>
+                        <div class="alert alert-warning text-center mb-0">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            No se encontraron pacientes para "<strong><?= htmlspecialchars($busqueda) ?></strong>"
+                        </div>
+                    <?php endif; ?>
+
+                <?php else: ?>
+
+                    <div class="text-center text-muted p-4">
+                        <i class="fas fa-search fa-2x mb-2"></i>
+                        <p class="mb-0">Buscá un paciente para asignar el turno</p>
                     </div>
 
                 <?php endif; ?>
@@ -241,8 +299,40 @@ $fechaCompleta = $dt->format('d/m/Y');
 
             $("#resultados").html(resultados);
 
+            actualizarFiltroResultados();
         });
     });
+
+    // 🔎 FILTRO LOCAL DE RESULTADOS (por nombre/apellido)
+    function actualizarFiltroResultados() {
+
+        const filas = $("#resultados table tbody tr");
+
+        if (filas.length > 1) {
+            $("#filtro-resultados-wrapper").show();
+        } else {
+            $("#filtro-resultados-wrapper").hide();
+        }
+
+        $("#filtroResultados").val('');
+    }
+
+    $(document).on('input', '#filtroResultados', function() {
+
+        const texto = $(this).val().toLowerCase().trim();
+
+        $("#resultados table tbody tr").each(function() {
+
+            const apellido = $(this).find('td:eq(0)').text().toLowerCase();
+            const nombre = $(this).find('td:eq(1)').text().toLowerCase();
+
+            const coincide = (apellido + ' ' + nombre).includes(texto);
+
+            $(this).toggle(coincide);
+        });
+    });
+
+    actualizarFiltroResultados();
 
 
     // ✅ ASIGNAR TURNO CON SWEETALERT
@@ -352,6 +442,11 @@ $fechaCompleta = $dt->format('d/m/Y');
     // ❌ CERRAR
     function cerrar() {
         parent.$('#modalTurno').modal('hide');
+    }
+
+    // 👤 NUEVO PACIENTE (desde el modal de turnos)
+    function nuevoPaciente() {
+        window.location.href = 'index_clean.php?seccion=pacientes_new';
     }
 
 

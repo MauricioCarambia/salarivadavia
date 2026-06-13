@@ -28,17 +28,17 @@ $stmt->execute([$id]);
 $detalle = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $stmt = $pdo->prepare("
-    SELECT destino, SUM(monto) as total
+    SELECT destino_id, SUM(monto) as total
     FROM cobros_reparto
     WHERE cobro_id = ?
-    GROUP BY destino
+    GROUP BY destino_id
 ");
 $stmt->execute([$id]);
 $reparto = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 function getTotal($arr, $key){
     foreach($arr as $r){
-        if($r['destino'] == $key) return $r['total'];
+        if($r['destino_id'] == $key) return $r['total'];
     }
     return 0;
 }

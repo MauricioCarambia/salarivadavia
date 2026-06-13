@@ -62,20 +62,22 @@ try {
     // =============================
     // VALIDAR EMPLEADO
     // =============================
-    $stmt = $pdo->prepare("SELECT Id FROM empleados WHERE Id = ?");
+    $stmt = $pdo->prepare("SELECT nombre FROM empleados WHERE Id = ?");
     $stmt->execute([$id]);
+    $empleadoRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$stmt->fetch(PDO::FETCH_ASSOC)) {
+    if (!$empleadoRow) {
         throw new Exception('Empleado no encontrado');
     }
 
     // =============================
     // VALIDAR ROL
     // =============================
-    $stmt = $pdo->prepare("SELECT Id FROM roles WHERE Id = ?");
+    $stmt = $pdo->prepare("SELECT nombre FROM roles WHERE Id = ?");
     $stmt->execute([$rol]);
+    $rolRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$stmt->fetch(PDO::FETCH_ASSOC)) {
+    if (!$rolRow) {
         throw new Exception('Rol no válido');
     }
 

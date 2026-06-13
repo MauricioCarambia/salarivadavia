@@ -11,14 +11,20 @@ if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
 require_once __DIR__ . '/../inc/csrf.php';
 requerirCsrf();
 require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/auditoria.php';
 header('Content-Type: application/json');
 
 try {
 
     $id = (int)($_POST['id'] ?? 0);
+    $motivo = trim($_POST['motivo'] ?? '');
 
     if (!$id) {
         throw new Exception("ID inválido");
+    }
+
+    if ($motivo === '') {
+        throw new Exception("Debe indicar el motivo de la anulación");
     }
 
     $pdo->beginTransaction();
@@ -60,6 +66,8 @@ try {
         $id,
         'Anulación de cobro'
     ]);
+
+    registrarAuditoria($pdo, 'cobro_anulado', "Se anuló el comprobante N° {$cobro['numero_completo']} por \${$cobro['total']}", $motivo);
 
     $pdo->commit();
 

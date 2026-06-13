@@ -55,6 +55,15 @@ try {
         (int)$usuarioId
     );
 
+    if (!empty($resultado['success'])) {
+        $stmt = $pdo->prepare("
+            SELECT c.nombre, cs.turno
+            FROM caja_sesion cs
+            INNER JOIN cajas c ON c.id = cs.caja_id
+            WHERE cs.id = ?
+        ");
+    }
+
     echo json_encode($resultado);
 
 } catch (Throwable $e) {

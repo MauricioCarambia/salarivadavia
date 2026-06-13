@@ -1,12 +1,23 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
 
+if (empty($_SESSION['login'])) {
+    header("Location: login.php");
+    exit;
+}
+
+if (empty($_SESSION['es_admin']) && !in_array('lista_espera', $_SESSION['accesos'] ?? [])) {
+    die('<div class="alert alert-danger">No tenés permisos para acceder a esta sección</div>');
+}
+
 $mensaje = '';
 $tipoMensaje = '';
 
-$nombre = $apellido = $documento = $especialidad = '';
+$nombre = $apellido = $documento = '';
 $derivacion = $horario = $celular = $edad = '';
 $nota = $profesional = $asignado = '';
+
+$especialidad = $_GET['especialidad'] ?? '';
 
 /* =========================
    ESPECIALIDADES (DB)

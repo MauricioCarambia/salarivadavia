@@ -156,6 +156,36 @@ HC
   display: block;
   margin-bottom: 4px;
 }
+
+/* Evita que la columna "Profesional" se agrande por nombres/especialidades largas */
+#tablaHC {
+  table-layout: fixed;
+  width: 100% !important;
+}
+
+#tablaHC td,
+#tablaHC th {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Encabezado: alto consistente y texto centrado verticalmente */
+#tablaHC thead th {
+  height: auto;
+  white-space: normal;
+  vertical-align: middle;
+  padding: 0.6rem;
+}
+
+/* Evita que el ícono de orden de DataTables empuje el ancho de la columna */
+#tablaHC thead th.sorting:before,
+#tablaHC thead th.sorting:after,
+#tablaHC thead th.sorting_asc:before,
+#tablaHC thead th.sorting_asc:after,
+#tablaHC thead th.sorting_desc:before,
+#tablaHC thead th.sorting_desc:after {
+  right: 0.5em;
+}
 @media (max-width: 991px) {
   .sidebar {
     max-height: calc(100vh - 150px); /* ajustá según tu logo */

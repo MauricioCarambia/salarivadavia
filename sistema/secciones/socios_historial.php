@@ -16,6 +16,10 @@ $stmtPaciente = $pdo->prepare("
 $stmtPaciente->execute([':id' => $id]);
 $paciente = $stmtPaciente->fetch(PDO::FETCH_ASSOC);
 
+if (!$paciente) {
+    die('<div class="alert alert-danger">Paciente no encontrado</div>');
+}
+
 /* ===============================
    ESTADO SOCIO (MOROSO > 3 MESES)
 ================================ */
@@ -353,6 +357,14 @@ $meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agost
             title: '¿Eliminar pago?',
             text: "No se puede deshacer",
             icon: 'warning',
+            input: 'text',
+            inputLabel: 'Motivo de la eliminación',
+            inputPlaceholder: 'Ingresá el motivo...',
+            inputValidator: (value) => {
+               if (!value || !value.trim()) {
+                  return 'Debes indicar un motivo';
+               }
+            },
             showCancelButton: true,
             confirmButtonText: 'Sí, eliminar',
             cancelButtonText: 'Cancelar'
@@ -364,7 +376,8 @@ $meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agost
                   url: 'ajax/afiliado_pago_delete.php',
                   type: 'POST',
                   data: {
-                     id: id
+                     id: id,
+                     motivo: result.value.trim()
                   },
                   dataType: 'json',
 

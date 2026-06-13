@@ -125,7 +125,7 @@ $menuItems = [
         ]
     ],
 
-    // ['seccion' => 'estadisticas', 'label' => 'Estadísticas', 'icon' => 'fas fa-chart-bar', 'permiso' => 'estadisticas'],
+    ['seccion' => 'estadisticas', 'label' => 'Estadísticas', 'icon' => 'fas fa-chart-bar', 'permiso' => 'estadisticas'],
 
     [
         'label' => 'Estudios',
@@ -229,6 +229,10 @@ $menuItems = [
 ],
 
     ['seccion' => 'empleado', 'label' => 'Administrar Empleados', 'icon' => 'fas fa-cogs', 'permiso' => 'administrar empleados'],
+
+    ['seccion' => 'auditoria', 'label' => 'Auditoría', 'icon' => 'fas fa-history', 'permiso' => 'auditoria'],
+
+    ['seccion' => 'autorizaciones_ip', 'label' => 'Accesos remotos', 'icon' => 'fas fa-globe', 'permiso' => 'autorizaciones_ip'],
 
     ['seccion' => 'salir', 'label' => 'Salir', 'icon' => 'fas fa-sign-out-alt', 'url' => './secciones/logout.php']
 

@@ -359,6 +359,14 @@ ksort($totalesDestinos);
             title: '¿Anular cobro?',
             text: "Se generará un egreso en caja automáticamente",
             icon: 'warning',
+            input: 'text',
+            inputLabel: 'Motivo de la anulación',
+            inputPlaceholder: 'Ingresá el motivo...',
+            inputValidator: (value) => {
+                if (!value || !value.trim()) {
+                    return 'Debes indicar un motivo';
+                }
+            },
             showCancelButton: true,
             confirmButtonColor: '#d33',
             confirmButtonText: 'Sí, anular',
@@ -369,7 +377,8 @@ ksort($totalesDestinos);
                     url: 'ajax/eliminar_cobro.php',
                     method: 'POST',
                     data: {
-                        id: id
+                        id: id,
+                        motivo: result.value.trim()
                     },
                     dataType: 'json',
                     success: function(resp) {

@@ -20,6 +20,10 @@ WHERE p.Id=:id
 $stmt->execute([':id'=>$id]);
 $prof = $stmt->fetch(PDO::FETCH_ASSOC);
 
+if (!$prof) {
+    die('<div class="alert alert-danger">Profesional no encontrado</div>');
+}
+
 
 /* ===============================
    TURNOS DEL DIA

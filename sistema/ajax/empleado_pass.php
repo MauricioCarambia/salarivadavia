@@ -43,10 +43,11 @@ try {
     // =============================
     // VALIDAR EMPLEADO
     // =============================
-    $stmt = $pdo->prepare("SELECT Id FROM empleados WHERE Id = ?");
+    $stmt = $pdo->prepare("SELECT nombre FROM empleados WHERE Id = ?");
     $stmt->execute([$id]);
+    $empleadoRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$stmt->fetch()) {
+    if (!$empleadoRow) {
         throw new Exception('Empleado no existe');
     }
 

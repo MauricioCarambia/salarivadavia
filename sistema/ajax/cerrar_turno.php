@@ -4,9 +4,9 @@ require_once __DIR__ . '/../inc/csrf.php';
 requerirCsrf();
 require_once "../inc/db.php";
 
-$usuarioId = $_SESSION['user_id'];
-$cajaId = $_SESSION['caja_id'];
-$turno = $_SESSION['turno']; // importante que lo guardes al loguear
+$usuarioId = $_SESSION['user_id'] ?? 0;
+$cajaId = $_SESSION['caja_id'] ?? null;
+$turno = $_SESSION['turno'] ?? null; // importante que lo guardes al loguear
 
 try {
 

@@ -22,6 +22,10 @@ $stmt = $pdo->prepare("SELECT * FROM pacientes WHERE Id = :id");
 $stmt->execute([':id' => $id]);
 $paciente = $stmt->fetch(PDO::FETCH_ASSOC);
 
+if (!$paciente) {
+    die('Paciente no encontrado');
+}
+
 /* ================= LOGO ================= */
 $logo = base64(__DIR__ . '/../images/logo_blanco.png');
 

@@ -1,6 +1,15 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
 
+if (empty($_SESSION['login'])) {
+    header("Location: login.php");
+    exit;
+}
+
+if (empty($_SESSION['es_admin']) && !in_array('estudios', $_SESSION['accesos'] ?? [])) {
+    die('<div class="alert alert-danger">No tenés permisos para acceder a esta sección</div>');
+}
+
 $rand = rand(1, 9999);
 
 $laboratorio = $pdo->query("
@@ -62,10 +71,11 @@ $laboratorio = $pdo->query("
                     <div>
                         <button id="btn_resumen" class="btn btn-info btn-sm">
                             <i class="fa fa-calculator"></i> Ver resumen
+                        </button>
 
-                            <button id="btn_limpiar" class="btn btn-danger btn-sm">
-                                <i class="fa fa-times"></i> Limpiar
-                            </button>
+                        <button id="btn_limpiar" class="btn btn-danger btn-sm">
+                            <i class="fa fa-times"></i> Limpiar
+                        </button>
                     </div>
                 </div>
                 <div class="mb-3">

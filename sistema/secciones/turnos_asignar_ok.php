@@ -1,7 +1,6 @@
 <?php
+require_once __DIR__ . "/../inc/session.php";
 require_once __DIR__ . "/../inc/db.php";
-
-if (session_status() === PHP_SESSION_NONE) session_start();
 
 date_default_timezone_set('America/Argentina/Buenos_Aires');
 header('Content-Type: application/json');

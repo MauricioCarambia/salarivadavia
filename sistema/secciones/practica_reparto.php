@@ -10,6 +10,63 @@ $repartos = $pdo->query("
     INNER JOIN practicas p ON p.id = r.practica_id
     LEFT JOIN profesionales pr ON pr.id = r.profesional_id
 ")->fetchAll(PDO::FETCH_ASSOC);
+
+/* =========================================
+    🔎 VALIDACIÓN DE REPARTOS VS PRECIOS
+
+    Para cada reparto, calcula el total que
+    resultaría de aplicar sus reglas (montos
+    fijos + porcentajes sobre el resto) al
+    precio configurado para esa práctica y
+    tipo de paciente, y lo compara con el
+    precio real.
+========================================= */
+$stmtPrecio = $pdo->prepare("
+    SELECT precio
+    FROM practicas_precios
+    WHERE practica_id = ? AND tipo_paciente = ?
+    LIMIT 1
+");
+
+$stmtReglas = $pdo->prepare("
+    SELECT d.valor, t.nombre AS tipo
+    FROM practicas_reparto_detalle d
+    INNER JOIN tipos_reparto t ON t.id = d.tipo_id
+    WHERE d.reparto_id = ?
+");
+
+foreach ($repartos as &$r) {
+
+    $stmtPrecio->execute([$r['practica_id'], $r['tipo_paciente']]);
+    $precio = $stmtPrecio->fetchColumn();
+
+    $r['precio'] = $precio !== false ? (float)$precio : null;
+    $r['diferencia'] = null;
+
+    if ($r['precio'] === null) {
+        continue;
+    }
+
+    $stmtReglas->execute([$r['id']]);
+    $reglas = $stmtReglas->fetchAll(PDO::FETCH_ASSOC);
+
+    $totalFijos = 0;
+    $sumPorcentajes = 0;
+
+    foreach ($reglas as $regla) {
+        if ($regla['tipo'] === 'monto fijo') {
+            $totalFijos += (float)$regla['valor'];
+        } else {
+            $sumPorcentajes += (float)$regla['valor'];
+        }
+    }
+
+    $base = $r['precio'] - $totalFijos;
+    $totalReparto = $totalFijos + ($base * $sumPorcentajes / 100);
+
+    $r['diferencia'] = round($r['precio'] - $totalReparto, 2);
+}
+unset($r);
 $destinos = $pdo->query("
     SELECT id, nombre, tipo, categoria
     FROM destinos_reparto
@@ -41,6 +98,7 @@ $tipos = $pdo->query("
                             <th>Tipo Paciente</th>
                             <th>Profesional</th>
                             <th>Reglas</th>
+                            <th>Diferencia</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
@@ -54,6 +112,20 @@ $tipos = $pdo->query("
                                 </td>
                                 <td>
                                     <button class="btn btn-info btn-sm verReglas" data-id="<?= $r['id'] ?>">Ver reglas</button>
+                                </td>
+                                <td>
+                                    <?php if ($r['precio'] === null): ?>
+                                        <span class="badge badge-secondary" title="No hay precio configurado para esta práctica/tipo de paciente">
+                                            Sin precio
+                                        </span>
+                                    <?php elseif (abs($r['diferencia']) < 0.01): ?>
+                                        <span class="badge badge-success">OK</span>
+                                    <?php else: ?>
+                                        <span class="badge badge-danger"
+                                            title="Precio: $<?= number_format($r['precio'], 2) ?> - Reparto no suma el total">
+                                            Diff: $<?= number_format($r['diferencia'], 2) ?>
+                                        </span>
+                                    <?php endif; ?>
                                 </td>
                                 <td class="text-center d-flex gap-2">
                                     <button class="btn btn-success btn-sm editar rounded-circle" data-id="<?= $r['id'] ?>"><i class="fas fa-edit"></i></button>
