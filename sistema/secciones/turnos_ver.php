@@ -674,7 +674,10 @@ $mensaje = urlencode($mensaje);
         if (!practica_id) return;
 
         const fechaTurno = '<?= date('Y-m-d', strtotime($r['fecha'])) ?>';
-        const hoy = new Date().toISOString().slice(0, 10);
+        const ahoraLocal = new Date();
+        const hoy = ahoraLocal.getFullYear() + '-' +
+            String(ahoraLocal.getMonth() + 1).padStart(2, '0') + '-' +
+            String(ahoraLocal.getDate()).padStart(2, '0');
 
         if (fechaTurno !== hoy) {
             const [at, ah] = [fechaTurno, hoy];

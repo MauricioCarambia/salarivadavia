@@ -65,7 +65,8 @@ $laboratorio = $pdo->query("
                 <div class="alert alert-primary d-flex justify-content-between align-items-center">
                     <div>
                         <strong>Total seleccionado:</strong>
-                        <span id="suma" class="ml-2 font-weight-bold">$ 0</span>
+                        <span id="suma" class="ml-2 font-weight-bold">$ 0,00</span>
+                        <span id="cantidad_seleccionados" class="badge badge-info ml-2">0 estudios</span>
                     </div>
 
                     <div>
@@ -82,7 +83,11 @@ $laboratorio = $pdo->query("
                     <input type="text" id="buscador_estudios" class="form-control" placeholder="🔎 Buscar estudio...">
                 </div>
                 <!-- LISTA -->
-                <div class="row">
+                <div class="row" id="lista_estudios">
+
+                    <div id="sin_resultados" class="col-12 text-center text-muted py-3" style="display:none;">
+                        <i class="fa fa-search"></i> No se encontraron estudios
+                    </div>
 
                     <?php foreach ($laboratorio as $row): ?>
 
@@ -155,12 +160,19 @@ $laboratorio = $pdo->query("
         function calcularTotal() {
 
             let suma = 0;
+            let cantidad = 0;
 
             $('.checkbox_lab:checked').each(function() {
                 suma += parseFloat($(this).val()) || 0;
+                cantidad++;
             });
 
-            $('#suma').text('$ ' + suma.toLocaleString('es-AR'));
+            $('#suma').text('$ ' + suma.toLocaleString('es-AR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }));
+
+            $('#cantidad_seleccionados').text(cantidad + (cantidad === 1 ? ' estudio' : ' estudios'));
         }
 
         // =========================
@@ -197,6 +209,7 @@ $laboratorio = $pdo->query("
         $('#buscador_estudios').on('keyup', function() {
 
             let texto = $(this).val().toLowerCase();
+            let visibles = 0;
 
             $('.item-estudio').each(function() {
 
@@ -204,11 +217,14 @@ $laboratorio = $pdo->query("
 
                 if (nombre.includes(texto)) {
                     $(this).parent().show(); // col-md-3
+                    visibles++;
                 } else {
                     $(this).parent().hide();
                 }
 
             });
+
+            $('#sin_resultados').toggle(visibles === 0);
 
         });
 

@@ -904,15 +904,28 @@ $profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
             let id = $(this).data('id');
 
             Swal.fire({
-                title: '¿Anular?',
+                title: '¿Anular cobro?',
+                text: "Se generará un egreso en caja automáticamente",
                 icon: 'warning',
-                showCancelButton: true
+                input: 'text',
+                inputLabel: 'Motivo de la anulación',
+                inputPlaceholder: 'Ingresá el motivo...',
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) {
+                        return 'Debes indicar un motivo';
+                    }
+                },
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: 'Sí, anular',
+                cancelButtonText: 'Cancelar'
             }).then(r => {
 
                 if (!r.isConfirmed) return;
 
                 $.post('ajax/eliminar_movimiento.php', {
-                    id
+                    id,
+                    motivo: r.value.trim()
                 }, function(res) {
 
                     if (res.success) {

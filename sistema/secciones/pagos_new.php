@@ -79,6 +79,9 @@ $saldo = $prof['total_generado'] - $prof['total_pagado'];
           <div class="inner">
             <h4>$<?= number_format($saldo,2,',','.') ?></h4>
             <p>Saldo</p>
+            <?php if ($saldo < 0): ?>
+              <small><i class="fas fa-info-circle"></i> El profesional debe</small>
+            <?php endif; ?>
           </div>
         </div>
       </div>
