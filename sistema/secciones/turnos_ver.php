@@ -220,20 +220,20 @@ $mensaje = urlencode($mensaje);
 
                 <?php if ($rPaciente): ?>
                     <div class="row">
-                        <div class="col-md-3"><b>Apellido:</b> <?= htmlspecialchars($rPaciente['apellido']) ?></div>
-                        <div class="col-md-3"><b>Nombre:</b> <?= htmlspecialchars($rPaciente['nombre']) ?></div>
-                        <div class="col-md-3"><b>Documento:</b> <?= htmlspecialchars($rPaciente['documento']) ?></div>
-                        <div class="col-md-3"><b>Celular:</b> <?= htmlspecialchars($rPaciente['celular']) ?></div>
+                        <div class="col-md-3"><b>Apellido:</b> <?= htmlspecialchars($rPaciente['apellido'] ?? '') ?></div>
+                        <div class="col-md-3"><b>Nombre:</b> <?= htmlspecialchars($rPaciente['nombre'] ?? '') ?></div>
+                        <div class="col-md-3"><b>Documento:</b> <?= htmlspecialchars($rPaciente['documento'] ?? '') ?></div>
+                        <div class="col-md-3"><b>Celular:</b> <?= htmlspecialchars($rPaciente['celular'] ?? '') ?></div>
 
-                        <div class="col-md-3"><b>Provincia:</b> <?= htmlspecialchars($rPaciente['provincia']) ?></div>
-                        <div class="col-md-3"><b>Localidad:</b> <?= htmlspecialchars($rPaciente['localidad']) ?></div>
-                        <div class="col-md-3"><b>Domicilio:</b> <?= htmlspecialchars($rPaciente['domicilio']) ?></div>
-                        <div class="col-md-3"><b>Email:</b> <?= htmlspecialchars($rPaciente['email']) ?></div>
+                        <div class="col-md-3"><b>Provincia:</b> <?= htmlspecialchars($rPaciente['provincia'] ?? '') ?></div>
+                        <div class="col-md-3"><b>Localidad:</b> <?= htmlspecialchars($rPaciente['localidad'] ?? '') ?></div>
+                        <div class="col-md-3"><b>Domicilio:</b> <?= htmlspecialchars($rPaciente['domicilio'] ?? '') ?></div>
+                        <div class="col-md-3"><b>Email:</b> <?= htmlspecialchars($rPaciente['email'] ?? '') ?></div>
 
-                        <div class="col-md-3"><b>Nro socio:</b> <?= htmlspecialchars($rPaciente['nro_afiliado']) ?></div>
-                        <div class="col-md-3"><b>Obra social:</b> <?= htmlspecialchars($rPaciente['obra_social']) ?></div>
-                        <div class="col-md-3"><b>Plan:</b> <?= htmlspecialchars($rPaciente['obra_social_plan']) ?></div>
-                        <div class="col-md-3"><b>Sexo:</b> <?= htmlspecialchars($rPaciente['sexo']) ?></div>
+                        <div class="col-md-3"><b>Nro socio:</b> <?= htmlspecialchars($rPaciente['nro_afiliado'] ?? '') ?></div>
+                        <div class="col-md-3"><b>Obra social:</b> <?= htmlspecialchars($rPaciente['obra_social'] ?? '') ?></div>
+                        <div class="col-md-3"><b>Plan:</b> <?= htmlspecialchars($rPaciente['obra_social_plan'] ?? '') ?></div>
+                        <div class="col-md-3"><b>Sexo:</b> <?= htmlspecialchars($rPaciente['sexo'] ?? '') ?></div>
                         <div class="col-md-3">
                             <b>Tipo socio:</b>
                             <?php
@@ -624,7 +624,8 @@ $mensaje = urlencode($mensaje);
             fetch('secciones/turno_eliminar.php', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content')
                     },
                     body: 'id=' + id
                 })
@@ -825,6 +826,7 @@ $mensaje = urlencode($mensaje);
                 const dataTicket = {
                     paciente: "<?= $paciente ?>",
                     profesional: "<?= $profesional ?>",
+                    numero_completo: res.numero || "",
                     total: parseFloat(res.total || 0),
                     detalle: Array.isArray(res.detalle) ? res.detalle : []
                 };
@@ -1207,6 +1209,14 @@ $mensaje = urlencode($mensaje);
             title: '¿Anular cobro?',
             text: 'Esta acción anula el cobro y su impacto en caja',
             icon: 'warning',
+            input: 'text',
+            inputLabel: 'Motivo de la anulación',
+            inputPlaceholder: 'Ingresá el motivo...',
+            inputValidator: (value) => {
+                if (!value || !value.trim()) {
+                    return 'Debes indicar un motivo';
+                }
+            },
             showCancelButton: true,
             confirmButtonText: 'Sí, anular',
             cancelButtonText: 'Cancelar',
@@ -1216,7 +1226,8 @@ $mensaje = urlencode($mensaje);
             if (!result.isConfirmed) return;
 
             $.post('ajax/anular_cobro.php', {
-                cobro_id: cobro_id
+                cobro_id: cobro_id,
+                motivo: result.value.trim()
             }, function(res) {
 
                 if (!res.success) {

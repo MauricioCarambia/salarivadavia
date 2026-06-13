@@ -13,6 +13,30 @@ $stmt = $pdo->query("
     ORDER BY p.nombre
 ");
 $precios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+/* =========================================
+    🔎 VALIDACIÓN: PRECIOS SIN REPARTO
+
+    Marca los precios de prácticas activas que
+    no tienen ningún reparto configurado para
+    su práctica + tipo de paciente, lo que hace
+    que no se pueda cobrar esa combinación.
+========================================= */
+$repartosConfigurados = $pdo->query("
+    SELECT DISTINCT practica_id, tipo_paciente
+    FROM practicas_reparto
+")->fetchAll(PDO::FETCH_ASSOC);
+
+$repartosSet = [];
+foreach ($repartosConfigurados as $r) {
+    $repartosSet[$r['practica_id'] . '|' . $r['tipo_paciente']] = true;
+}
+
+foreach ($precios as &$p) {
+    $clave = $p['practica_id'] . '|' . $p['tipo_paciente'];
+    $p['sin_reparto'] = !isset($repartosSet[$clave]);
+}
+unset($p);
 ?>
 
 <div class="card card-outline card-info shadow-sm">
@@ -37,6 +61,7 @@ $precios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <th>Tipo Paciente</th>
                     <th>Precio</th>
                     <th>Estado</th>
+                    <th>Reparto</th>
                     <th width="120">Acciones</th>
                 </tr>
             </thead>
@@ -59,6 +84,14 @@ $precios = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <?= $p['activo']
                                 ? '<span class="badge badge-success">Activo</span>'
                                 : '<span class="badge badge-secondary">Inactivo</span>' ?>
+                        </td>
+
+                        <td>
+                            <?php if ($p['sin_reparto']): ?>
+                                <span class="badge badge-warning" title="No hay reparto configurado para esta práctica/tipo de paciente">Sin reparto</span>
+                            <?php else: ?>
+                                <span class="badge badge-success">Configurado</span>
+                            <?php endif; ?>
                         </td>
 
                        <td class="text-center d-flex justify-content-center gap-2">

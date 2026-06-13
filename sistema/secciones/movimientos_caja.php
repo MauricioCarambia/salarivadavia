@@ -71,6 +71,8 @@ SELECT
     c.medio_pago,
     c.transferencia_tipo,
     c.empleado_destino_id,
+    c.profesional_id,
+    c.paciente_id,
 
     ed.nombre AS empleado_destino_nombre,
 
@@ -79,7 +81,9 @@ SELECT
         COALESCE(pr.nombre,'')
     ) AS profesional_destino_nombre,
 
-    GROUP_CONCAT(DISTINCT d.nombre SEPARATOR ', ') AS destino_nombre
+    GROUP_CONCAT(DISTINCT d.nombre SEPARATOR ', ') AS destino_nombre,
+
+    SUM(cr.monto) AS total_reparto
 
 FROM cobros c
 
@@ -97,6 +101,164 @@ ORDER BY c.fecha DESC
 
 $stmt->execute($params);
 $movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+/* =========================
+   🔎 DIFERENCIA REPARTO
+   Compara el total cobrado contra la suma de
+   cobros_reparto, para detectar repartos que
+   no quedaron registrados correctamente.
+========================= */
+foreach ($movimientos as &$m) {
+
+    $m['diferencia_reparto'] = null;
+    $m['reparto_alerta'] = null;
+
+    if ($m['total_reparto'] === null) {
+        if ((float)$m['monto'] != 0) {
+            $m['reparto_alerta'] = "Sin reparto registrado para este cobro";
+        }
+        continue;
+    }
+
+    $diff = round((float)$m['monto'] - (float)$m['total_reparto'], 2);
+
+    if (abs($diff) >= 0.01) {
+        $m['diferencia_reparto'] = $diff;
+        $m['reparto_alerta'] = sprintf(
+            "El reparto registrado ($%s en %s) no coincide con el total cobrado ($%s)",
+            number_format((float)$m['total_reparto'], 2),
+            $m['destino_nombre'] ?: 'sin destino',
+            number_format((float)$m['monto'], 2)
+        );
+    }
+}
+unset($m);
+
+/* =========================
+   🔎 VALIDACIÓN: REPARTO CONFIGURADO POR PRÁCTICA
+
+   El reparto registrado en cobros_reparto puede
+   estar "compensado" (cobrar_turno.php ajusta
+   centavos para que cierre exacto), por lo que el
+   chequeo anterior no detecta reglas mal cargadas.
+   Acá se revisa, para cada práctica del cobro, si
+   la regla de reparto configurada actualmente
+   suma el precio cobrado.
+========================= */
+$idsIngresos = array_column(
+    array_filter($movimientos, fn($m) => $m['tipo'] === 'ingreso'),
+    'id'
+);
+
+if ($idsIngresos) {
+
+    $in = implode(',', array_fill(0, count($idsIngresos), '?'));
+
+    $stmtDet = $pdo->prepare("
+        SELECT cobro_id, practica_id, nombre AS practica_nombre, precio
+        FROM cobros_detalle
+        WHERE cobro_id IN ($in)
+    ");
+    $stmtDet->execute($idsIngresos);
+    $detalles = $stmtDet->fetchAll(PDO::FETCH_ASSOC);
+
+    $profesionalPorCobro = [];
+    $tipoPacientePorCobro = [];
+    foreach ($movimientos as $m) {
+        $profesionalPorCobro[$m['id']] = $m['profesional_id'];
+
+        if (!array_key_exists($m['id'], $tipoPacientePorCobro)) {
+            $tipoPacientePorCobro[$m['id']] = $m['paciente_id']
+                ? obtenerEstadoAfiliado($pdo, (int)$m['paciente_id'])['cobra_como']
+                : null;
+        }
+    }
+
+    $stmtRepartoId = $pdo->prepare("
+        SELECT id FROM practicas_reparto
+        WHERE practica_id = ?
+          AND (profesional_id = ? OR profesional_id IS NULL)
+          AND tipo_paciente = ?
+        ORDER BY profesional_id DESC
+        LIMIT 1
+    ");
+
+    $stmtReglas = $pdo->prepare("
+        SELECT d.valor, t.nombre AS tipo
+        FROM practicas_reparto_detalle d
+        INNER JOIN tipos_reparto t ON t.id = d.tipo_id
+        WHERE d.reparto_id = ?
+    ");
+
+    $alertasConfigPorCobro = [];
+
+    foreach ($detalles as $d) {
+
+        $precio = (float)$d['precio'];
+
+        $tipoPaciente = $tipoPacientePorCobro[$d['cobro_id']] ?? null;
+
+        if ($tipoPaciente === null) {
+            continue;
+        }
+
+        $profesionalId = $profesionalPorCobro[$d['cobro_id']] ?? null;
+        $stmtRepartoId->execute([$d['practica_id'], $profesionalId, $tipoPaciente]);
+        $repId = $stmtRepartoId->fetchColumn();
+
+        if (!$repId) {
+            $alertasConfigPorCobro[$d['cobro_id']][] = sprintf(
+                "%s: no hay reparto configurado para tipo de paciente '%s'",
+                $d['practica_nombre'],
+                $tipoPaciente
+            );
+            continue;
+        }
+
+        $stmtReglas->execute([$repId]);
+        $reglas = $stmtReglas->fetchAll(PDO::FETCH_ASSOC);
+
+        $totalFijos = 0;
+        $sumPorcentajes = 0;
+
+        foreach ($reglas as $r) {
+            if ($r['tipo'] === 'monto fijo') {
+                $totalFijos += (float)$r['valor'];
+            } else {
+                $sumPorcentajes += (float)$r['valor'];
+            }
+        }
+
+        $base = $precio - $totalFijos;
+        $totalReparto = $totalFijos + ($base * $sumPorcentajes / 100);
+        $diff = round($precio - $totalReparto, 2);
+
+        if (abs($diff) >= 0.01) {
+            $alertasConfigPorCobro[$d['cobro_id']][] = sprintf(
+                "%s: precio $%s, reparto configurado suma $%s (diferencia $%s)",
+                $d['practica_nombre'],
+                number_format($precio, 2),
+                number_format($totalReparto, 2),
+                number_format($diff, 2)
+            );
+        }
+    }
+
+    foreach ($movimientos as &$m) {
+        if (!empty($alertasConfigPorCobro[$m['id']])) {
+            $m['config_alerta'] = implode(' | ', $alertasConfigPorCobro[$m['id']]);
+        } else {
+            $m['config_alerta'] = null;
+        }
+    }
+    unset($m);
+} else {
+    foreach ($movimientos as &$m) {
+        $m['config_alerta'] = null;
+    }
+    unset($m);
+}
+
 /* =========================
    🎯 DESTINOS
 ========================= */
@@ -371,14 +533,14 @@ $profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                                             <?php if ($m['transferencia_tipo'] === 'clinica'): ?>
 
-                                                <small class="badge badge-info">
+                                                <small class="badge badge-info d-block text-wrap text-left" style="max-width:100%;">
                                                     <i class="fas fa-user mr-1"></i>
                                                     <?= htmlspecialchars($m['empleado_destino_nombre'] ?: '-') ?>
                                                 </small>
 
                                             <?php elseif ($m['transferencia_tipo'] === 'profesional'): ?>
 
-                                                <small class="badge badge-info text-dark">
+                                                <small class="badge badge-info text-dark d-block text-wrap text-left" style="max-width:100%;">
                                                     <i class="fas fa-user-md mr-1"></i>
                                                     Cobrado por <?= htmlspecialchars(trim($m['profesional_destino_nombre']) ?: '-') ?>
                                                 </small>
@@ -396,6 +558,24 @@ $profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                                         <?php if ($m['estado'] === 'anulado'): ?>
                                             <span class="badge badge-danger ml-2">ANULADO</span>
+                                        <?php endif; ?>
+
+                                        <?php if ($m['reparto_alerta'] !== null): ?>
+                                            <span class="badge badge-danger d-block text-wrap text-left mt-1" style="max-width:100%;" title="<?= htmlspecialchars($m['reparto_alerta']) ?>">
+                                                <i class="fas fa-exclamation-triangle"></i>
+                                                <?php if ($m['diferencia_reparto'] !== null): ?>
+                                                    Diff $<?= number_format($m['diferencia_reparto'], 2) ?>
+                                                <?php else: ?>
+                                                    Sin reparto
+                                                <?php endif; ?>
+                                            </span>
+                                        <?php endif; ?>
+
+                                        <?php if ($m['config_alerta'] !== null): ?>
+                                            <span class="badge badge-danger text-dark d-block text-wrap text-left mt-1" style="max-width:100%;" title="<?= htmlspecialchars($m['config_alerta']) ?>">
+                                                <i class="fas fa-exclamation-triangle"></i>
+                                                Práctica mal config.
+                                            </span>
                                         <?php endif; ?>
 
                                     </td>
@@ -474,14 +654,14 @@ $profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                                             <?php if ($m['transferencia_tipo'] === 'clinica'): ?>
 
-                                                <small class="badge badge-info">
+                                                <small class="badge badge-info d-block text-wrap text-left" style="max-width:100%;">
                                                     <i class="fas fa-user mr-1"></i>
                                                     <?= htmlspecialchars($m['empleado_destino_nombre'] ?: '-') ?>
                                                 </small>
 
                                             <?php elseif ($m['transferencia_tipo'] === 'profesional'): ?>
 
-                                                <small class="badge badge-info text-dark">
+                                                <small class="badge badge-info text-dark d-block text-wrap text-left" style="max-width:100%;">
                                                     <i class="fas fa-user-md mr-1"></i>
                                                     Cobrado por <?= htmlspecialchars(trim($m['profesional_destino_nombre']) ?: '-') ?>
                                                 </small>
@@ -498,6 +678,24 @@ $profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                                         <?php if ($m['estado'] === 'anulado'): ?>
                                             <span class="badge badge-danger ml-2">ANULADO</span>
+                                        <?php endif; ?>
+
+                                        <?php if ($m['reparto_alerta'] !== null): ?>
+                                            <span class="badge badge-danger d-block text-wrap text-left mt-1" style="max-width:100%;" title="<?= htmlspecialchars($m['reparto_alerta']) ?>">
+                                                <i class="fas fa-exclamation-triangle"></i>
+                                                <?php if ($m['diferencia_reparto'] !== null): ?>
+                                                    Diff $<?= number_format($m['diferencia_reparto'], 2) ?>
+                                                <?php else: ?>
+                                                    Sin reparto
+                                                <?php endif; ?>
+                                            </span>
+                                        <?php endif; ?>
+
+                                        <?php if ($m['config_alerta'] !== null): ?>
+                                            <span class="badge badge-danger text-dark d-block text-wrap text-left mt-1" style="max-width:100%;" title="<?= htmlspecialchars($m['config_alerta']) ?>">
+                                                <i class="fas fa-exclamation-triangle"></i>
+                                                Práctica mal config.
+                                            </span>
                                         <?php endif; ?>
 
                                     </td>
@@ -659,6 +857,12 @@ $profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     });
 
                     if (r.isConfirmed) {
+                        Swal.fire({
+                            title: 'Imprimiendo...',
+                            allowOutsideClick: false,
+                            didOpen: () => Swal.showLoading()
+                        });
+
                         try {
                             await imprimirMovimiento(res.cobro_id);
                         } catch (err) {

@@ -15,6 +15,7 @@ if (isset($_GET['accion']) && $_GET['accion'] === 'getHC') {
 $profesionalId = $_SESSION['user_id'] ?? 0;
 $tipoUsuario = $_SESSION['tipo'] ?? '';
 $id = (int) ($_GET['id'] ?? 0);
+$turnoId = (int) ($_GET['turno'] ?? 0);
 $rand = $_GET['nc'] ?? '';
 
 if (!$id) {
@@ -83,7 +84,7 @@ function mostrarCampo($label, $valor)
                     class="btn btn-secondary btn-sm ml-2">
                     Volver
                 </a>
-                <a href="./?seccion=historia_clinica_new&paciente_id=<?= $id ?>" class="btn btn-success btn-sm ml-2">
+                <a href="./?seccion=historia_clinica_new&paciente_id=<?= $id ?>&turno=<?= $turnoId ?>&nc=<?= $rand ?>" class="btn btn-success btn-sm ml-2">
                     <i class="fa fa-plus"></i> Nueva HC
                 </a>
             <?php endif; ?>
@@ -107,13 +108,13 @@ function mostrarCampo($label, $valor)
                     </div>
                     <div class="card-header d-flex align-items-center ">
                         <div class="col-md-3"><b>Paciente:</b><br><?= htmlspecialchars($pacienteNombre) ?></div>
-                        <div class="col-md-2"><b>DNI:</b><br><?= htmlspecialchars($pacienteData['documento']) ?></div>
+                        <div class="col-md-2"><b>DNI:</b><br><?= htmlspecialchars($pacienteData['documento'] ?? '') ?></div>
                         <div class="col-md-2">
                             <b>Nacimiento:</b><br><?= $pacienteData['nacimiento'] ? date('d/m/Y', strtotime($pacienteData['nacimiento'])) : '-' ?>
                         </div>
-                        <div class="col-md-2"><b>Celular:</b><br><?= htmlspecialchars($pacienteData['celular']) ?></div>
+                        <div class="col-md-2"><b>Celular:</b><br><?= htmlspecialchars($pacienteData['celular'] ?? '') ?></div>
                         <div class="col-md-2"><b>HC:</b><br><span
-                                class="badge badge-info"><?= htmlspecialchars($pacienteData['historia_clinica']) ?></span>
+                                class="badge badge-info"><?= htmlspecialchars($pacienteData['historia_clinica'] ?? '') ?></span>
                         </div>
                     </div>
                 </div>
@@ -132,9 +133,9 @@ function mostrarCampo($label, $valor)
                     <tr>
                         <th style="width:50%">Consulta</th>
                         <th style="width:25%">Profesional</th>
-                        <th style="width:15%" class="text-center">Firma</th>
+                        <th style="width:<?= $tipoUsuario === 'profesional' ? '15' : '25' ?>%" class="text-center">Firma</th>
                         <?php if ($tipoUsuario === 'profesional'): ?>
-                            <th style="width:1%" class="text-center">Acciones</th><?php endif; ?>
+                            <th style="width:10%" class="text-center">Acciones</th><?php endif; ?>
                     </tr>
                 </thead>
                 <tbody>
@@ -158,10 +159,10 @@ function mostrarCampo($label, $valor)
 
                                     <b><?= date('d/m/Y', strtotime($hc['fecha'])) ?></b><br>
 
-                                    <?= htmlspecialchars($hc['profesionalapellido'] . ' ' . $hc['profesionalnombre']) ?><br>
+                                    <?= htmlspecialchars(trim(($hc['profesionalapellido'] ?? '') . ' ' . ($hc['profesionalnombre'] ?? ''))) ?><br>
 
                                     <span class="badge badge-info">
-                                        <?= htmlspecialchars($hc['especialidad']) ?>
+                                        <?= htmlspecialchars($hc['especialidad'] ?? '') ?>
                                     </span><br>
 
                                     <small>
@@ -173,7 +174,7 @@ function mostrarCampo($label, $valor)
                                 </td>
                                 <td class="text-center align-middle">
                                     <?php if (!empty($hc['profesionalfirma'])): ?><img
-                                            src="<?= htmlspecialchars($hc['profesionalfirma']) ?>"
+                                            src="<?= htmlspecialchars($hc['profesionalfirma'] ?? '') ?>"
                                             style="width:150px"><?php endif; ?>
                                 </td>
                                 <?php if ($tipoUsuario === 'profesional'): ?>
@@ -327,6 +328,7 @@ function mostrarCampo($label, $valor)
             order: [
                 [1, "desc"]
             ],
+            autoWidth: false,
             dom: 'Bfrtip', // 🔥 IMPORTANTE
             buttons: [
 

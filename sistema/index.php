@@ -2,6 +2,37 @@
 require_once __DIR__ . '/inc/session.php';
 require_once __DIR__ . '/inc/db.php';
 require_once __DIR__ . '/inc/csrf.php';
+require_once __DIR__ . '/inc/access_control.php';
+require_once __DIR__ . '/inc/auditoria.php';
+
+/* =============================
+   RESTRICCIÓN POR IP
+=============================*/
+if (restriccionIpActiva() && !ipPermitida(obtenerIpCliente()) && !empty($_SESSION['login'])) {
+
+    $esAdminSesion = !empty($_SESSION['es_admin']);
+    $tieneAuthTemporal = tieneAutorizacionTemporal(
+        $pdo,
+        $_SESSION['tipo'] ?? '',
+        (int) ($_SESSION['user_id'] ?? 0)
+    );
+
+    if (!$esAdminSesion && !$tieneAuthTemporal) {
+
+        registrarAuditoria(
+            $pdo,
+            'acceso_bloqueado',
+            "Sesión cerrada por acceso desde IP no autorizada (" . obtenerIpCliente() . ")"
+        );
+
+        $_SESSION = [];
+        session_destroy();
+
+        header("Location: login.php");
+        exit;
+    }
+}
+
 $cajas = [];
 $stmt = $pdo->query("SELECT * FROM cajas ORDER BY nombre");
 if ($stmt) {
@@ -169,7 +200,7 @@ $meses = [
             <div id="sidebarCaja" class="p-2  d-flex justify-content-center">
                 <?php
                 // Obtenemos la caja abierta si hay
-                $cajaAbierta = obtenerCajaAbierta($pdo, $_SESSION['user_id']);
+                $cajaAbierta = obtenerCajaAbierta($pdo, $usuarioId);
                 if ($cajaAbierta):
                 ?>
                     <small><i class="fas fa-cash-register"></i> <?= htmlspecialchars($cajaAbierta['nombre']) ?> |

@@ -64,15 +64,15 @@ $meses = [
                 </div>
                 <div class="col-md-2">
                     <small class="text-muted d-block">N° socio</small>
-                    <strong><?= htmlspecialchars($paciente['nro_afiliado']) ?></strong>
+                    <strong><?= htmlspecialchars($paciente['nro_afiliado'] ?? '') ?></strong>
                 </div>
                 <div class="col-md-2">
                     <small class="text-muted d-block">Documento</small>
-                    <?= htmlspecialchars($paciente['tipo_documento']) ?> <?= htmlspecialchars($paciente['documento']) ?>
+                    <?= htmlspecialchars($paciente['tipo_documento'] ?? '') ?> <?= htmlspecialchars($paciente['documento'] ?? '') ?>
                 </div>
                 <div class="col-md-2">
                     <small class="text-muted d-block">Celular</small>
-                    <?= htmlspecialchars($paciente['celular']) ?>
+                    <?= htmlspecialchars($paciente['celular'] ?? '') ?>
                 </div>
                 <div class="col-md-2">
                     <small class="text-muted d-block">Obra social</small>
@@ -80,7 +80,7 @@ $meses = [
                 </div>
                 <div class="col-md-1">
                     <small class="text-muted d-block">Localidad</small>
-                    <?= htmlspecialchars($paciente['localidad']) ?>
+                    <?= htmlspecialchars($paciente['localidad'] ?? '') ?>
                 </div>
             </div><br>
         <?php else: ?>
@@ -166,7 +166,13 @@ $meses = [
                 </table>
 
             </div>
-            <div class="card-footer text-right">
+            <div class="card-footer d-flex justify-content-between align-items-center flex-wrap">
+                <div class="form-check">
+                    <input type="checkbox" class="form-check-input" id="sinCobro">
+                    <label class="form-check-label" for="sinCobro">
+                        Ya fue abonado por otro medio (no generar cobro en caja)
+                    </label>
+                </div>
                 <button type="button" id="guardarPagos" class="btn btn-success" disabled>
                     <i class="fas fa-save mr-1"></i> Guardar pagos
                 </button>
@@ -628,23 +634,120 @@ $meses = [
             }
         }
 
+        /* ---- enviar pagos al servidor ---- */
+        function enviarPagos(sinCobro, debeImprimir, afiliados, totalCarrito) {
+            fetch('ajax/guardar_pagos_afiliado.php?paciente_id=<?= $id ?>', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content')
+                    },
+                    body: JSON.stringify({
+                        items: carrito,
+                        sin_cobro: sinCobro
+                    })
+                })
+                .then(r => {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                })
+                .then(data => {
+                    if (data.ok) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: data.msg,
+                            timer: 2000,
+                            showConfirmButton: false
+                        });
+
+                        if (debeImprimir) {
+                            imprimirTicketAfiliado(data.afiliados || [], carrito, totalCarrito)
+                                .catch(err => console.error(err))
+                                .finally(() => location.reload());
+                        } else {
+                            setTimeout(() => location.reload(), 1500);
+                        }
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Error',
+                            text: data.msg
+                        });
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error de conexión',
+                        text: 'No se pudo comunicar con el servidor. Verificá tu conexión e intentá de nuevo.'
+                    });
+                });
+        }
+
         /* ---- guardar pagos ---- */
         document.getElementById('guardarPagos').addEventListener('click', function() {
             if (carrito.length === 0) return;
 
             const totalCarrito = carrito.reduce((s, i) => s + i.monto, 0);
+            const sinCobro = document.getElementById('sinCobro').checked;
+
+            const filasMeses = carrito.map(item => `
+                    <tr>
+                        <td style="text-align:left; padding:4px 8px;">${item.label}</td>
+                        <td style="text-align:right; padding:4px 8px;">${formatMoney(item.monto)}</td>
+                    </tr>`).join('');
+
+            const tablaMeses = `
+                    <p style="font-weight:600; margin-bottom:4px;">Meses a registrar:</p>
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead>
+                            <tr style="background:#f0f0f0; color:#333;">
+                                <th style="text-align:left; padding:5px 8px;">Mes</th>
+                                <th style="text-align:right; padding:5px 8px;">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody>${filasMeses}</tbody>
+                        <tfoot>
+                            <tr style="border-top:2px solid #333; font-weight:bold;">
+                                <td style="padding:6px 8px;">TOTAL</td>
+                                <td style="text-align:right; padding:6px 8px;">${formatMoney(totalCarrito)}</td>
+                            </tr>
+                        </tfoot>
+                    </table>`;
+
+            // ---- Ya abonado por otro medio: no se cobra en caja ----
+            if (sinCobro) {
+                const previewHtml = `
+                    <div style="font-size:14px; text-align:left;">
+                        <p class="mb-2"><i class="fas fa-info-circle text-info"></i>
+                           Estas cuotas se registrarán como pagadas <strong>sin generar movimiento de caja</strong>.</p>
+                        ${tablaMeses}
+                    </div>
+                `;
+
+                Swal.fire({
+                    title: 'Confirmar registro',
+                    html: previewHtml,
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: '<i class="fas fa-save"></i> Registrar cuotas',
+                    cancelButtonText: 'Cancelar',
+                    confirmButtonColor: '#17a2b8',
+                    width: 480,
+                }).then(result => {
+                    if (!result.isConfirmed) return;
+                    enviarPagos(true, false, [], totalCarrito);
+                });
+
+                return;
+            }
 
             // Traer afiliados del mismo nro de socio antes de mostrar el Swal
             fetch('ajax/preview_pago_masivo.php?paciente_id=<?= $id ?>')
                 .then(r => r.json())
                 .catch(() => [])
                 .then(afiliados => {
-
-                    const filasMeses = carrito.map(item => `
-                    <tr>
-                        <td style="text-align:left; padding:4px 8px;">${item.label}</td>
-                        <td style="text-align:right; padding:4px 8px;">${formatMoney(item.monto)}</td>
-                    </tr>`).join('');
 
                     const filasAfiliados = afiliados.length ?
                         afiliados.map(af => `
@@ -666,22 +769,7 @@ $meses = [
                             </thead>
                             <tbody>${filasAfiliados}</tbody>
                         </table>
-                        <p style="font-weight:600; margin-bottom:4px;">Meses a cobrar:</p>
-                        <table style="width:100%; border-collapse:collapse;">
-                            <thead>
-                                <tr style="background:#f0f0f0; color:#333;">
-                                    <th style="text-align:left; padding:5px 8px;">Mes</th>
-                                    <th style="text-align:right; padding:5px 8px;">Monto</th>
-                                </tr>
-                            </thead>
-                            <tbody>${filasMeses}</tbody>
-                            <tfoot>
-                                <tr style="border-top:2px solid #333; font-weight:bold;">
-                                    <td style="padding:6px 8px;">TOTAL</td>
-                                    <td style="text-align:right; padding:6px 8px;">${formatMoney(totalCarrito)}</td>
-                                </tr>
-                            </tfoot>
-                        </table>
+                        ${tablaMeses.replace('Meses a registrar:', 'Meses a cobrar:')}
                     </div>
                 `;
 
@@ -701,53 +789,7 @@ $meses = [
                         if (result.isDismissed) return;
 
                         const debeImprimir = result.isConfirmed; // true = imprimir, false = no imprimir
-
-                        fetch('ajax/guardar_pagos_afiliado.php?paciente_id=<?= $id ?>', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content')
-                                },
-                                body: JSON.stringify({
-                                    items: carrito
-                                })
-                            })
-                            .then(r => {
-                                if (!r.ok) throw new Error('HTTP ' + r.status);
-                                return r.json();
-                            })
-                            .then(data => {
-                                if (data.ok) {
-                                    Swal.fire({
-                                        icon: 'success',
-                                        title: data.msg,
-                                        timer: 2000,
-                                        showConfirmButton: false
-                                    });
-
-                                    if (debeImprimir) {
-                                        imprimirTicketAfiliado(data.afiliados || [], carrito, totalCarrito)
-                                            .catch(err => console.error(err))
-                                            .finally(() => location.reload());
-                                    } else {
-                                        setTimeout(() => location.reload(), 1500);
-                                    }
-                                } else {
-                                    Swal.fire({
-                                        icon: 'error',
-                                        title: 'Error',
-                                        text: data.msg
-                                    });
-                                }
-                            })
-                            .catch(err => {
-                                console.error(err);
-                                Swal.fire({
-                                    icon: 'error',
-                                    title: 'Error de conexión',
-                                    text: 'No se pudo comunicar con el servidor. Verificá tu conexión e intentá de nuevo.'
-                                });
-                            });
+                        enviarPagos(false, debeImprimir, afiliados, totalCarrito);
                     }); // cierre .then(afiliados =>
                 }); // cierre fetch
         });

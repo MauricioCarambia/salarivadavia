@@ -21,7 +21,7 @@ $sql = "SELECT
             p.fecha_correspondiente
         FROM pagos_afiliados p
         LEFT JOIN pacientes pa ON pa.Id = p.paciente_id
-        WHERE p.afiliado_id = :id
+        WHERE p.paciente_id = :id
         ORDER BY p.fecha_correspondiente ASC";
 
 $stmt = $pdo->prepare($sql);

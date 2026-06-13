@@ -93,7 +93,7 @@ $total = array_sum(array_column($turnos, 'pago'));
           <div class="col-md-4">
             <div class="small-box bg-info text-white">
               <div class="inner">
-                <h4><?= htmlspecialchars($prof['celular']) ?></h4>
+                <h4><?= htmlspecialchars($prof['celular'] ?? '') ?></h4>
                 <p>Celular</p>
               </div>
             </div>
@@ -101,7 +101,7 @@ $total = array_sum(array_column($turnos, 'pago'));
           <div class="col-md-4">
             <div class="small-box bg-secondary text-white">
               <div class="inner">
-                <h4><?= htmlspecialchars($prof['fijo']) ?></h4>
+                <h4><?= htmlspecialchars($prof['fijo'] ?? '') ?></h4>
                 <p>Teléfono</p>
               </div>
             </div>

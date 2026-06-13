@@ -465,14 +465,56 @@ function obtenerCajaSesionActiva($pdo, $usuarioId)
                     <button type="button" class="close" data-dismiss="modal">&times;</button>
                 </div>
                 <div class="modal-body">
+
+                    <div class="card mb-2 border-success">
+                        <div class="card-header bg-light text-success font-weight-bold py-2">
+                            <i class="fas fa-money-bill-wave"></i> Efectivo
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between">
+                                <span>Monto inicial</span>
+                                <strong id="dMontoInicial">$0.00</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Ingresos en efectivo</span>
+                                <strong class="text-success" id="dIngEf">+ $0.00</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Egresos / pagos en efectivo</span>
+                                <strong class="text-danger" id="dEgrEf">- $0.00</strong>
+                            </div>
+                            <hr class="my-1">
+                            <div class="d-flex justify-content-between">
+                                <span><strong>Debería quedar en efectivo</strong></span>
+                                <strong class="text-success" id="dEsperadoEf">$0.00</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-3 border-info">
+                        <div class="card-header bg-light text-info font-weight-bold py-2">
+                            <i class="fas fa-exchange-alt"></i> Transferencias (no se cuentan en caja)
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between">
+                                <span><strong>Debería quedar por transferencia</strong></span>
+                                <strong class="text-info" id="dEsperadoTransf">$0.00</strong>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="form-group">
-                        <label>Efectivo en caja</label>
+                        <label><strong>Efectivo real contado en caja</strong></label>
                         <div class="input-group">
                             <div class="input-group-prepend"><span class="input-group-text">$</span></div>
                             <input type="number" class="form-control" id="montoReal" step="0.01"
                                 placeholder="Ingrese monto en caja" required>
                         </div>
+                        <small class="form-text text-muted">
+                            Ingresá solo el efectivo físico contado. No incluyas montos por transferencia.
+                        </small>
                     </div>
+
                     <div id="diferencia" class="font-weight-bold mt-2"></div>
                 </div>
                 <div class="modal-footer">
@@ -495,6 +537,8 @@ function obtenerCajaSesionActiva($pdo, $usuarioId)
         let ingEfGlobal = 0;
         let egrEfGlobal = 0;
         let egrProfGlobal = 0;
+        let cajaEsperadaEfectivoGlobal = 0;
+        let cajaEsperadaTransferenciaGlobal = 0;
 
         // ==========================
         // CERRAR CAJA (CLICK)
@@ -524,7 +568,10 @@ function obtenerCajaSesionActiva($pdo, $usuarioId)
 
                         ingEfGlobal = parseFloat(data.ingresos_efectivo ?? 0);
                         egrEfGlobal = parseFloat(data.egresos_efectivo ?? 0);
-                        egrProfGlobal = parseFloat(data.egresos_profesionales_efectivo ?? 0);
+                        egrProfGlobal = parseFloat(data.egresos_profesionales ?? 0);
+
+                        cajaEsperadaEfectivoGlobal = parseFloat(data.caja_esperada_efectivo ?? 0);
+                        cajaEsperadaTransferenciaGlobal = parseFloat(data.caja_esperada_transferencia ?? 0);
 
                         renderDetalle(null);
                     } else {
@@ -541,41 +588,32 @@ function obtenerCajaSesionActiva($pdo, $usuarioId)
         // ==========================
         function renderDetalle(montoReal) {
 
+            $("#dMontoInicial").text(`$${montoInicialGlobal.toFixed(2)}`);
+            $("#dIngEf").text(`+ $${ingEfGlobal.toFixed(2)}`);
+            $("#dEgrEf").text(`- $${(egrEfGlobal + egrProfGlobal).toFixed(2)}`);
+            $("#dEsperadoEf").text(`$${cajaEsperadaEfectivoGlobal.toFixed(2)}`);
+            $("#dEsperadoTransf").text(`$${cajaEsperadaTransferenciaGlobal.toFixed(2)}`);
+
             let diff = 0;
             let color = "secondary";
 
             if (montoReal !== null && !isNaN(montoReal)) {
-                diff = montoReal - cajaEsperadaGlobal;
+                diff = montoReal - cajaEsperadaEfectivoGlobal;
 
                 if (diff > 0) color = "success";
                 if (diff < 0) color = "danger";
             }
 
-            $("#diferencia").html(`
-        <div class="mb-2">
-            <strong>Caja</strong><br>
-            Monto Inicial: <strong>$${montoInicialGlobal.toFixed(2)}</strong><br>
-           
-            Total Sistema: 
-            <strong class="text-success">
-                $${cajaEsperadaGlobal.toFixed(2)}
-            </strong>
-        </div>
-
-        
-        
-
-        ${
-            montoReal !== null
-            ? `<div>
-                    <strong>Diferencia:</strong> 
-                    <span class="badge badge-${color}">
-                        $${diff.toFixed(2)}
-                    </span>
-               </div>`
-            : ""
-        }
-    `);
+            $("#diferencia").html(
+                montoReal !== null
+                    ? `<div>
+                            <strong>Diferencia (vs. efectivo esperado):</strong>
+                            <span class="badge badge-${color}">
+                                $${diff.toFixed(2)}
+                            </span>
+                       </div>`
+                    : ""
+            );
         }
 
         // ==========================

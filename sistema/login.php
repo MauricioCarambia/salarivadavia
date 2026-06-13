@@ -9,15 +9,34 @@ session_start();
 require_once __DIR__ . '/inc/db.php';
 require_once __DIR__ . '/inc/rate_limit.php';
 require_once __DIR__ . '/inc/csrf.php';
+require_once __DIR__ . '/inc/access_control.php';
+require_once __DIR__ . '/inc/auditoria.php';
 
 $rand = mt_rand();
 $mensaje = '';
+$ip = obtenerIpCliente();
+$accesoBloqueado = false;
+
+function registrarAccesoBloqueado(PDO $pdo, int $userId, string $nombre, string $ip): void
+{
+    $sessionPrevia = $_SESSION;
+
+    $_SESSION['user_id'] = $userId;
+    $_SESSION['nombre_completo'] = $nombre;
+
+    registrarAuditoria(
+        $pdo,
+        'acceso_bloqueado',
+        "Acceso denegado por IP no autorizada ({$ip})"
+    );
+
+    $_SESSION = $sessionPrevia;
+}
 
 if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
 
   $usuario = trim($_POST['usuario']);
   $contrasenia = trim($_POST['contrasenia']);
-  $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 
   if (!csrf_validate()) {
 
@@ -57,6 +76,20 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
         $mensaje = '<div class="alert alert-danger">Usuario inactivo</div>';
       } else {
 
+        $esAdmin = strtolower(trim($empleado['rol_nombre'])) === 'administrador';
+
+        $ipPermitidaParaEsteUsuario = !restriccionIpActiva()
+          || ipPermitida($ip)
+          || $esAdmin
+          || tieneAutorizacionTemporal($pdo, 'empleado', (int)$empleado['Id']);
+
+        if (!$ipPermitidaParaEsteUsuario) {
+
+          registrarAccesoBloqueado($pdo, (int)$empleado['Id'], $empleado['nombre'], $ip);
+          $mensaje = '<div class="alert alert-danger">Acceso restringido. Este sistema solo puede usarse desde la red de la clínica.</div>';
+
+        } else {
+
         limpiarIntentosLogin($pdo, $usuario, $ip);
         session_regenerate_id(true);
         $_SESSION = [];
@@ -69,9 +102,7 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
         $_SESSION["rol_id"] = $empleado['rol_id'];
         $_SESSION["rol_nombre"] = $empleado['rol_nombre'];
 
-        $_SESSION['es_admin'] = (
-          strtolower(trim($empleado['rol_nombre'])) === 'administrador'
-        );
+        $_SESSION['es_admin'] = $esAdmin;
 
         if ($_SESSION['es_admin']) {
           $_SESSION['accesos'] = ['*'];
@@ -91,8 +122,11 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
           );
         }
 
+        registrarAuditoria($pdo, 'acceso_concedido', "Inicio de sesión de empleado desde {$ip}");
+
         header("Location: index.php");
         exit;
+        }
       }
 
     } else {
@@ -125,6 +159,19 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
 
       if ($passwordOk){
 
+        $nombreCompleto = $profesional['nombre'] . ' ' . $profesional['apellido'];
+
+        $ipPermitidaParaEsteUsuario = !restriccionIpActiva()
+          || ipPermitida($ip)
+          || tieneAutorizacionTemporal($pdo, 'profesional', (int)$profesional['Id']);
+
+        if (!$ipPermitidaParaEsteUsuario) {
+
+          registrarAccesoBloqueado($pdo, (int)$profesional['Id'], $nombreCompleto, $ip);
+          $mensaje = '<div class="alert alert-danger">Acceso restringido. Este sistema solo puede usarse desde la red de la clínica.</div>';
+
+        } else {
+
         limpiarIntentosLogin($pdo, $usuario, $ip);
         session_regenerate_id(true);
         $_SESSION = [];
@@ -132,7 +179,7 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
         $_SESSION["login"] = 'si';
         $_SESSION["tipo"] = 'profesional';
         $_SESSION["user_id"] = $profesional['Id'];
-        $_SESSION["nombre_completo"] = $profesional['nombre'] . ' ' . $profesional['apellido'];
+        $_SESSION["nombre_completo"] = $nombreCompleto;
 
         $_SESSION["accesos"] = [
           'historia_pacientes',
@@ -142,8 +189,11 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
 
         $_SESSION["es_admin"] = false;
 
+        registrarAuditoria($pdo, 'acceso_concedido', "Inicio de sesión de profesional desde {$ip}");
+
         header("Location: index.php");
         exit;
+        }
 
       } else {
         registrarIntentoFallido($pdo, $usuario, $ip);
@@ -191,6 +241,8 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
 
         <?= $mensaje ?>
 
+        <?php if (!$accesoBloqueado): ?>
+
         <form method="post">
           <?= csrf_field() ?>
 
@@ -227,6 +279,7 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
         <a href="empleado_new.php" class="btn btn-primary btn-block">
           <i class="fas fa-user-plus"></i> Crear cuenta
         </a>
+        <?php endif; ?>
 <a href="../index.php" class="btn btn-secondary btn-block mt-2">
   <i class="fas fa-home"></i> Ir a noticias
 </a>

@@ -1,6 +1,15 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
 
+if (empty($_SESSION['login'])) {
+    header("Location: login.php");
+    exit;
+}
+
+if (empty($_SESSION['es_admin']) && !in_array('estudios', $_SESSION['accesos'] ?? [])) {
+    die('<div class="alert alert-danger">No tenés permisos para acceder a esta sección</div>');
+}
+
 $rand = rand(1, 9999);
 
 // Traer todos los registros
@@ -51,13 +60,23 @@ $estudios = $pdo->query("SELECT DISTINCT estudio FROM cardiologia_sur ORDER BY e
                         <input type="date" id="filtro_fecha" class="form-control">
                     </div>
 
+                    <div class="col-md-3">
+                        <label>Filtrar por estudio</label>
+                        <select id="filtro_estudio" class="form-control">
+                            <option value="">Todos</option>
+                            <?php foreach ($estudios as $e): ?>
+                                <option value="<?= htmlspecialchars($e) ?>"><?= htmlspecialchars($e) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
                     <div class="col-md-3 d-flex align-items-end">
                         <div>
                             <input type="checkbox" id="filtro_no_avisados">
                             <label for="filtro_no_avisados" class="mb-0">No avisados</label>
                         </div>
                     </div>
-                    <div class="col-md-6 d-flex justify-content-end gap-2">
+                    <div class="col-md-3 d-flex justify-content-end gap-2">
 
                         <button class="btn btn-primary btn-sm rounded mr-2" id="btn_imprimir">
                             <i class="fa fa-print"></i> Imprimir seleccionados
@@ -118,13 +137,13 @@ $estudios = $pdo->query("SELECT DISTINCT estudio FROM cardiologia_sur ORDER BY e
 
                                     <td><?= htmlspecialchars($r['celular']) ?></td>
                                     <td>
-                                        <?= htmlspecialchars($r['nacimiento']) ?>
+                                        <?= htmlspecialchars($r['nacimiento'] ?? '') ?>
                                     </td>
                                     <td>
-                                        <?= htmlspecialchars($r['domicilio']) ?>
+                                        <?= htmlspecialchars($r['domicilio'] ?? '') ?>
                                     </td>
                                     <td>
-                                        <?= htmlspecialchars($r['obra_social']) ?>
+                                        <?= htmlspecialchars($r['obra_social'] ?? '') ?>
                                     </td>
 
                                     <td><?= htmlspecialchars($r['estudio']) ?></td>
@@ -292,11 +311,13 @@ $estudios = $pdo->query("SELECT DISTINCT estudio FROM cardiologia_sur ORDER BY e
 
             let fechaFiltro = $('#filtro_fecha').val();
             let noAvisados = $('#filtro_no_avisados').is(':checked');
+            let estudioFiltro = $('#filtro_estudio').val();
 
             let row = table.row(dataIndex).node();
 
             let fecha = $(row).data('fecha'); // YYYY-MM-DD
             let aviso = $(row).data('aviso');
+            let estudio = $(row).data('estudio');
 
             // FILTRO FECHA
             if (fechaFiltro && fecha !== fechaFiltro) {
@@ -308,11 +329,16 @@ $estudios = $pdo->query("SELECT DISTINCT estudio FROM cardiologia_sur ORDER BY e
                 return false;
             }
 
+            // FILTRO ESTUDIO
+            if (estudioFiltro && estudio !== estudioFiltro) {
+                return false;
+            }
+
             return true;
         });
 
         // Ejecutar filtros
-        $('#filtro_fecha, #filtro_no_avisados').on('change', function() {
+        $('#filtro_fecha, #filtro_no_avisados, #filtro_estudio').on('change', function() {
             table.draw();
         });
 

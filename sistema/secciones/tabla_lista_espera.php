@@ -1,5 +1,17 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
+
+if (empty($_SESSION['login'])) {
+    header("Location: login.php");
+    exit;
+}
+
+if (empty($_SESSION['es_admin']) && !in_array('lista_espera', $_SESSION['accesos'] ?? [])) {
+    die('<div class="alert alert-danger">No tenés permisos para acceder a esta sección</div>');
+}
+
+$rand = rand(1, 9999);
+
 function obtenerListaEspera(PDO $pdo, string $especialidad): array
 {
     $stmt = $pdo->prepare("
@@ -46,7 +58,7 @@ $registros = obtenerListaEspera($pdo, $especialidad);
         <h3 class="card-title"><?= $titulo ?>
 
 
-            <a href="./?seccion=lista_espera_new" class="btn btn-success btn-sm">
+            <a href="./?seccion=lista_espera_new&especialidad=<?= urlencode($especialidad) ?>&nc=<?= $rand ?>" class="btn btn-success btn-sm">
                 <i class="fa fa-plus"></i> Nuevo
             </a>
         </h3>

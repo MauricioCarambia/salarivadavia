@@ -420,7 +420,8 @@ $dias_anulados = $stmt->fetchAll(PDO::FETCH_COLUMN, 0); // obtenemos solo las fe
                     fetch('secciones/turno_mover.php', {
                         method: 'POST',
                         headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded'
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content')
                         },
                         body: `id=${info.event.id}&fecha=${inicio}&sobreturno=${nuevoSobreTurno}`
                     }).then(r => r.json()).then(resp => {
@@ -483,7 +484,8 @@ $dias_anulados = $stmt->fetchAll(PDO::FETCH_COLUMN, 0); // obtenemos solo las fe
                     fetch('secciones/turno_eliminar.php', {
                         method: 'POST',
                         headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded'
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content')
                         },
                         body: `id=${eventoArrastrado.id}`
                     }).then(r => r.json()).then(resp => {

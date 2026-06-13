@@ -145,12 +145,20 @@ ORDER BY pr.apellido, pr.nombre, t.fecha ASC";
 
                     <!-- PACIENTE -->
                     <td>
-                        <div class="d-flex justify-content-between">
+                        <div class="d-flex justify-content-between align-items-center">
                             <?= htmlspecialchars($r['pacienteApellido'] . ' ' . $r['pacienteNombre']) ?>
 
-                            <?php if ($r['sobreturno']): ?>
-                                <span class="badge badge-warning">Sobreturno</span>
-                            <?php endif; ?>
+                            <span>
+                                <?php if ((int)$r['atendido'] === 1): ?>
+                                    <span class="badge badge-primary">Atendido</span>
+                                <?php elseif ((int)$r['asistio'] === 1): ?>
+                                    <span class="badge badge-info">Asistió</span>
+                                <?php endif; ?>
+
+                                <?php if ($r['sobreturno']): ?>
+                                    <span class="badge badge-warning">Sobreturno</span>
+                                <?php endif; ?>
+                            </span>
                         </div>
                     </td>
 

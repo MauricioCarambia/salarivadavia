@@ -3,6 +3,7 @@ require_once __DIR__ . '/../inc/session.php';
 require_once __DIR__ . '/../inc/csrf.php';
 requerirCsrf();
 require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/auditoria.php';
 
 header('Content-Type: application/json');
 
@@ -10,6 +11,7 @@ try {
 
     $cobro_id = (int)($_POST['cobro_id'] ?? 0);
     $usuarioId = $_SESSION['user_id'] ?? 0;
+    $motivo = trim($_POST['motivo'] ?? '');
 
     if (!$usuarioId) {
         throw new Exception('Usuario no autenticado');
@@ -19,7 +21,11 @@ try {
         throw new Exception('ID inválido');
     }
 
-    
+    if ($motivo === '') {
+        throw new Exception('Debe indicar el motivo de la anulación');
+    }
+
+
 
     $pdo->beginTransaction();
 
@@ -73,7 +79,7 @@ try {
     ");
     $stmt->execute([$cobro_id]);
 
-   
+    registrarAuditoria($pdo, 'cobro_anulado', "Se anuló el comprobante N° {$cobro['numero_completo']} por \${$cobro['total']}", $motivo);
 
     $pdo->commit();
 

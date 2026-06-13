@@ -6,6 +6,7 @@ $tipoMsg = 'success';
 $redirigir = null;
 
 $pacienteId = (int) ($_GET['paciente_id'] ?? 0);
+$turnoId = (int) ($_GET['turno'] ?? 0);
 $profesionalId = $_SESSION['user_id'] ?? 0;
 
 // =========================
@@ -14,6 +15,7 @@ $profesionalId = $_SESSION['user_id'] ?? 0;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $pacienteId = (int) ($_POST['paciente_id'] ?? 0);
+    $turnoId = (int) ($_POST['turno_id'] ?? 0);
 
     $motivo = trim($_POST['motivo'] ?? '');
     $diagnostico = trim($_POST['diagnostico'] ?? '');
@@ -73,6 +75,12 @@ VALUES
             $mensaje = "Historia clínica guardada correctamente";
             $tipoMsg = "success";
             $redirigir = $pacienteId;
+
+            // Marcar el turno como atendido automáticamente al cargar la HC
+            if ($turnoId) {
+                $pdo->prepare("UPDATE turnos SET atendido = 1 WHERE Id = :turno_id")
+                    ->execute([':turno_id' => $turnoId]);
+            }
         } else {
             $mensaje = "Error al guardar";
             $tipoMsg = "error";
@@ -186,6 +194,7 @@ VALUES
 
                 </div>
                 <input type="hidden" name="paciente_id" value="<?= $pacienteId ?>">
+                <input type="hidden" name="turno_id" value="<?= $turnoId ?>">
 
                 <div>
                     <button type="submit" class="btn btn-success">

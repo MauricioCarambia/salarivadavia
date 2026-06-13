@@ -122,7 +122,7 @@ $pendientesCount = $totalTurnos - $atendidosCount;
                     <tr <?= $t['sobreturno'] ? 'style="border-left: 4px solid #ffc107;"' : '' ?>>
 
                         <td>
-                            <a href="./?seccion=historia_clinica&id=<?= $t['paciente_id'] ?>&nc=<?= $rand ?>"
+                            <a href="./?seccion=historia_clinica&id=<?= $t['paciente_id'] ?>&turno=<?= $t['Id'] ?>&nc=<?= $rand ?>"
                                 class="btn btn-info btn-sm rounded-circle">
                                 <i class="fas fa-search"></i>
                             </a>
@@ -223,7 +223,10 @@ $pendientesCount = $totalTurnos - $atendidosCount;
 
             fetch('./ajax/actualizar_turno_profesional.php', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': $('meta[name="csrf-token"]').attr('content')
+                },
                 body: JSON.stringify({
                     turno_id: turnoId,
                     atendido: atendido

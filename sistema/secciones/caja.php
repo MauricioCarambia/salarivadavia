@@ -54,14 +54,18 @@ $data = $cajaService->getResumen($filtros);
 
 
 // 💵 CAJA
-$ingEfectivoReal = $data['caja']['ingresos'];
-$egrEfectivo     = $data['caja']['egresos'];
-$balanceFisico   = $data['caja']['balance'];
+$ingEfectivoReal     = $data['caja']['ingresos'];
+$egrEfectivo         = $data['caja']['egresos'];
+$egrProfesional      = $data['caja']['egresos_profesional'];
+$balanceFisico       = $data['caja']['balance'];
+$subtotalSinManuales = $ingEfectivoReal - $egrProfesional;
 
 // 🏦 BANCO
-$ingTransferenciaReal = $data['banco']['ingresos'];
-$egrTransferencia     = $data['banco']['egresos'];
-$balanceBanco         = $data['banco']['balance'];
+$ingTransferenciaReal     = $data['banco']['ingresos'];
+$egrTransferencia         = $data['banco']['egresos'];
+$egrTransferenciaProf     = $data['banco']['egresos_profesional'];
+$balanceBanco             = $data['banco']['balance'];
+$subtotalTransfSinManuales = $ingTransferenciaReal - $egrTransferenciaProf;
 
 // 📊 DESTINOS
 $destinosActualizados = $data['destinos'];
@@ -181,6 +185,12 @@ function formatearMedioPago(
                     Egresos Efec: $<?= number_format($egrEfectivo, 2, ',', '.') ?>
                 </small>
             </div>
+
+            <hr class="w-100 my-2">
+
+            <small class="text-warning">
+                Subtotal (Total ingresos - egresos profesionales): $<?= number_format($subtotalSinManuales, 2, ',', '.') ?>
+            </small>
         </div>
     </div>
 
@@ -204,6 +214,12 @@ function formatearMedioPago(
                     Salió: $<?= number_format($egrTransferencia, 2, ',', '.') ?>
                 </small>
             </div>
+
+            <hr class="w-100 my-2">
+
+            <small class="text-light">
+                Subtotal (transferencia sala - egresos profesionales): $<?= number_format($subtotalTransfSinManuales, 2, ',', '.') ?>
+            </small>
         </div>
     </div>
 

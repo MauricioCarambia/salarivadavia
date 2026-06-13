@@ -18,7 +18,7 @@ try {
        🔍 OBTENER COBRO
     ============================== */
     $stmt = $pdo->prepare("
-        SELECT id, estado
+        SELECT id, estado, total, numero_completo, concepto
         FROM cobros
         WHERE id = ?
         LIMIT 1

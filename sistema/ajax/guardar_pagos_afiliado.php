@@ -3,6 +3,7 @@ require_once __DIR__ . '/../inc/session.php';
 require_once __DIR__ . '/../inc/csrf.php';
 requerirCsrf();
 require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/auditoria.php';
 
 header('Content-Type: application/json');
 
@@ -21,6 +22,7 @@ if (!$paciente_id) {
 
 $input = json_decode(file_get_contents('php://input'), true);
 $items = $input['items'] ?? [];
+$sinCobro = !empty($input['sin_cobro']);
 
 if (empty($items)) {
     echo json_encode(['ok' => false, 'msg' => 'No hay ítems para guardar']);
@@ -29,30 +31,36 @@ if (empty($items)) {
 
 /* =========================
    CAJA ABIERTA
+   (no aplica si la cuota ya fue abonada por otro medio)
 ========================= */
-$stmtCaja = $pdo->prepare("
-    SELECT cs.id AS caja_sesion_id, cs.caja_id
-    FROM caja_sesion cs
-    INNER JOIN cajas c ON c.id = cs.caja_id
-    WHERE cs.estado = 'abierta'
-      AND cs.usuario_id = ?
-    LIMIT 1
-");
-$stmtCaja->execute([$usuario_id]);
-$caja = $stmtCaja->fetch(PDO::FETCH_ASSOC);
+$caja_id        = null;
+$caja_sesion_id = null;
 
-if (!$caja) {
-    echo json_encode(['ok' => false, 'msg' => 'No hay una caja abierta. Abrí una caja antes de registrar pagos.']);
-    exit;
+if (!$sinCobro) {
+    $stmtCaja = $pdo->prepare("
+        SELECT cs.id AS caja_sesion_id, cs.caja_id
+        FROM caja_sesion cs
+        INNER JOIN cajas c ON c.id = cs.caja_id
+        WHERE cs.estado = 'abierta'
+          AND cs.usuario_id = ?
+        LIMIT 1
+    ");
+    $stmtCaja->execute([$usuario_id]);
+    $caja = $stmtCaja->fetch(PDO::FETCH_ASSOC);
+
+    if (!$caja) {
+        echo json_encode(['ok' => false, 'msg' => 'No hay una caja abierta. Abrí una caja antes de registrar pagos.']);
+        exit;
+    }
+
+    $caja_id        = (int)$caja['caja_id'];
+    $caja_sesion_id = (int)$caja['caja_sesion_id'];
 }
-
-$caja_id        = (int)$caja['caja_id'];
-$caja_sesion_id = (int)$caja['caja_sesion_id'];
 
 /* =========================
    NRO AFILIADO DEL PACIENTE
 ========================= */
-$stmtNro = $pdo->prepare("SELECT nro_afiliado FROM pacientes WHERE Id = ?");
+$stmtNro = $pdo->prepare("SELECT nro_afiliado, apellido, nombre FROM pacientes WHERE Id = ?");
 $stmtNro->execute([$paciente_id]);
 $rowNro   = $stmtNro->fetch(PDO::FETCH_ASSOC);
 $nro_base = trim(explode('/', $rowNro['nro_afiliado'] ?? '?')[0]);
@@ -146,6 +154,12 @@ try {
             ':fecha'       => $fecha,
         ]);
 
+        // Si ya fue abonado por otro medio, no se genera cobro/reparto en caja
+        if ($sinCobro) {
+            $es_primer_pago = false;
+            continue;
+        }
+
         // 2. Número con lock
         $stmtNum = $pdo->prepare("SELECT MAX(numero) FROM cobros WHERE punto_venta = ? FOR UPDATE");
         $stmtNum->execute([$caja_id]);
@@ -176,7 +190,7 @@ try {
         // 5. reparto
         //    - siempre: destino 6 (cuota / caja)
         //    - solo primer mes nuevo: destino 11 (cuota inicial / fondo)
-        
+
 
         if ($es_primer_pago) {
             $stmtReparto->execute([$cobro_id, DESTINO_CUOTA_INICIAL, $monto]);

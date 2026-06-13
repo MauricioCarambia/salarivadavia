@@ -338,11 +338,13 @@ $provincias = [
                     confirmButtonText: 'Aceptar',
                     allowOutsideClick: false
                 }).then((result) => {
-                    if (window.parent && window.parent.$) {
+                    if (window.parent && window.parent.$ && window.parent.$('#modalTurno').length) {
                         window.parent.$('#modalTurno').modal('hide');
-                        window.parent.location.reload();
+                        if (window.parent.calendar) {
+                            window.parent.calendar.refetchEvents();
+                        }
                     } else {
-                        window.location.href = './?seccion=turnos&nc=<?= $rand ?>';
+                        window.location.href = './?seccion=pacientes&nc=<?= $rand ?>';
                     }
                 });
             <?php elseif ($swalError): ?>
