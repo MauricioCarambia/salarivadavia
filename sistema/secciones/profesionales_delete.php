@@ -1,9 +1,11 @@
 <?php
 require_once __DIR__ . '/../inc/db.php'; // $pdo = instancia PDO
+require_once __DIR__ . '/../inc/csrf.php';
 $rand = rand(1000,9999);
 
 $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 $confirmar = $_GET['confirmar'] ?? '';
+$tokenValido = hash_equals($_SESSION['csrf_token'] ?? '', $_GET['csrf_token'] ?? '');
 $swalGuardado = false;
 $swalError = false;
 
@@ -17,7 +19,7 @@ if (!$profesional && $id > 0) {
 }
 
 // Eliminar profesional si confirma
-if ($id > 0 && $confirmar === 'si' && $profesional) {
+if ($id > 0 && $confirmar === 'si' && $tokenValido && $profesional) {
     try {
         $pdo->beginTransaction();
 
@@ -61,7 +63,7 @@ if ($id > 0 && $confirmar === 'si' && $profesional) {
                     Esta acción no puede deshacerse.
                 </div>
                 <div class="text-right">
-                    <a href="?seccion=profesionales_delete&id=<?= $id ?>&confirmar=si&nc=<?= $rand ?>" class="btn btn-danger">Eliminar</a>
+                    <a href="?seccion=profesionales_delete&id=<?= $id ?>&confirmar=si&csrf_token=<?= urlencode(csrf_token()) ?>&nc=<?= $rand ?>" class="btn btn-danger">Eliminar</a>
                     <a href="?seccion=profesionales&nc=<?= $rand ?>" class="btn btn-secondary">Cancelar</a>
                 </div>
             <?php endif; ?>
