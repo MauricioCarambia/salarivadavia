@@ -1,0 +1,3 @@
+# Estos archivos sólo deben incluirse desde index.php (ya autenticado).
+# Bloquear acceso HTTP directo para evitar bypass de sesión/CSRF.
+Require all denied

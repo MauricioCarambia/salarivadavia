@@ -399,6 +399,19 @@ $mensaje = urlencode($mensaje);
                     Total: $<span id="total">0.00</span>
                 </h4>
 
+                <!-- CALCULADOR DE VUELTO (solo efectivo) -->
+                <div id="boxVuelto" style="display:none;" class="mt-3">
+                    <div class="input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text"><i class="fas fa-hand-holding-usd"></i> Entrega</span>
+                        </div>
+                        <input type="number" id="montoEntrega" class="form-control" placeholder="$ que entrega el paciente" min="0" step="0.01">
+                        <div class="input-group-append">
+                            <span class="input-group-text font-weight-bold" id="labelVuelto">Vuelto: $0.00</span>
+                        </div>
+                    </div>
+                </div>
+
                 <button type="button" class="btn btn-primary btn-block mt-3" id="btnPreview">
                     <i class="fas fa-eye"></i> Ver resumen
                 </button>
@@ -499,6 +512,10 @@ $mensaje = urlencode($mensaje);
 
         }, 'json');
         cargarHistorial();
+
+        // Inicializar label del switch según estado real del checkbox
+        $('#asistioSwitch').trigger('change');
+
         if ($('#medio_pago').val() === 'transferencia') {
             $('#boxDestino').show();
         }
@@ -739,7 +756,31 @@ $mensaje = urlencode($mensaje);
         });
 
         $('#total').text(total.toFixed(2));
+        calcularVuelto();
     }
+
+    function calcularVuelto() {
+        const total    = parseFloat($('#total').text()) || 0;
+        const entrega  = parseFloat($('#montoEntrega').val()) || 0;
+        const vuelto   = entrega - total;
+        const label    = document.getElementById('labelVuelto');
+        if (vuelto < 0) {
+            label.textContent = 'Falta: $' + Math.abs(vuelto).toLocaleString('es-AR', {minimumFractionDigits:2});
+            label.style.color = '#dc3545';
+        } else {
+            label.textContent = 'Vuelto: $' + vuelto.toLocaleString('es-AR', {minimumFractionDigits:2});
+            label.style.color = vuelto > 0 ? '#28a745' : '';
+        }
+    }
+
+    // Mostrar/ocultar calculador según medio de pago
+    $('#medio_pago').on('change', function() {
+        $('#boxVuelto').toggle($(this).val() === 'efectivo');
+        $('#montoEntrega').val('');
+        calcularVuelto();
+    }).trigger('change');
+
+    $('#montoEntrega').on('input', calcularVuelto);
 
     $('#btnPreview').click(function() {
 
@@ -831,7 +872,8 @@ $mensaje = urlencode($mensaje);
                     profesional: "<?= $profesional ?>",
                     numero_completo: res.numero || "",
                     total: parseFloat(res.total || 0),
-                    detalle: Array.isArray(res.detalle) ? res.detalle : []
+                    detalle: Array.isArray(res.detalle) ? res.detalle : [],
+                    medio_pago: res.medio_pago || medio_pago
                 };
 
                 cargarHistorial();
@@ -1252,11 +1294,7 @@ $mensaje = urlencode($mensaje);
 
     });
     $('#asistioSwitch').change(function() {
-        if ($(this).is(':checked')) {
-            $(this).next('label').text('Asistió');
-        } else {
-            $(this).next('label').text('No asistió');
-        }
+        $('label[for="asistioSwitch"]').text($(this).is(':checked') ? 'Asistió' : 'No asistió');
     });
     $('#transferencia_tipo').change(function() {
 

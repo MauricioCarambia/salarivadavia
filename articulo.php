@@ -1,207 +1,171 @@
 <?php
 require_once __DIR__ . "/sistema/inc/db.php";
 
-$id = $_GET['id'] ?? 0;
+$id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT) ?: 0;
 
-$stmt = $pdo->prepare("SELECT * FROM articulos WHERE id=?");
+$stmt = $pdo->prepare("SELECT * FROM articulos WHERE id = ?");
 $stmt->execute([$id]);
-
 $articulo = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$articulo) {
-    header("Location: noticias.php"); // Redirigir en lugar de morir feo
+    header("Location: noticias.php");
     exit;
 }
+
+// Artículos relacionados (excluye el actual)
+$stmtRel = $pdo->prepare("SELECT * FROM articulos WHERE id != ? ORDER BY created_at DESC LIMIT 3");
+$stmtRel->execute([$id]);
+$relacionados = $stmtRel->fetchAll(PDO::FETCH_ASSOC);
+
+$imgPlaceholder = "https://images.unsplash.com/photo-1504711432869-00d0211995a7?auto=format&fit=crop&q=80&w=900";
+$heroImg = (!empty($articulo['imagen'])) ? "sistema/uploads/" . htmlspecialchars($articulo['imagen']) : $imgPlaceholder;
+
+$meses = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+$fechaObj = strtotime($articulo['created_at']);
+$fechaLarga = date('d', $fechaObj) . ' de ' . $meses[(int)date('m', $fechaObj)] . ', ' . date('Y', $fechaObj);
+
+$paginaActual = 'noticias';
 ?>
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
     <meta charset="UTF-8">
-    <title><?= htmlspecialchars($articulo['titulo']) ?> | Sala Rivadavia</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><?= htmlspecialchars($articulo['titulo']) ?> | Sala Rivadavia</title>
+    <meta name="description" content="<?= htmlspecialchars(mb_substr(strip_tags($articulo['texto']), 0, 160)) ?>">
+    <!-- Open Graph -->
+    <meta property="og:title"       content="<?= htmlspecialchars($articulo['titulo']) ?>">
+    <meta property="og:description" content="<?= htmlspecialchars(mb_substr(strip_tags($articulo['texto']), 0, 160)) ?>">
+    <meta property="og:image"       content="<?= $heroImg ?>">
+    <meta property="og:type"        content="article">
     <link rel="icon" type="image/x-icon" href="sistema/images/sala.ico">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" href="sistema/styles/style.css">
- 
+    <link rel="stylesheet" href="public.css">
 </head>
+<body class="pub">
 
-<body class="bodynoticia">
+<!-- Barra de progreso de lectura -->
+<div class="pub-progress" id="readProgress"></div>
 
-    <nav class="nave">
-        <a href="index.php" class="btn-back">
-            <i class="fas fa-chevron-left"></i> Volver a noticias
-        </a>
+<?php include __DIR__ . '/_partials/nav.php'; ?>
 
-        <div class="nav-right">
-            <img src="sistema/images/logo_blanco.png" height="40" alt="Logo">
-            <div class="nav-socials">
-                <a href="https://www.facebook.com/la.sala.rivadavia" class="fb" target="_blank">
-                    <i class="fab fa-facebook-f"></i>
-                </a>
-                <a href="https://www.instagram.com/lasalarivadavia" class="ig" target="_blank">
-                    <i class="fab fa-instagram"></i>
-                </a>
-                <a href="https://wa.me/5491122436786?text=Hola!%20Quisiera%20consultar%20por%20" target="_blank" class="contact-link wa-link">
-                    <i class="fab fa-whatsapp"></i>
-                </a>
-            </div>
-             <div class="nav-links">
-                <a href="index.php">Inicio</a>
-                 <a href="noticias.php">Noticias</a>
-            </div>
+<!-- HERO del artículo -->
+<div class="pub-article-hero">
+    <img class="pub-article-hero__img" src="<?= $heroImg ?>" alt="<?= htmlspecialchars($articulo['titulo']) ?>">
+    <div class="pub-article-hero__overlay"></div>
+    <div class="pub-article-hero__content">
+        <span class="pub-article-hero__tag"><i class="fas fa-newspaper"></i> Noticia</span>
+        <h1 class="pub-article-hero__title"><?= htmlspecialchars($articulo['titulo']) ?></h1>
+        <div class="pub-article-hero__meta">
+            <span><i class="far fa-calendar-alt"></i> <?= $fechaLarga ?></span>
+            <span><i class="fas fa-building"></i> Sala Rivadavia</span>
         </div>
-    </nav>
+    </div>
+</div>
 
-    <article class="article-container">
-        <header class="article-header">
-            <span class="meta-info">Compromiso & Comunidad</span>
-            <h1><?= htmlspecialchars($articulo['titulo']) ?></h1>
+<!-- CUERPO DEL ARTÍCULO -->
+<div class="pub-article-wrap">
 
-            <div class="date-share">
-                <span>
-                    <i class="far fa-calendar-alt"></i>
-                    <?php
-                    $meses = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-                    $fechaObj = strtotime($articulo['created_at']);
-                    $dia = date('d', $fechaObj);
-                    $mes = $meses[(int)date('m', $fechaObj)];
-                    $anio = date('Y', $fechaObj);
-                    echo "$dia de $mes, $anio";
-                    ?>
-                </span>
+    <a href="noticias.php" class="pub-article-back">
+        <i class="fas fa-arrow-left"></i> Volver a noticias
+    </a>
 
-            </div>
-        </header>
+    <div class="pub-article-body" id="articleBody">
+        <?= nl2br(htmlspecialchars($articulo['texto'])) ?>
+    </div>
 
-        <?php if (!empty($articulo['imagen'])): ?>
+    <!-- COMPARTIR -->
+    <div class="pub-share">
+        <h4>¿Te gustó esta nota? Compartila</h4>
+        <div class="pub-share__btns">
+            <button class="pub-share__btn pub-share__btn--fb" onclick="shareF()">
+                <i class="fab fa-facebook-f"></i> Facebook
+            </button>
+            <button class="pub-share__btn pub-share__btn--wa" onclick="shareW()">
+                <i class="fab fa-whatsapp"></i> WhatsApp
+            </button>
+            <button class="pub-share__btn pub-share__btn--copy" onclick="copyLink()">
+                <i class="fas fa-link"></i> Copiar enlace
+            </button>
+        </div>
+        <p class="pub-share__toast" id="shareToast">¡Enlace copiado!</p>
+    </div>
 
-    <img 
-        class="featured-image"
-        src="/sistema/uploads/<?= urlencode($articulo['imagen']) ?>"
-        alt="<?= htmlspecialchars($articulo['titulo']) ?>"
-    >
+</div>
 
+<!-- ARTÍCULOS RELACIONADOS -->
+<?php if (!empty($relacionados)): ?>
+<section class="pub-related">
+    <div style="max-width:1200px;margin:0 auto;">
+        <h3>Otras noticias</h3>
+        <div class="pub-grid pub-grid--3">
+            <?php foreach ($relacionados as $r):
+                $rImg = (!empty($r['imagen'])) ? "sistema/uploads/" . htmlspecialchars($r['imagen']) : $imgPlaceholder;
+            ?>
+            <article class="pub-card pub-card--small reveal">
+                <div class="pub-card__img">
+                    <img src="<?= $rImg ?>" alt="<?= htmlspecialchars($r['titulo']) ?>" loading="lazy">
+                    <span class="pub-card__tag">Novedad</span>
+                </div>
+                <div class="pub-card__body">
+                    <div class="pub-card__date">
+                        <i class="far fa-calendar-alt"></i>
+                        <?= date('d M Y', strtotime($r['created_at'])) ?>
+                    </div>
+                    <h3 class="pub-card__title"><?= htmlspecialchars($r['titulo']) ?></h3>
+                    <p class="pub-card__excerpt"><?= htmlspecialchars(mb_substr(strip_tags($r['texto']), 0, 120)) ?>…</p>
+                    <div class="pub-card__footer">
+                        <a href="articulo.php?id=<?= $r['id'] ?>" class="pub-card__read">
+                            Leer más <i class="fas fa-arrow-right"></i>
+                        </a>
+                    </div>
+                </div>
+            </article>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</section>
 <?php endif; ?>
 
-        <div class="article-content">
-            <p><?= nl2br(htmlspecialchars($articulo['texto'])) ?></p>
-        </div>
+<?php include __DIR__ . '/_partials/footer.php'; ?>
 
-        <footer class="article-footer">
-            <p>¿Te gustó esta noticia? Compártela:</p>
-            <div class="share-buttons">
-                <!-- Facebook -->
-                <i class="fab fa-facebook" onclick="window.open('https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(window.location.href))"></i>
-
-                <!-- Twitter / X -->
-                <i class="fab fa-twitter"></i>
-
-                <!-- WhatsApp -->
-                <i class="fab fa-whatsapp" onclick="window.open('https://api.whatsapp.com/send?text='+encodeURIComponent(window.location.href))"></i>
-
-                <!-- Instagram (Acción: Copiar Enlace) -->
-                <i class="fab fa-instagram" id="share-instagram" title="Copiar enlace para Instagram"></i>
-
-                <!-- Copiar al portapapeles -->
-                <i class="fas fa-link" id="copy-link" title="Copiar enlace"></i>
-            </div>
-            <div id="copy-message" style="display:none; font-size: 0.8rem; color: var(--accent); margin-top: 10px;">
-                ¡Enlace copiado al portapapeles!
-            </div>
-        </footer>
-    </article>
-
-    <footer class="main-footer">
-        <div class="footer-grid">
-            <!-- Columna 1: Sobre nosotros -->
-            <div class="footer-col footer-about">
-                <img src="sistema/images/logo_blanco.png" alt="Logo Sala Rivadavia" class="logo-img">
-                <p>Promoviendo la cultura y el encuentro vecinal desde nuestra Sociedad de Fomento. Un espacio de todos.</p>
-
-                <div class="footer-contact-info">
-                    <h4>Contacto</h4>
-                    <p><i class="fas fa-map-marker-alt"></i> <strong>Dirección:</strong> Av. Eva Peron 695, Temperley</p>
-
-                    <!-- Enlace para llamar directamente -->
-                    <p>
-                        <a href="tel:+541139894325" class="contact-link">
-                            <i class="fas fa-phone-alt"></i> <strong>Tel:</strong> 3989-4325
-                        </a>
-                    </p>
-                    <p>
-                        <a href="tel:+541139912183" class="contact-link">
-                            <i class="fas fa-phone-alt"></i> <strong>Tel:</strong> 3991-2183
-                        </a>
-                    </p>
-
-                    <!-- Enlace directo a WhatsApp -->
-                    <p>
-                        <a href="https://wa.me/5491122436786?text=Hola!%20Quisiera%20consultar%20por%20" target="_blank" class="contact-link wa-link">
-                            <i class="fab fa-whatsapp"></i> <strong>WhatsApp:</strong> +54 9 11 2243-6786
-                        </a>
-                    </p>
-                </div>
-            </div>
-
-            <!-- Columna 2: Navegación -->
-            <div class="footer-col">
-                <h4>Navegación</h4>
-                <ul class="footer-links">
-                    <li><a href="index.php">Inicio</a></li>
-                    <li><a href="noticias.php">Noticias</a></li>
-                </ul>
-                <div class="footer-social-big" style="margin-top: 0; margin-bottom: 15px;">
-                    <a href="https://www.facebook.com/la.sala.rivadavia" class="fb" title="Facebook" target="_blank">
-                        <i class="fab fa-facebook-f"></i>
-                    </a>
-                    <a href="https://www.instagram.com/lasalarivadavia" class="ig" title="Instagram" target="_blank">
-                        <i class="fab fa-instagram"></i>
-                    </a>
-                    <a href="https://wa.me/5491122436786?text=Hola!%20Quisiera%20consultar%20por%20" target="_blank" class="contact-link wa-link">
-                        <i class="fab fa-whatsapp"></i>
-                    </a>
-                </div>
-            </div>
-
-            <!-- Columna 3: Redes y Mapa -->
-            <div class="footer-col">
-                <h4>Ubicación</h4>
-
-
-                <div class="footer-map">
-                    <!-- REEMPLAZA EL SRC CON TU URL DE GOOGLE MAPS -->
-                    <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3277.2179926191807!2d-58.390543387912835!3d-34.77528706646768!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x95bcd2d93ade4b85%3A0xe66d5172dcf019b1!2sSala%20de%20Fomento%20Bernardino%20Rivadavia%20atenci%C3%B3n%20primaria!5e0!3m2!1ses!2sar!4v1777510807241!5m2!1ses!2sar" width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
-                </div>
-            </div>
-        </div>
-
-        <div class="footer-bottom">
-            <p>&copy; <?= date('Y') ?> Sala Rivadavia - Sociedad de Fomento. <br>
-                <small>Temperley, Buenos Aires, Argentina.</small>
-            </p>
-        </div>
-    </footer>
-
-</body>
-
-</html>
 <script>
-document.getElementById('share-instagram').addEventListener('click', copyToClipboard);
-document.getElementById('copy-link').addEventListener('click', copyToClipboard);
+// Barra de progreso de lectura
+const progress = document.getElementById('readProgress');
+const body     = document.getElementById('articleBody');
+window.addEventListener('scroll', () => {
+    const top  = body.getBoundingClientRect().top + window.scrollY;
+    const h    = body.offsetHeight;
+    const pct  = Math.min(100, Math.max(0, (window.scrollY - top + window.innerHeight * .5) / h * 100));
+    progress.style.width = pct + '%';
+}, { passive: true });
 
-function copyToClipboard() {
-    const el = document.createElement('textarea');
-    el.value = window.location.href;
-    document.body.appendChild(el);
-    el.select();
-    document.execCommand('copy');
-    document.body.removeChild(el);
-    
-    // Mostrar mensaje de éxito
-    const msg = document.getElementById('copy-message');
-    msg.style.display = 'block';
-    setTimeout(() => { msg.style.display = 'none'; }, 2000);
+// Nav
+const nav = document.getElementById('pubNav');
+window.addEventListener('scroll', () => nav.classList.toggle('scrolled', window.scrollY > 20), { passive: true });
+document.getElementById('navToggle').addEventListener('click', () => document.getElementById('navLinks').classList.toggle('open'));
+
+// Scroll reveal
+const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); } });
+}, { threshold: 0.1 });
+document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+
+// Compartir
+function shareF() {
+    window.open('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(location.href));
+}
+function shareW() {
+    window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(document.title + ' ' + location.href));
+}
+function copyLink() {
+    navigator.clipboard.writeText(location.href).then(() => {
+        const t = document.getElementById('shareToast');
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 2500);
+    });
 }
 </script>
+</body>
+</html>

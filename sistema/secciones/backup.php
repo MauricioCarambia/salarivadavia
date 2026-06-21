@@ -1,23 +1,44 @@
 <?php
-// Configuración de la base de datos
-$dbhost = "localhost";
-$dbusuario = "root";
-$dbpassword = "";
-$db = "sala";
+require_once __DIR__ . '/../inc/db.php';
 
-// Nombre del archivo de backup
-$backup_file = __DIR__ . "\\backup_" . date("Y-m-d_H-i-s") . ".sql";
+if (empty($_SESSION['login'])) {
+    header("Location: login.php");
+    exit;
+}
 
-// Comando para realizar el backup
-$command = "C:\\xampp\\mysql\\bin\\mysqldump --opt --host=$dbhost --user=$dbusuario --password=$dbpassword $db > $backup_file";
+if (empty($_SESSION['es_admin'])) {
+    die('<div class="alert alert-danger">No tenés permisos para acceder a esta sección</div>');
+}
 
-// Ejecutar el comando
+require_once __DIR__ . '/../inc/config.php';
+
+// Configuración de la base de datos (misma fuente que inc/db.php)
+$dbhost = env('DB_HOST', 'localhost');
+$dbusuario = env('DB_USER', 'root');
+$dbpassword = env('DB_PASS', '');
+$db = env('DB_NAME', 'sala');
+
+// Carpeta de backups FUERA del webroot, no accesible públicamente
+$backupDir = __DIR__ . '/../../../backups_salarivadavia';
+if (!is_dir($backupDir)) {
+    mkdir($backupDir, 0750, true);
+}
+
+$backup_file = $backupDir . '/backup_' . date('Y-m-d_H-i-s') . '.sql';
+
+$mysqldump = 'C:\\xampp\\mysql\\bin\\mysqldump.exe';
+
+$command = escapeshellcmd($mysqldump)
+    . ' --opt --host=' . escapeshellarg($dbhost)
+    . ' --user=' . escapeshellarg($dbusuario)
+    . ' --password=' . escapeshellarg($dbpassword)
+    . ' ' . escapeshellarg($db)
+    . ' > ' . escapeshellarg($backup_file);
+
 exec($command, $output, $result);
 
-// Verificar si se realizó correctamente
-if ($result == 0) {
-    echo "Backup realizado con éxito. Archivo: $backup_file";
+if ($result === 0) {
+    echo "Backup realizado con éxito. Archivo guardado fuera del directorio público.";
 } else {
     echo "Error al realizar el backup. Código de error: $result";
 }
-?>

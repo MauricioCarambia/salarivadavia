@@ -25,7 +25,7 @@ if ($busqueda !== '' && strlen($busqueda) >= 2) {
            OR documento     LIKE ?
            OR nro_afiliado  LIKE ?
         ORDER BY apellido ASC
-        LIMIT 25
+        LIMIT 500
     ");
 
     $buscar = "%{$busqueda}%";

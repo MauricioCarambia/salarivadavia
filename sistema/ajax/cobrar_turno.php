@@ -10,7 +10,9 @@ try {
     $turno_id = (int) ($_POST['turno_id'] ?? 0);
     $practicas = $_POST['practicas'] ?? [];
     $medio_pago = $_POST['medio_pago'] ?? 'efectivo';
-    $transferencia_tipo = $_POST['transferencia_tipo'] ?? null;
+    $transferencia_tipo = $medio_pago === 'transferencia'
+        ? ($_POST['transferencia_tipo'] ?? null)
+        : null;
 
     $empleado_destino_id = !empty($_POST['empleado_destino_id'])
         ? (int) $_POST['empleado_destino_id']
@@ -324,7 +326,7 @@ try {
     /* =========================
        UPDATE TURNO
     ========================= */
-    $stmt = $pdo->prepare("UPDATE turnos SET asistio = 1, pago = ?, fecha_actual = NOW() WHERE Id = ?");
+    $stmt = $pdo->prepare("UPDATE turnos SET asistio = 1, pago = COALESCE(pago, 0) + ?, fecha_actual = NOW() WHERE Id = ?");
     $stmt->execute([$total, $turno_id]);
 
     $pdo->commit();
@@ -333,7 +335,8 @@ try {
         'success' => true,
         'total' => $total,
         'numero' => $numeroCompleto,
-        'detalle' => $detalle
+        'detalle' => $detalle,
+        'medio_pago' => $medio_pago
     ]);
 } catch (Exception $e) {
 

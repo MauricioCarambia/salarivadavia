@@ -6,6 +6,12 @@ session_name("turnos");
 session_cache_limiter("private");
 session_start();
 
+// Si ya tiene sesión válida no volver a mostrar el login
+if (!empty($_SESSION['login']) && $_SESSION['login'] === 'si') {
+    header("Location: index.php");
+    exit;
+}
+
 require_once __DIR__ . '/inc/db.php';
 require_once __DIR__ . '/inc/rate_limit.php';
 require_once __DIR__ . '/inc/csrf.php';
@@ -124,6 +130,9 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
 
         registrarAuditoria($pdo, 'acceso_concedido', "Inicio de sesión de empleado desde {$ip}");
 
+        // Rotar token CSRF post-login para bloquear reenvíos del form
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+
         header("Location: index.php");
         exit;
         }
@@ -191,6 +200,8 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
 
         registrarAuditoria($pdo, 'acceso_concedido', "Inicio de sesión de profesional desde {$ip}");
 
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+
         header("Location: index.php");
         exit;
         }
@@ -243,7 +254,7 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
 
         <?php if (!$accesoBloqueado): ?>
 
-        <form method="post">
+        <form method="post" id="form-login">
           <?= csrf_field() ?>
 
           <div class="input-group mb-3">
@@ -296,6 +307,13 @@ if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
   <script src="adminlte/plugins/jquery/jquery.min.js"></script>
   <script src="adminlte/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
   <script src="adminlte/dist/js/adminlte.min.js"></script>
+  <script>
+    document.getElementById('form-login').addEventListener('submit', function () {
+      var btn = this.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ingresando...';
+    });
+  </script>
 
 </body>
 

@@ -116,7 +116,8 @@ try {
             'total'           => (float)$c['total'],
             'detalle'         => $detalle,
             'reparto'         => $reparto,
-            'tipo'            => $c['tipo'] ?? 'ingreso'
+            'tipo'            => $c['tipo'] ?? 'ingreso',
+            'medio_pago'      => $c['medio_pago'] ?? 'efectivo'
         ]
     ]);
 
