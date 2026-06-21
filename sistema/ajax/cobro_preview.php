@@ -82,6 +82,34 @@ try {
     /* =========================
        🔁 RECORRER PRÁCTICAS
     ========================= */
+    $stmtPrecio = $pdo->prepare("
+        SELECT precio
+        FROM practicas_precios
+        WHERE practica_id=?
+          AND tipo_paciente=?
+          AND activo=1
+        ORDER BY fecha_desde DESC
+        LIMIT 1
+    ");
+    $stmtNombre = $pdo->prepare("SELECT nombre FROM practicas WHERE id=?");
+    $stmtRepartoId = $pdo->prepare("
+        SELECT id
+        FROM practicas_reparto
+        WHERE practica_id=?
+          AND (profesional_id=? OR profesional_id IS NULL)
+          AND tipo_paciente=?
+        ORDER BY profesional_id DESC
+        LIMIT 1
+    ");
+    $stmtRepartoDetalle = $pdo->prepare("
+        SELECT d.valor, t.nombre AS tipo, dr.nombre AS destino, dr.categoria
+        FROM practicas_reparto_detalle d
+        INNER JOIN tipos_reparto t ON t.id = d.tipo_id
+        INNER JOIN destinos_reparto dr ON dr.id = d.destino_id
+        WHERE d.reparto_id=?
+        ORDER BY d.orden
+    ");
+
     foreach ($practicas as $practica_id) {
 
         $practica_id = (int) $practica_id;
@@ -89,17 +117,8 @@ try {
         /* =========================
            💰 PRECIO
         ========================= */
-        $stmt = $pdo->prepare("
-            SELECT precio 
-            FROM practicas_precios
-            WHERE practica_id=? 
-              AND tipo_paciente=?
-              AND activo=1
-            ORDER BY fecha_desde DESC
-            LIMIT 1
-        ");
-        $stmt->execute([$practica_id, $tipoPaciente]);
-        $precio = (float) $stmt->fetchColumn();
+        $stmtPrecio->execute([$practica_id, $tipoPaciente]);
+        $precio = (float) $stmtPrecio->fetchColumn();
 
         if (!$precio) {
             throw new Exception("Práctica mal configurada, revisa precio o reparto");
@@ -108,24 +127,14 @@ try {
         /* =========================
            📄 NOMBRE
         ========================= */
-        $stmt = $pdo->prepare("SELECT nombre FROM practicas WHERE id=?");
-        $stmt->execute([$practica_id]);
-        $nombre = $stmt->fetchColumn() ?: 'Práctica #' . $practica_id;
+        $stmtNombre->execute([$practica_id]);
+        $nombre = $stmtNombre->fetchColumn() ?: 'Práctica #' . $practica_id;
 
         /* =========================
            🔀 REPARTO
         ========================= */
-        $stmt = $pdo->prepare("
-            SELECT id 
-            FROM practicas_reparto
-            WHERE practica_id=? 
-              AND (profesional_id=? OR profesional_id IS NULL)
-              AND tipo_paciente=?
-            ORDER BY profesional_id DESC
-            LIMIT 1
-        ");
-        $stmt->execute([$practica_id, $profesional_id, $tipoPaciente]);
-        $rep_id = $stmt->fetchColumn();
+        $stmtRepartoId->execute([$practica_id, $profesional_id, $tipoPaciente]);
+        $rep_id = $stmtRepartoId->fetchColumn();
 
         if (!$rep_id) {
             throw new Exception("Práctica mal configurada, revisa precio o reparto");
@@ -135,16 +144,8 @@ try {
 
         if ($rep_id) {
 
-            $stmt = $pdo->prepare("
-                SELECT d.valor, t.nombre AS tipo, dr.nombre AS destino, dr.categoria
-                FROM practicas_reparto_detalle d
-                INNER JOIN tipos_reparto t ON t.id = d.tipo_id
-                INNER JOIN destinos_reparto dr ON dr.id = d.destino_id
-                WHERE d.reparto_id=?
-                ORDER BY d.orden
-            ");
-            $stmt->execute([$rep_id]);
-            $reglas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmtRepartoDetalle->execute([$rep_id]);
+            $reglas = $stmtRepartoDetalle->fetchAll(PDO::FETCH_ASSOC);
 
             $reparto = [];
             $totalFijos = 0;

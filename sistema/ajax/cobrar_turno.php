@@ -109,49 +109,50 @@ try {
     $deudaClinica = 0;
     $liqProfesional = 0;
 
+    $stmtPrecio = $pdo->prepare("
+        SELECT precio
+        FROM practicas_precios
+        WHERE practica_id = ? AND tipo_paciente = ? AND activo = 1
+        LIMIT 1
+    ");
+    $stmtNombre = $pdo->prepare("SELECT nombre FROM practicas WHERE id = ?");
+    $stmtRepartoId = $pdo->prepare("
+        SELECT id FROM practicas_reparto
+        WHERE practica_id = ?
+          AND (profesional_id = ? OR profesional_id IS NULL)
+          AND tipo_paciente = ?
+        ORDER BY profesional_id DESC
+        LIMIT 1
+    ");
+    $stmtRepartoDetalle = $pdo->prepare("
+        SELECT d.valor, t.nombre AS tipo, dr.nombre AS destino, dr.categoria
+        FROM practicas_reparto_detalle d
+        INNER JOIN tipos_reparto t ON t.id = d.tipo_id
+        INNER JOIN destinos_reparto dr ON dr.id = d.destino_id
+        WHERE d.reparto_id = ?
+    ");
+
     foreach ($practicas as $idPrac) {
 
         $idPrac = (int)$idPrac;
 
-        $stmt = $pdo->prepare("
-            SELECT precio 
-            FROM practicas_precios
-            WHERE practica_id = ? AND tipo_paciente = ? AND activo = 1
-            LIMIT 1
-        ");
-        $stmt->execute([$idPrac, $tipoPaciente]);
-        $precio = (float)$stmt->fetchColumn();
+        $stmtPrecio->execute([$idPrac, $tipoPaciente]);
+        $precio = (float)$stmtPrecio->fetchColumn();
 
         if (!$precio) throw new Exception("Sin precio práctica $idPrac");
 
-        $stmt = $pdo->prepare("SELECT nombre FROM practicas WHERE id = ?");
-        $stmt->execute([$idPrac]);
-        $nombre = $stmt->fetchColumn();
+        $stmtNombre->execute([$idPrac]);
+        $nombre = $stmtNombre->fetchColumn();
 
-        $stmt = $pdo->prepare("
-            SELECT id FROM practicas_reparto
-            WHERE practica_id = ? 
-              AND (profesional_id = ? OR profesional_id IS NULL)
-              AND tipo_paciente = ?
-            ORDER BY profesional_id DESC
-            LIMIT 1
-        ");
-        $stmt->execute([$idPrac, $profesional_id, $tipoPaciente]);
-        $rep_id = $stmt->fetchColumn();
+        $stmtRepartoId->execute([$idPrac, $profesional_id, $tipoPaciente]);
+        $rep_id = $stmtRepartoId->fetchColumn();
 
         $reparto = [];
 
         if ($rep_id) {
 
-            $stmt = $pdo->prepare("
-                SELECT d.valor, t.nombre AS tipo, dr.nombre AS destino, dr.categoria
-                FROM practicas_reparto_detalle d
-                INNER JOIN tipos_reparto t ON t.id = d.tipo_id
-                INNER JOIN destinos_reparto dr ON dr.id = d.destino_id
-                WHERE d.reparto_id = ?
-            ");
-            $stmt->execute([$rep_id]);
-            $reglas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $stmtRepartoDetalle->execute([$rep_id]);
+            $reglas = $stmtRepartoDetalle->fetchAll(PDO::FETCH_ASSOC);
 
             $fijos = 0;
             $porc = [];
