@@ -60,9 +60,9 @@ $totalActivos = (int)$stmt->fetchColumn();
             <div class="row">
                 <div class="col-md-4">
                     <label>Monto Inicial</label>
-                    <input type="number" step="0.01" id="montoInicialDia" class="form-control" required>
+                    <input type="number" step="0.01" id="montoInicialDia" class="form-control" placeholder="Dejar vacío para no modificar">
                     <small class="text-muted">
-                        Se precarga con el valor actual. Solo se usa para carga inicial o corrección manual.
+                        Solo se usa para carga inicial o corrección manual. Si lo dejás vacío, no se modifica.
                     </small>
                 </div>
                 <div class="col-md-4">
@@ -73,10 +73,11 @@ $totalActivos = (int)$stmt->fetchColumn();
                         type="number"
                         step="0.01"
                         id="fondoInicialDia"
-                        class="form-control">
+                        class="form-control"
+                        placeholder="Dejar vacío para no modificar">
 
                     <small class="text-muted">
-                        Se precarga con el valor actual. Solo para carga inicial o corrección manual.
+                        Solo para carga inicial o corrección manual. Si lo dejás vacío, no se modifica.
                     </small>
 
                 </div>
@@ -203,15 +204,6 @@ $totalActivos = (int)$stmt->fetchColumn();
                 "$" + formatearNumero(k.fondo_inicial)
             );
 
-            // Precargar los inputs del form con los valores reales,
-            // para que si el usuario no los toca no se pisen con 0
-            if (!$("#montoInicialDia").data("tocado")) {
-                $("#montoInicialDia").val(Number(k.monto_inicial || 0).toFixed(2));
-            }
-            if (!$("#fondoInicialDia").data("tocado")) {
-                $("#fondoInicialDia").val(Number(k.fondo_inicial || 0).toFixed(2));
-            }
-
             $("#kpiCaja").text(
                 "$" + formatearNumero(k.caja)
             );
@@ -325,12 +317,32 @@ $totalActivos = (int)$stmt->fetchColumn();
     $("#formControlDiario").submit(function(e) {
         e.preventDefault();
 
-        const monto = parseFloat($("#montoInicialDia").val());
-        const fondo = parseFloat($("#fondoInicialDia").val()) || 0;
+        const montoVal = $("#montoInicialDia").val().trim();
+        const fondoVal = $("#fondoInicialDia").val().trim();
 
-        if (isNaN(monto) || monto < 0) {
-            Swal.fire("Error", "Monto inválido", "error");
+        if (montoVal === "" && fondoVal === "") {
+            Swal.fire("Error", "Ingresá al menos un valor para guardar", "error");
             return;
+        }
+
+        const payload = {};
+
+        if (montoVal !== "") {
+            const monto = parseFloat(montoVal);
+            if (isNaN(monto) || monto < 0) {
+                Swal.fire("Error", "Monto inválido", "error");
+                return;
+            }
+            payload.monto_inicial = monto;
+        }
+
+        if (fondoVal !== "") {
+            const fondo = parseFloat(fondoVal);
+            if (isNaN(fondo) || fondo < 0) {
+                Swal.fire("Error", "Fondo inválido", "error");
+                return;
+            }
+            payload.fondo_inicial = fondo;
         }
 
         $.ajax({
@@ -338,14 +350,11 @@ $totalActivos = (int)$stmt->fetchColumn();
             type: "POST",
             contentType: "application/json",
             dataType: "json",
-            data: JSON.stringify({
-                monto_inicial: monto,
-                fondo_inicial: fondo
-            }),
+            data: JSON.stringify(payload),
             success: function(res) {
                 if (res.success) {
                     Swal.fire("OK", "Caja actualizada", "success");
-                    $("#montoInicialDia, #fondoInicialDia").data("tocado", false);
+                    $("#montoInicialDia, #fondoInicialDia").val("");
                     cargarDashboard();
                     cargarControlDiario();
                 } else {
@@ -364,9 +373,5 @@ $totalActivos = (int)$stmt->fetchColumn();
     // ==========================
     $(document).ready(function() {
         cargarTodo();
-
-        $("#montoInicialDia, #fondoInicialDia").on("input", function() {
-            $(this).data("tocado", true);
-        });
     });
 </script>
