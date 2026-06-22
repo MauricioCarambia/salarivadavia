@@ -44,11 +44,18 @@ try {
 
     // 🔴 Anular cobro (NO borrar físicamente)
     $stmt = $pdo->prepare("
-        UPDATE cobros 
+        UPDATE cobros
         SET estado = 'anulado'
         WHERE id = ?
     ");
     $stmt->execute([$id]);
+
+    // Revertir el impacto en el turno para que un cobro nuevo no herede
+    // el monto del cobro anulado
+    if (!empty($cobro['turno_id'])) {
+        $pdo->prepare("UPDATE turnos SET pago = COALESCE(pago, 0) - ? WHERE Id = ?")
+            ->execute([$cobro['total'], $cobro['turno_id']]);
+    }
 
     // 🔴 Registrar movimiento inverso en caja
     $stmt = $pdo->prepare("

@@ -33,7 +33,7 @@ try {
        🔒 BLOQUEAR COBRO
     ========================= */
     $stmt = $pdo->prepare("
-        SELECT estado, caja_sesion_id, total, numero_completo
+        SELECT estado, caja_sesion_id, total, numero_completo, turno_id
         FROM cobros
         WHERE id = ?
         FOR UPDATE
@@ -73,11 +73,18 @@ try {
        🔴 ANULAR COBRO
     ========================= */
     $stmt = $pdo->prepare("
-        UPDATE cobros 
+        UPDATE cobros
         SET estado = 'anulado'
         WHERE id = ?
     ");
     $stmt->execute([$cobro_id]);
+
+    // Revertir el impacto en el turno para que un cobro nuevo no herede
+    // el monto del cobro anulado
+    if ($cobro['turno_id']) {
+        $pdo->prepare("UPDATE turnos SET pago = COALESCE(pago, 0) - ? WHERE Id = ?")
+            ->execute([$cobro['total'], $cobro['turno_id']]);
+    }
 
     registrarAuditoria($pdo, 'cobro_anulado', "Se anuló el comprobante N° {$cobro['numero_completo']} por \${$cobro['total']}", $motivo);
 

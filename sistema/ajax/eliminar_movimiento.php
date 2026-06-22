@@ -21,7 +21,7 @@ try {
        🔍 OBTENER COBRO
     ============================== */
     $stmt = $pdo->prepare("
-        SELECT id, estado, total, numero_completo, concepto
+        SELECT id, estado, total, numero_completo, concepto, turno_id
         FROM cobros
         WHERE id = ?
         LIMIT 1
@@ -41,6 +41,13 @@ try {
     ============================== */
     $stmt = $pdo->prepare("UPDATE cobros SET estado = 'anulado' WHERE id = ?");
     $stmt->execute([$id]);
+
+    // Revertir el impacto en el turno para que un cobro nuevo no herede
+    // el monto del cobro anulado
+    if (!empty($cobro['turno_id'])) {
+        $pdo->prepare("UPDATE turnos SET pago = COALESCE(pago, 0) - ? WHERE Id = ?")
+            ->execute([$cobro['total'], $cobro['turno_id']]);
+    }
 
     registrarAuditoria($pdo, 'cobro_anulado', "Se anuló el comprobante N° {$cobro['numero_completo']} por \${$cobro['total']}", $motivo);
 
