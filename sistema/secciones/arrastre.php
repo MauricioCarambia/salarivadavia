@@ -62,7 +62,7 @@ $totalActivos = (int)$stmt->fetchColumn();
                     <label>Monto Inicial</label>
                     <input type="number" step="0.01" id="montoInicialDia" class="form-control" required>
                     <small class="text-muted">
-                        Solo se usa para carga inicial o corrección manual.
+                        Se precarga con el valor actual. Solo se usa para carga inicial o corrección manual.
                     </small>
                 </div>
                 <div class="col-md-4">
@@ -73,11 +73,10 @@ $totalActivos = (int)$stmt->fetchColumn();
                         type="number"
                         step="0.01"
                         id="fondoInicialDia"
-                        class="form-control"
-                        value="0">
+                        class="form-control">
 
                     <small class="text-muted">
-                        Solo para carga inicial o corrección manual.
+                        Se precarga con el valor actual. Solo para carga inicial o corrección manual.
                     </small>
 
                 </div>
@@ -203,6 +202,15 @@ $totalActivos = (int)$stmt->fetchColumn();
             $("#kpiFondoInicial").text(
                 "$" + formatearNumero(k.fondo_inicial)
             );
+
+            // Precargar los inputs del form con los valores reales,
+            // para que si el usuario no los toca no se pisen con 0
+            if (!$("#montoInicialDia").data("tocado")) {
+                $("#montoInicialDia").val(Number(k.monto_inicial || 0).toFixed(2));
+            }
+            if (!$("#fondoInicialDia").data("tocado")) {
+                $("#fondoInicialDia").val(Number(k.fondo_inicial || 0).toFixed(2));
+            }
 
             $("#kpiCaja").text(
                 "$" + formatearNumero(k.caja)
@@ -337,6 +345,7 @@ $totalActivos = (int)$stmt->fetchColumn();
             success: function(res) {
                 if (res.success) {
                     Swal.fire("OK", "Caja actualizada", "success");
+                    $("#montoInicialDia, #fondoInicialDia").data("tocado", false);
                     cargarDashboard();
                     cargarControlDiario();
                 } else {
@@ -355,5 +364,9 @@ $totalActivos = (int)$stmt->fetchColumn();
     // ==========================
     $(document).ready(function() {
         cargarTodo();
+
+        $("#montoInicialDia, #fondoInicialDia").on("input", function() {
+            $(this).data("tocado", true);
+        });
     });
 </script>
