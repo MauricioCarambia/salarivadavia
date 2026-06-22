@@ -176,7 +176,9 @@ $totalActivos = (int)$stmt->fetchColumn();
     </div>
 </div> -->
 <script>
-    const BASE_URL = "/salarivadavia/sistema";
+    // Ruta relativa a sistema/index.php (donde se incluye esta sección),
+    // funciona igual en local (xampp) y en cualquier dominio/subcarpeta
+    const BASE_URL = ".";
     // ==========================
     // CARGA GENERAL
     // ==========================
