@@ -562,6 +562,45 @@ td {
 });
 
         // =========================
+        // ELIMINAR SELECCIONADOS
+        // =========================
+        $('#btn_eliminar').click(function() {
+
+            let ids = [];
+
+            $('.checkbox_cardio:checked').each(function() {
+                ids.push($(this).closest('tr').data('id'));
+            });
+
+            if (!ids.length) {
+                Swal.fire('Atención', 'No seleccionaste registros', 'warning');
+                return;
+            }
+
+            Swal.fire({
+                title: '¿Eliminar los seleccionados?',
+                text: 'Se eliminarán ' + ids.length + ' registro(s). Esta acción no puede deshacerse.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, eliminar'
+            }).then(result => {
+
+                if (result.isConfirmed) {
+
+                    $.post('ajax/delete_cardiologia.php', {
+                        ids: ids
+                    }, function() {
+                        Swal.fire('Eliminado', 'Registros eliminados', 'success')
+                            .then(() => location.reload());
+                    });
+
+                }
+
+            });
+
+        });
+
+        // =========================
         // ELIMINAR FILTRADOS (PRO)
         // =========================
         $('#btn_eliminar_filtrados').click(function() {
