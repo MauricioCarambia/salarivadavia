@@ -55,6 +55,7 @@ $stmt->execute([$id]);
 $dias_anulados_db = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
 $firma = $_FILES['firma'] ?? null;
+$firmaDibujada = $_POST['firma_dibujada'] ?? '';
 $especialidades = $pdo->query("SELECT * FROM especialidades")->fetchAll(PDO::FETCH_ASSOC);
 $nombresDias = ['0' => 'Domingo', '1' => 'Lunes', '2' => 'Martes', '3' => 'Miércoles', '4' => 'Jueves', '5' => 'Viernes', '6' => 'Sábado'];
 $contador = 1000;
@@ -71,11 +72,26 @@ if (isset($_POST['guardar'])) {
             throw new Exception("El documento {$campos['documento']} ya se encuentra registrado.");
         }
 
-        // Procesar Firma
+        // Procesar Firma: prioriza la dibujada en el momento, si no hay usa el archivo subido
         $rutaImagen = $rArray['firma'];
-        if (!empty($firma['name'])) {
-            $directorio = 'imagenes/';
-            if (!is_dir($directorio)) mkdir($directorio, 0777, true);
+        $directorio = 'imagenes/';
+        if (!is_dir($directorio)) mkdir($directorio, 0777, true);
+
+        if (!empty($firmaDibujada) && preg_match('/^data:image\/png;base64,/', $firmaDibujada)) {
+
+            $datos = explode(',', $firmaDibujada, 2)[1] ?? '';
+            $binario = base64_decode($datos);
+
+            if ($binario === false) {
+                throw new Exception("No se pudo procesar la firma dibujada.");
+            }
+
+            $nombreArchivo = uniqid() . '_firma.png';
+            $rutaImagen = $directorio . $nombreArchivo;
+            file_put_contents($rutaImagen, $binario);
+
+        } elseif (!empty($firma['name'])) {
+
             $nombreArchivo = uniqid() . '_' . basename($firma['name']);
             $rutaImagen = $directorio . $nombreArchivo;
             if (!move_uploaded_file($firma['tmp_name'], $rutaImagen)) {
@@ -333,10 +349,49 @@ if (isset($_POST['guardar'])) {
                 </div>
                 <div class="form-group">
                     <label>Firma</label>
-                    <input type="file" class="form-control" name="firma" accept="image/*">
+
                     <?php if ($rArray['firma']): ?>
-                        <img src="<?= $rArray['firma'] ?>" class="img-fluid mt-2 border" style="max-height:80px;">
+                        <div class="mb-2">
+                            <small class="text-muted d-block">Firma actual:</small>
+                            <img src="<?= $rArray['firma'] ?>" class="img-fluid border" style="max-height:80px;">
+                        </div>
                     <?php endif; ?>
+
+                    <ul class="nav nav-tabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" data-toggle="tab" href="#tabDibujarFirma" role="tab">
+                                <i class="fa fa-pen"></i> Dibujar nueva firma
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-toggle="tab" href="#tabSubirFirma" role="tab">
+                                <i class="fa fa-upload"></i> Subir imagen
+                            </a>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content border border-top-0 p-3">
+
+                        <div class="tab-pane fade show active" id="tabDibujarFirma" role="tabpanel">
+                            <p class="small text-muted mb-2">
+                                Pedile al profesional que firme en pantalla con el mouse o el dedo (celular/tablet).
+                                Si dejás esto en blanco, se conserva la firma actual.
+                            </p>
+                            <canvas id="firmaCanvas" width="500" height="180"
+                                style="border:1px solid #ccc; background:#fff; max-width:100%; touch-action:none; cursor:crosshair;"></canvas>
+                            <div class="mt-2">
+                                <button type="button" class="btn btn-secondary btn-sm" id="btnLimpiarFirma">
+                                    <i class="fa fa-eraser"></i> Limpiar
+                                </button>
+                            </div>
+                            <input type="hidden" name="firma_dibujada" id="firma_dibujada">
+                        </div>
+
+                        <div class="tab-pane fade" id="tabSubirFirma" role="tabpanel">
+                            <input type="file" class="form-control" name="firma" accept="image/*">
+                        </div>
+
+                    </div>
                 </div>
                 <div class="form-group text-right">
                     <a href="./?seccion=profesionales" class="btn btn-secondary">Volver</a>
@@ -371,6 +426,71 @@ if (isset($_POST['guardar'])) {
         window.remover = function(id) {
             $('.dia' + id).remove();
         }
+
+        // =========================
+        // FIRMA DIBUJADA (mouse / touch)
+        // =========================
+        (function () {
+            var canvas = document.getElementById('firmaCanvas');
+            var ctx = canvas.getContext('2d');
+            var dibujando = false;
+            var hayTrazo = false;
+
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#000';
+
+            function posicion(e) {
+                var rect = canvas.getBoundingClientRect();
+                var escalaX = canvas.width / rect.width;
+                var escalaY = canvas.height / rect.height;
+                var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                var clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: (clientX - rect.left) * escalaX,
+                    y: (clientY - rect.top) * escalaY
+                };
+            }
+
+            function empezar(e) {
+                e.preventDefault();
+                dibujando = true;
+                var p = posicion(e);
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+            }
+
+            function mover(e) {
+                if (!dibujando) return;
+                e.preventDefault();
+                var p = posicion(e);
+                ctx.lineTo(p.x, p.y);
+                ctx.stroke();
+                hayTrazo = true;
+            }
+
+            function terminar() {
+                dibujando = false;
+            }
+
+            canvas.addEventListener('mousedown', empezar);
+            canvas.addEventListener('mousemove', mover);
+            canvas.addEventListener('mouseup', terminar);
+            canvas.addEventListener('mouseleave', terminar);
+
+            canvas.addEventListener('touchstart', empezar);
+            canvas.addEventListener('touchmove', mover);
+            canvas.addEventListener('touchend', terminar);
+
+            $('#btnLimpiarFirma').click(function () {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                hayTrazo = false;
+            });
+
+            $('#formProfesional').on('submit', function () {
+                $('#firma_dibujada').val(hayTrazo ? canvas.toDataURL('image/png') : '');
+            });
+        })();
 
         flatpickr("#anular_desde", {
             dateFormat: "Y-m-d"
