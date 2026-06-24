@@ -447,7 +447,7 @@ $provincias = [
         // Remover fila
         window.remover = function (id) {
             $('.dia' + id).remove();
-        }
+        };
 
         // =========================
         // FIRMA DIBUJADA (mouse / touch)

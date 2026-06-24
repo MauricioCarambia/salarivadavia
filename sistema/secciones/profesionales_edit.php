@@ -425,7 +425,7 @@ if (isset($_POST['guardar'])) {
 
         window.remover = function(id) {
             $('.dia' + id).remove();
-        }
+        };
 
         // =========================
         // FIRMA DIBUJADA (mouse / touch)
