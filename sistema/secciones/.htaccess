@@ -1,3 +1,9 @@
 # Estos archivos sólo deben incluirse desde index.php (ya autenticado).
 # Bloquear acceso HTTP directo para evitar bypass de sesión/CSRF.
 Require all denied
+
+# logout.php se accede directo por URL (no vía index.php?seccion=...)
+# y es seguro exponerlo: solo limpia la sesión, no expone datos.
+<Files "logout.php">
+    Require all granted
+</Files>
