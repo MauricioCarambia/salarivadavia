@@ -436,6 +436,14 @@ if (isset($_POST['guardar'])) {
             var dibujando = false;
             var hayTrazo = false;
 
+            function fondoBlanco() {
+                // El canvas nace transparente (no blanco) aunque se vea blanco por el CSS.
+                // Si se exporta así, el PDF (que convierte a JPEG) puede perder el trazo.
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            fondoBlanco();
+
             ctx.lineWidth = 2;
             ctx.lineCap = 'round';
             ctx.strokeStyle = '#000';
@@ -483,7 +491,7 @@ if (isset($_POST['guardar'])) {
             canvas.addEventListener('touchend', terminar);
 
             $('#btnLimpiarFirma').click(function () {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                fondoBlanco();
                 hayTrazo = false;
             });
 
