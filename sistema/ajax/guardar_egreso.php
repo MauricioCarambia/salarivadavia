@@ -63,14 +63,15 @@ try {
 
         $pdo->prepare("
             INSERT INTO resumen_financiero_diario (
-                fecha, monto_inicial,
+                fecha, monto_inicial, fondo_inicial,
                 total_cajas, total_fondos,
                 egresos_caja, egresos_fondos,
                 saldo_caja, saldo_fondo, saldo_total
-            ) VALUES (?, ?, 0, 0, 0, 0, ?, ?, ?)
+            ) VALUES (?, ?, ?, 0, 0, 0, 0, ?, ?, ?)
         ")->execute([
             $hoy,
-            $saldoCajaInicial + $saldoFondoInicial,   // monto_inicial = referencia histórica
+            $saldoCajaInicial,    // monto_inicial = saldo de caja heredado del día anterior
+            $saldoFondoInicial,   // fondo_inicial = saldo de fondo heredado del día anterior
             $saldoCajaInicial,
             $saldoFondoInicial,
             $saldoCajaInicial + $saldoFondoInicial,   // saldo_total = caja + fondo
