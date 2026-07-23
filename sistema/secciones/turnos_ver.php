@@ -881,6 +881,10 @@ $mensaje = urlencode($mensaje);
                 $('#tablaCobro tbody').empty();
                 $('#total').text('0');
 
+                // Resetear medio de pago para evitar cobrar transfer sin querer
+                $('#medio_pago').val('efectivo').trigger('change');
+                $('#transferencia_tipo').val('clinica');
+
                 $('#asistioSwitch')
                     .prop('checked', true)
                     .trigger('change');

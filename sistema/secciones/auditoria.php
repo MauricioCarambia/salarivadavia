@@ -51,7 +51,7 @@ $accionLabels = [
             <tbody>
                 <?php foreach ($registros as $r): ?>
                     <tr>
-                        <td><?= htmlspecialchars(date('d/m/Y H:i:s', strtotime($r['creado_en']))) ?></td>
+                        <td data-order="<?= htmlspecialchars($r['creado_en']) ?>"><?= htmlspecialchars(date('d/m/Y H:i:s', strtotime($r['creado_en']))) ?></td>
                         <td><?= htmlspecialchars($r['usuario_nombre'] ?? '-') ?></td>
                         <td><?= htmlspecialchars($accionLabels[$r['accion']] ?? $r['accion']) ?></td>
                         <td><?= nl2br(htmlspecialchars($r['detalle'] ?? '')) ?></td>
