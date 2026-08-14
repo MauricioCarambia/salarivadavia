@@ -1,10 +1,12 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/csrf.php';
 
 $id         = $_GET['id'] ?? null;
 $confirmar  = $_GET['confirmar'] ?? '';
 $rand       = $_GET['nc'] ?? uniqid();
 $mensaje    = '';
+$tokenValido = hash_equals($_SESSION['csrf_token'] ?? '', $_GET['csrf_token'] ?? '');
 
 if (!$id) {
     $mensaje = '
@@ -16,7 +18,7 @@ if (!$id) {
 /* ==========================
    ELIMINAR REGISTRO
 ========================== */
-if ($confirmar === 'si' && $id) {
+if ($confirmar === 'si' && $tokenValido && $id) {
 
     try {
 
@@ -65,7 +67,7 @@ if ($confirmar === 'si' && $id) {
                 <div class="hpanel">
                     <div class="panel-body">
 
-                        <?php if ($confirmar !== 'si' && $id): ?>
+                        <?php if (!($confirmar === 'si' && $tokenValido) && $id): ?>
 
                             <div class="alert alert-danger">
                                 ¿Confirma eliminar el turno?<br>
@@ -73,7 +75,7 @@ if ($confirmar === 'si' && $id) {
                             </div>
 
                             <div class="pull-right">
-                                <a href="?seccion=cardiologia_sur_delete&id=<?= $id ?>&confirmar=si&nc=<?= $rand ?>"
+                                <a href="?seccion=cardiologia_sur_delete&id=<?= $id ?>&confirmar=si&csrf_token=<?= urlencode(csrf_token()) ?>&nc=<?= $rand ?>"
                                    class="btn btn-danger">
                                     Eliminar
                                 </a>

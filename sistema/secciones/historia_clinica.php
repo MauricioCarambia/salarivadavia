@@ -88,7 +88,7 @@ function mostrarCampo($label, $valor)
                     <i class="fa fa-plus"></i> Nueva HC
                 </a>
             <?php endif; ?>
-            <button class="btn btn-warning btn-sm ml-2" onclick="imprimirHC()">
+            <button class="btn btn-warning btn-sm ml-2" id="btnImprimirHC" onclick="imprimirHC()">
                 <i class="fa fa-print"></i> Imprimir
             </button>
 
@@ -546,7 +546,21 @@ function mostrarCampo($label, $valor)
         });
     }
 
-    function imprimirHC() {
+    async function imprimirHC() {
+
+        // Reservamos la ventana ANTES de las conversiones async: si se abre
+        // después de un await, el navegador la trata como popup y la bloquea.
+        let w = window.open('', '_blank');
+        if (!w) {
+            Swal.fire('Atención', 'El navegador bloqueó la ventana de impresión. Habilitá los popups para este sitio.', 'warning');
+            return;
+        }
+        w.document.write('<p style="font-family:Arial;padding:30px;">Generando impresión, por favor esperá...</p>');
+        w.document.close();
+
+        let $btn = $('#btnImprimirHC');
+        let textoOriginal = $btn.html();
+        $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Generando...');
 
         let tabla = $('.datatable').DataTable();
         let filas = tabla.rows({
@@ -556,6 +570,13 @@ function mostrarCampo($label, $valor)
 
         let paciente = "<?= addslashes($pacienteNombre) ?>";
         let dni = "<?= addslashes($pacienteData['documento']) ?>";
+
+        // Logo en base64: una ruta relativa escrita en una ventana en blanco
+        // (about:blank) no tiene base URL para resolverse y no carga.
+        let logo = '';
+        try {
+            logo = await getBase64FromUrl('images/logo_blanco.png');
+        } catch {}
 
         let contenido = `
 <html>
@@ -675,7 +696,7 @@ function mostrarCampo($label, $valor)
 <body>
 
 <div class="header">
-    <img src="images/logo_blanco.png">
+    <img src="${logo}">
     <h1>Sala Bernardino Rivadavia</h1>
 </div>
 
@@ -685,21 +706,26 @@ function mostrarCampo($label, $valor)
 </div>
 `;
 
-        $(filas).each(function() {
+        for (let row of filas) {
 
-            let tds = $(this).find('td');
+            let tds = $(row).find('td');
 
             let consulta = tds.eq(0).html();
             let profesionalHTML = tds.eq(1).html();
-            let firmaHTML = tds.eq(2).html();
+            let firmaSrc = tds.eq(2).find('img').attr('src');
 
-            // Extraer fecha del HTML del profesional
-            let fecha = $(tds.eq(1)).find('b').first().text();
+            let firmaHTML = '';
+            if (firmaSrc) {
+                try {
+                    let firmaB64 = await getBase64FromUrl(firmaSrc);
+                    firmaHTML = `<img src="${firmaB64}">`;
+                } catch {}
+            }
 
             contenido += `
         <div class="hc-entry">
 
-           
+
 
             <div class="hc-body">
 
@@ -712,21 +738,25 @@ function mostrarCampo($label, $valor)
                 </div>
 
                 <div class="firma">
-                    ${firmaHTML || ''}
-                  
+                    ${firmaHTML}
+
                 </div>
 
             </div>
 
         </div>
         `;
-        });
+        }
 
         contenido += `</body></html>`;
 
-        let w = window.open('', '_blank');
+        w.document.open();
         w.document.write(contenido);
         w.document.close();
-        w.print();
+        w.onload = function () {
+            w.print();
+        };
+
+        $btn.prop('disabled', false).html(textoOriginal);
     }
 </script>

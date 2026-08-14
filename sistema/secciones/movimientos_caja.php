@@ -825,8 +825,12 @@ $profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
         /* =========================
            💾 SUBMIT
         ========================= */
+        let _guardandoMovimiento = false;
         $('#formMovimientoManual').on('submit', function(e) {
             e.preventDefault();
+
+            if (_guardandoMovimiento) return;
+            _guardandoMovimiento = true;
 
             let medio = $('#medio_pago').val();
 
@@ -839,6 +843,7 @@ $profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 }
 
                 if (tipoTransferencia === 'clinica' && !$('select[name="empleado_destino_id"]').val()) {
+                    _guardandoMovimiento = false;
                     Swal.fire('Atención', 'Debe seleccionar un empleado destino', 'warning');
                     return;
                 }
@@ -874,10 +879,13 @@ $profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     location.reload();
 
                 } else {
+                    _guardandoMovimiento = false;
                     Swal.fire('Error', res.message, 'error');
                 }
 
-            }, 'json');
+            }, 'json').fail(function() {
+                _guardandoMovimiento = false;
+            });
         });
 
         /* =========================
@@ -923,6 +931,7 @@ $profesionales = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                 if (!r.isConfirmed) return;
 
+                Swal.close();
                 $.post('ajax/eliminar_movimiento.php', {
                     id,
                     motivo: r.value.trim()

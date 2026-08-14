@@ -60,9 +60,9 @@ $totalActivos = (int)$stmt->fetchColumn();
             <div class="row">
                 <div class="col-md-4">
                     <label>Monto Inicial</label>
-                    <input type="number" step="0.01" id="montoInicialDia" class="form-control" required>
+                    <input type="number" step="0.01" id="montoInicialDia" class="form-control" placeholder="Dejar vacío para no modificar">
                     <small class="text-muted">
-                        Solo se usa para carga inicial o corrección manual.
+                        Solo se usa para carga inicial o corrección manual. Si lo dejás vacío, no se modifica.
                     </small>
                 </div>
                 <div class="col-md-4">
@@ -74,10 +74,10 @@ $totalActivos = (int)$stmt->fetchColumn();
                         step="0.01"
                         id="fondoInicialDia"
                         class="form-control"
-                        value="0">
+                        placeholder="Dejar vacío para no modificar">
 
                     <small class="text-muted">
-                        Solo para carga inicial o corrección manual.
+                        Solo para carga inicial o corrección manual. Si lo dejás vacío, no se modifica.
                     </small>
 
                 </div>
@@ -176,7 +176,9 @@ $totalActivos = (int)$stmt->fetchColumn();
     </div>
 </div> -->
 <script>
-    const BASE_URL = "/salarivadavia/sistema";
+    // Ruta relativa a sistema/index.php (donde se incluye esta sección),
+    // funciona igual en local (xampp) y en cualquier dominio/subcarpeta
+    const BASE_URL = ".";
     // ==========================
     // CARGA GENERAL
     // ==========================
@@ -317,12 +319,32 @@ $totalActivos = (int)$stmt->fetchColumn();
     $("#formControlDiario").submit(function(e) {
         e.preventDefault();
 
-        const monto = parseFloat($("#montoInicialDia").val());
-        const fondo = parseFloat($("#fondoInicialDia").val()) || 0;
+        const montoVal = $("#montoInicialDia").val().trim();
+        const fondoVal = $("#fondoInicialDia").val().trim();
 
-        if (isNaN(monto) || monto < 0) {
-            Swal.fire("Error", "Monto inválido", "error");
+        if (montoVal === "" && fondoVal === "") {
+            Swal.fire("Error", "Ingresá al menos un valor para guardar", "error");
             return;
+        }
+
+        const payload = {};
+
+        if (montoVal !== "") {
+            const monto = parseFloat(montoVal);
+            if (isNaN(monto) || monto < 0) {
+                Swal.fire("Error", "Monto inválido", "error");
+                return;
+            }
+            payload.monto_inicial = monto;
+        }
+
+        if (fondoVal !== "") {
+            const fondo = parseFloat(fondoVal);
+            if (isNaN(fondo) || fondo < 0) {
+                Swal.fire("Error", "Fondo inválido", "error");
+                return;
+            }
+            payload.fondo_inicial = fondo;
         }
 
         $.ajax({
@@ -330,13 +352,11 @@ $totalActivos = (int)$stmt->fetchColumn();
             type: "POST",
             contentType: "application/json",
             dataType: "json",
-            data: JSON.stringify({
-                monto_inicial: monto,
-                fondo_inicial: fondo
-            }),
+            data: JSON.stringify(payload),
             success: function(res) {
                 if (res.success) {
                     Swal.fire("OK", "Caja actualizada", "success");
+                    $("#montoInicialDia, #fondoInicialDia").val("");
                     cargarDashboard();
                     cargarControlDiario();
                 } else {

@@ -132,7 +132,7 @@ $fechaCompleta = $dt->format('d/m/Y');
                         <span class="input-group-text"><i class="fas fa-search"></i></span>
                     </div>
                     <input type="text" class="form-control" name="busqueda" id="busqueda"
-                        value="<?= htmlspecialchars($busqueda) ?>" placeholder="Buscar paciente por nombre, apellido o DNI..."
+                        value="<?= htmlspecialchars($busqueda) ?>" placeholder="Buscar paciente por nombre, apellido, DNI o N° de socio..."
                         autofocus>
 
                     <div class="input-group-append">
@@ -168,13 +168,15 @@ $fechaCompleta = $dt->format('d/m/Y');
     WHERE apellido LIKE :b1
        OR nombre LIKE :b2
        OR documento LIKE :b3
+       OR nro_afiliado LIKE :b4
     LIMIT 200
 ");
 
                     $stmtPac->execute([
                         ':b1' => "%$busqueda%",
                         ':b2' => "%$busqueda%",
-                        ':b3' => "%$busqueda%"
+                        ':b3' => "%$busqueda%",
+                        ':b4' => "%$busqueda%"
                     ]);
 
                     $pacientes = $stmtPac->fetchAll(PDO::FETCH_ASSOC);
@@ -410,7 +412,7 @@ $fechaCompleta = $dt->format('d/m/Y');
                             paciente: nombre,
                             profesional: res.profesional,
                             especialidad: res.especialidad,
-                            fecha: res.fecha.split(' ')[0],
+                            fecha: res.fecha.split(' ')[0].split('-').reverse().join('-'),
                             hora: res.hora,
                             sobreturno: res.sobreturno
                         }).catch(e => {

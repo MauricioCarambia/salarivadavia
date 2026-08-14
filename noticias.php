@@ -1,128 +1,200 @@
 <?php
-// Incluir la conexión a la base de datos
 require_once __DIR__ . "/sistema/inc/db.php";
 
-// Consulta para obtener TODAS las noticias, ordenadas por fecha descendente
-$stmt = $pdo->query("SELECT * FROM articulos ORDER BY created_at DESC");
+$busqueda  = trim($_GET['q'] ?? '');
+$pagina    = max(1, (int)($_GET['pag'] ?? 1));
+$porPagina = 9;
+
+// 1. Contar total primero
+if ($busqueda !== '') {
+    $like = "%$busqueda%";
+    $stmtTotal = $pdo->prepare("SELECT COUNT(*) FROM articulos WHERE titulo LIKE ? OR texto LIKE ?");
+    $stmtTotal->execute([$like, $like]);
+} else {
+    $stmtTotal = $pdo->query("SELECT COUNT(*) FROM articulos");
+}
+$total     = (int)$stmtTotal->fetchColumn();
+$totalPags = max(1, (int)ceil($total / $porPagina));
+
+// 2. Redirigir si la página pedida supera el total
+if ($pagina > $totalPags) {
+    $qs = '?pag=' . $totalPags . ($busqueda ? '&q=' . urlencode($busqueda) : '');
+    header("Location: noticias.php$qs");
+    exit;
+}
+
+// 3. Query de datos con offset correcto
+$offset = ($pagina - 1) * $porPagina;
+if ($busqueda !== '') {
+    $stmt = $pdo->prepare("SELECT * FROM articulos WHERE titulo LIKE ? OR texto LIKE ? ORDER BY created_at DESC LIMIT $porPagina OFFSET $offset");
+    $stmt->execute([$like, $like]);
+} else {
+    $stmt = $pdo->prepare("SELECT * FROM articulos ORDER BY created_at DESC LIMIT $porPagina OFFSET $offset");
+    $stmt->execute();
+}
+
 $articulos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$featured   = $articulos[0] ?? null;
+$resto      = array_slice($articulos, 1);
+
+$imgPlaceholder = "https://images.unsplash.com/photo-1504711432869-00d0211995a7?auto=format&fit=crop&q=80&w=900";
+
+$paginaActual = 'noticias';
 ?>
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
     <meta charset="UTF-8">
-    <title>Todas las Noticias | Sala Rivadavia</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Noticias | Sala Rivadavia</title>
     <link rel="icon" type="image/x-icon" href="sistema/images/sala.ico">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    
-    <!-- Enlace a tu archivo CSS externo -->
-    <link rel="stylesheet" href="sistema/styles/style.css">
+    <link rel="stylesheet" href="public.css">
 </head>
+<body class="pub">
 
-<body class="bodynoticia">
+<?php include __DIR__ . '/_partials/nav.php'; ?>
 
-    <nav class="nave">
-        <a href="index.php" class="logo-container">
-            <img src="sistema/images/logo_blanco.png" class="logo-img" alt="Logo Sala Rivadavia">
-            <span class="nav-brand">Sala Rivadavia</span>
-        </a>
-        <div class="nav-right">
-            <div class="nav-socials">
-                <a href="https://www.facebook.com/la.sala.rivadavia" class="fb" target="_blank">
-                    <i class="fab fa-facebook-f"></i>
-                </a>
-                <a href="https://www.instagram.com/lasalarivadavia" class="ig" target="_blank">
-                    <i class="fab fa-instagram"></i>
-                </a>
-                <a href="https://wa.me/5491122436786?text=Hola!%20Quisiera%20consultar%20por%20" target="_blank" class="wa-link">
-                    <i class="fab fa-whatsapp"></i>
-                </a>
-            </div>
-            <div class="nav-links">
-                <a href="index.php">Inicio</a>
-                <a href="noticias.php">Noticias</a>
-            </div>
+<!-- HEADER -->
+<div class="pub-page-header">
+    <h1>Noticias</h1>
+    <p>Todas las novedades y comunicados de la Sala Rivadavia</p>
+
+    <form class="pub-search" method="get" action="noticias.php">
+        <div class="pub-search__wrap">
+            <input class="pub-search__input" type="text" name="q"
+                   value="<?= htmlspecialchars($busqueda) ?>"
+                   placeholder="Buscar noticia...">
+            <button class="pub-search__btn" type="submit">
+                <i class="fas fa-search"></i>
+            </button>
         </div>
-    </nav>
+    </form>
+</div>
 
-    <!-- Header con el estilo degradado del CSS -->
-    <header class="header">
-        <h1>Historial de Noticias</h1>
-        <p>Explora todas las publicaciones y eventos pasados de la Sala Rivadavia.</p>
-    </header>
+<!-- CONTENIDO -->
+<main class="pub-section" style="max-width:1200px;margin:0 auto;">
 
-    <main class="container">
-        <section class="gridNoticias">
-            <?php foreach ($articulos as $articulo): ?>
-                <article class="cards">
-                    <?php if ($articulo['imagen']): ?>
-                        <div class="cards-img-wrapper">
-                           
-                            <img src="sistema/uploads/<?= htmlspecialchars($articulo['imagen']) ?>" alt="<?= htmlspecialchars($articulo['titulo']) ?>">
-                        </div>
-                    <?php endif; ?>
-                    
-                    <div class="cards-body">
-                        <span class="fecha">
-                            <i class="far fa-calendar-alt"></i>
-                            <?= date('d/m/Y', strtotime($articulo['created_at'])) ?>
-                        </span>
-                        
-                        <h3><?= htmlspecialchars($articulo['titulo']) ?></h3>
-                        
-                        <p><?= htmlspecialchars(substr($articulo['texto'], 0, 120)) ?>...</p>
-                        
-                        <div class="cards-footer">
-                            <a href="articulo.php?id=<?= $articulo['id'] ?>" class="read-more">
-                                Leer más <i class="fas fa-arrow-right"></i>
-                            </a>
-                        </div>
+    <?php if ($total === 0): ?>
+        <div class="pub-no-results">
+            <i class="fas fa-search"></i>
+            <p>No se encontraron noticias<?= $busqueda ? ' para "<strong>' . htmlspecialchars($busqueda) . '</strong>"' : '' ?>.</p>
+            <?php if ($busqueda): ?>
+                <a href="noticias.php" class="pub-btn pub-btn--primary" style="display:inline-flex;margin-top:20px;">Ver todas</a>
+            <?php endif; ?>
+        </div>
+
+    <?php else: ?>
+
+        <?php if ($busqueda): ?>
+            <p class="pub-count">
+                <?= $total ?> resultado<?= $total === 1 ? '' : 's' ?> para
+                "<strong><?= htmlspecialchars($busqueda) ?></strong>"
+                — <a href="noticias.php" style="color:var(--pub-accent);">limpiar</a>
+            </p>
+        <?php endif; ?>
+
+        <!-- ARTÍCULO DESTACADO -->
+        <?php if ($featured && $pagina === 1 && $busqueda === ''):
+            $fImg = (!empty($featured['imagen'])) ? "sistema/uploads/" . htmlspecialchars($featured['imagen']) : $imgPlaceholder;
+        ?>
+        <article class="pub-card pub-card--horizontal" style="margin-bottom:40px;">
+            <div class="pub-card__img">
+                <img src="<?= $fImg ?>" alt="<?= htmlspecialchars($featured['titulo']) ?>" loading="lazy">
+                <span class="pub-card__tag">Destacado</span>
+            </div>
+            <div class="pub-card__body">
+                <div class="pub-card__date">
+                    <i class="far fa-calendar-alt"></i>
+                    <?= date('d \d\e F, Y', strtotime($featured['created_at'])) ?>
+                </div>
+                <h2 class="pub-card__title"><?= htmlspecialchars($featured['titulo']) ?></h2>
+                <p class="pub-card__excerpt" style="-webkit-line-clamp:5;">
+                    <?= htmlspecialchars(mb_substr(strip_tags($featured['texto']), 0, 320)) ?>…
+                </p>
+                <div class="pub-card__footer">
+                    <a href="articulo.php?id=<?= $featured['id'] ?>" class="pub-card__read">
+                        Leer nota completa <i class="fas fa-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+        </article>
+        <?php
+            $listado = $resto;
+        else:
+            $listado = $articulos;
+        endif; ?>
+
+        <!-- GRILLA -->
+        <?php if (!empty($listado)): ?>
+        <div class="pub-grid pub-grid--3" id="gridNoticias">
+            <?php foreach ($listado as $a):
+                $img = (!empty($a['imagen'])) ? "sistema/uploads/" . htmlspecialchars($a['imagen']) : $imgPlaceholder;
+            ?>
+            <article class="pub-card pub-card--small reveal">
+                <div class="pub-card__img">
+                    <img src="<?= $img ?>" alt="<?= htmlspecialchars($a['titulo']) ?>" loading="lazy">
+                    <span class="pub-card__tag">Novedad</span>
+                </div>
+                <div class="pub-card__body">
+                    <div class="pub-card__date">
+                        <i class="far fa-calendar-alt"></i>
+                        <?= date('d M Y', strtotime($a['created_at'])) ?>
                     </div>
-                </article>
+                    <h3 class="pub-card__title"><?= htmlspecialchars($a['titulo']) ?></h3>
+                    <p class="pub-card__excerpt"><?= htmlspecialchars(mb_substr(strip_tags($a['texto']), 0, 140)) ?>…</p>
+                    <div class="pub-card__footer">
+                        <a href="articulo.php?id=<?= $a['id'] ?>" class="pub-card__read">
+                            Leer más <i class="fas fa-arrow-right"></i>
+                        </a>
+                    </div>
+                </div>
+            </article>
             <?php endforeach; ?>
-        </section>
-    </main>
-
-    <footer class="main-footer">
-        <div class="footer-grid">
-            <div class="footer-col footer-about">
-                <img src="sistema/images/logo_blanco.png" alt="Logo Sala Rivadavia" class="logo-img" style="margin-bottom:20px">
-                <p>Promoviendo la cultura y el encuentro vecinal desde nuestra Sociedad de Fomento. Un espacio de todos.</p>
-                <div class="footer-social-big">
-                    <a href="https://www.facebook.com/la.sala.rivadavia" class="fb" title="Facebook" target="_blank"><i class="fab fa-facebook-f"></i></a>
-                    <a href="https://www.instagram.com/lasalarivadavia" class="ig" title="Instagram" target="_blank"><i class="fab fa-instagram"></i></a>
-                    <a href="https://wa.me/5491122436786?text=Hola!%20Quisiera%20consultar%20por%20" target="_blank" class="wa-link"><i class="fab fa-whatsapp"></i></a>
-                </div>
-            </div>
-
-            <div class="footer-col">
-                <h4>Contacto</h4>
-                <div class="footer-contact-info">
-                    <p><i class="fas fa-map-marker-alt"></i> Av. Eva Peron 695, Temperley</p>
-                    <p><a href="tel:+541139894325" class="contact-link"><i class="fas fa-phone-alt"></i> 3989-4325</a></p>
-                    <p><a href="tel:+541139912183" class="contact-link"><i class="fas fa-phone-alt"></i> 3991-2183</a></p>
-                    <p><a href="https://wa.me/5491122436786" target="_blank" class="contact-link"><i class="fab fa-whatsapp"></i> +54 9 11 2243-6786</a></p>
-                </div>
-            </div>
-
-            <div class="footer-col">
-                <h4>Navegación</h4>
-                <ul class="footer-links">
-                    <li><a href="index.php">Inicio</a></li>
-                    <li><a href="noticias.php">Noticias</a></li>
-                </ul>
-                <div class="footer-map">
-                    <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3277.2179926191807!2d-58.390543387912835!3d-34.77528706646768!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x95bcd2d93ade4b85%3A0xe66d5172dcf019b1!2sSala%20de%20Fomento%20Bernardino%20Rivadavia%20atenci%C3%B3n%20primaria!5e0!3m2!1ses!2sar!4v1777510807241!5m2!1ses!2sar" loading="lazy"></iframe>
-                </div>
-            </div>
         </div>
-        
-        <div class="footer-bottom">
-            <p>&copy; <?= date('Y') ?> Sala Rivadavia - Sociedad de Fomento. <br>Temperley, Buenos Aires, Argentina.</p>
-        </div>
-    </footer>
+        <?php endif; ?>
+
+        <!-- PAGINACIÓN -->
+        <?php if ($totalPags > 1):
+            $qs = $busqueda ? '&q=' . urlencode($busqueda) : '';
+        ?>
+        <nav class="pub-pagination" aria-label="Páginas">
+            <a href="noticias.php?pag=<?= max(1, $pagina-1) . $qs ?>"
+               class="pub-page-btn <?= $pagina <= 1 ? 'disabled' : '' ?>"
+               <?= $pagina <= 1 ? 'tabindex="-1"' : '' ?>>
+                <i class="fas fa-chevron-left"></i>
+            </a>
+
+            <?php for ($p = 1; $p <= $totalPags; $p++): ?>
+                <a href="noticias.php?pag=<?= $p . $qs ?>"
+                   class="pub-page-btn <?= $p === $pagina ? 'active' : '' ?>">
+                    <?= $p ?>
+                </a>
+            <?php endfor; ?>
+
+            <a href="noticias.php?pag=<?= min($totalPags, $pagina+1) . $qs ?>"
+               class="pub-page-btn <?= $pagina >= $totalPags ? 'disabled' : '' ?>"
+               <?= $pagina >= $totalPags ? 'tabindex="-1"' : '' ?>>
+                <i class="fas fa-chevron-right"></i>
+            </a>
+        </nav>
+        <?php endif; ?>
+
+    <?php endif; ?>
+</main>
+
+<?php include __DIR__ . '/_partials/footer.php'; ?>
+
+<script>
+const nav = document.getElementById('pubNav');
+window.addEventListener('scroll', () => nav.classList.toggle('scrolled', window.scrollY > 20), { passive: true });
+document.getElementById('navToggle').addEventListener('click', () => document.getElementById('navLinks').classList.toggle('open'));
+
+const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); } });
+}, { threshold: 0.1 });
+document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+</script>
 </body>
-
 </html>

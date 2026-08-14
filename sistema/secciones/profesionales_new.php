@@ -41,6 +41,7 @@ $dia = $_POST['dia'] ?? [];
 $desde = $_POST['desde'] ?? [];
 $hasta = $_POST['hasta'] ?? [];
 $firma = $_FILES['firma'] ?? null;
+$firmaDibujada = $_POST['firma_dibujada'] ?? '';
 
 // Guardar profesional
 if (isset($_POST['guardar'])) {
@@ -51,12 +52,27 @@ if (isset($_POST['guardar'])) {
 
     if ($stmt->rowCount() === 0) {
 
-        // Subida de firma
+        // Firma: prioriza la dibujada en el momento, si no hay usa el archivo subido
         $rutaImagen = '';
-        if (!empty($firma['name'])) {
-            $directorioSubida = 'imagenes/';
-            if (!is_dir($directorioSubida))
-                mkdir($directorioSubida, 0777, true);
+        $directorioSubida = 'imagenes/';
+        if (!is_dir($directorioSubida)) {
+            mkdir($directorioSubida, 0777, true);
+        }
+
+        if (!empty($firmaDibujada) && preg_match('/^data:image\/png;base64,/', $firmaDibujada)) {
+
+            $datos = explode(',', $firmaDibujada, 2)[1] ?? '';
+            $binario = base64_decode($datos);
+
+            if ($binario === false) {
+                $swalError = 'No se pudo procesar la firma dibujada.';
+            } else {
+                $nombreArchivo = uniqid() . '_firma.png';
+                $rutaImagen = $directorioSubida . $nombreArchivo;
+                file_put_contents($rutaImagen, $binario);
+            }
+
+        } elseif (!empty($firma['name'])) {
 
             $ext = pathinfo($firma['name'], PATHINFO_EXTENSION);
             $nombreArchivo = uniqid() . '.' . $ext;
@@ -354,9 +370,43 @@ $provincias = [
                 </div>
 
                 <!-- Firma -->
-                <div class="form-group col-md-6">
+                <div class="form-group">
                     <label>Firma</label>
-                    <input type="file" class="form-control" accept="image/*" name="firma">
+
+                    <ul class="nav nav-tabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" data-toggle="tab" href="#tabDibujarFirma" role="tab">
+                                <i class="fa fa-pen"></i> Dibujar firma
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-toggle="tab" href="#tabSubirFirma" role="tab">
+                                <i class="fa fa-upload"></i> Subir imagen
+                            </a>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content border border-top-0 p-3">
+
+                        <div class="tab-pane fade show active" id="tabDibujarFirma" role="tabpanel">
+                            <p class="small text-muted mb-2">
+                                Pedile al profesional que firme en pantalla con el mouse o el dedo (celular/tablet).
+                            </p>
+                            <canvas id="firmaCanvas" width="500" height="180"
+                                style="border:1px solid #ccc; background:#fff; max-width:100%; touch-action:none; cursor:crosshair;"></canvas>
+                            <div class="mt-2">
+                                <button type="button" class="btn btn-secondary btn-sm" id="btnLimpiarFirma">
+                                    <i class="fa fa-eraser"></i> Limpiar
+                                </button>
+                            </div>
+                            <input type="hidden" name="firma_dibujada" id="firma_dibujada">
+                        </div>
+
+                        <div class="tab-pane fade" id="tabSubirFirma" role="tabpanel">
+                            <input type="file" class="form-control" accept="image/*" name="firma">
+                        </div>
+
+                    </div>
                 </div>
 
                 <div class="form-group text-right">
@@ -397,7 +447,80 @@ $provincias = [
         // Remover fila
         window.remover = function (id) {
             $('.dia' + id).remove();
-        }
+        };
+
+        // =========================
+        // FIRMA DIBUJADA (mouse / touch)
+        // =========================
+        (function () {
+            var canvas = document.getElementById('firmaCanvas');
+            var ctx = canvas.getContext('2d');
+            var dibujando = false;
+            var hayTrazo = false;
+
+            function fondoBlanco() {
+                // El canvas nace transparente (no blanco) aunque se vea blanco por el CSS.
+                // Si se exporta así, el PDF (que convierte a JPEG) puede perder el trazo.
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            fondoBlanco();
+
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#000';
+
+            function posicion(e) {
+                var rect = canvas.getBoundingClientRect();
+                var escalaX = canvas.width / rect.width;
+                var escalaY = canvas.height / rect.height;
+                var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                var clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: (clientX - rect.left) * escalaX,
+                    y: (clientY - rect.top) * escalaY
+                };
+            }
+
+            function empezar(e) {
+                e.preventDefault();
+                dibujando = true;
+                var p = posicion(e);
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+            }
+
+            function mover(e) {
+                if (!dibujando) return;
+                e.preventDefault();
+                var p = posicion(e);
+                ctx.lineTo(p.x, p.y);
+                ctx.stroke();
+                hayTrazo = true;
+            }
+
+            function terminar(e) {
+                dibujando = false;
+            }
+
+            canvas.addEventListener('mousedown', empezar);
+            canvas.addEventListener('mousemove', mover);
+            canvas.addEventListener('mouseup', terminar);
+            canvas.addEventListener('mouseleave', terminar);
+
+            canvas.addEventListener('touchstart', empezar);
+            canvas.addEventListener('touchmove', mover);
+            canvas.addEventListener('touchend', terminar);
+
+            $('#btnLimpiarFirma').click(function () {
+                fondoBlanco();
+                hayTrazo = false;
+            });
+
+            $('form').on('submit', function () {
+                $('#firma_dibujada').val(hayTrazo ? canvas.toDataURL('image/png') : '');
+            });
+        })();
 
         // Validación horarios
         $('form').submit(function (e) {

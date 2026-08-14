@@ -410,23 +410,16 @@ foreach ($turnos as $t) {
         }
         contenido.push("\n");
 
-        const fechaTurno = new Date(data.fecha);
+        const [fechaParte, horaParte] = data.fecha.split(' ');
+        const fechaFormateada = fechaParte.split('-').reverse().join('-');
+        const horaFormateada = horaParte ? horaParte.substring(0, 5) : '';
 
         contenido.push(
-            left(
-                "Fecha: " +
-                fechaTurno.toLocaleDateString('es-AR')
-            )
+            left("Fecha: " + fechaFormateada)
         );
 
         contenido.push(
-            left(
-                "Hora: " +
-                fechaTurno.toLocaleTimeString('es-AR', {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                })
-            )
+            left("Hora: " + horaFormateada)
         );
 
         contenido.push(

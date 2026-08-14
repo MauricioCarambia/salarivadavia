@@ -34,16 +34,19 @@ try {
     }
 
     // ==========================
-    // 🔁 TRAER SALDO ANTERIOR
+    // 🔁 TRAER SALDOS ANTERIORES (caja y fondo POR SEPARADO)
     // ==========================
     $stmt = $pdo->query("
-        SELECT saldo_total 
-        FROM resumen_financiero_diario 
-        ORDER BY fecha DESC 
+        SELECT saldo_caja, saldo_fondo
+        FROM resumen_financiero_diario
+        ORDER BY fecha DESC
         LIMIT 1
     ");
 
-    $saldoAnterior = (float)($stmt->fetchColumn() ?? 0);
+    $anterior = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    $montoInicial = (float)($anterior['saldo_caja']  ?? 0);
+    $fondoInicial = (float)($anterior['saldo_fondo'] ?? 0);
 
     // ==========================
     // 🆕 CREAR DÍA LIMPIO
@@ -52,23 +55,30 @@ try {
         INSERT INTO resumen_financiero_diario (
             fecha,
             monto_inicial,
+            fondo_inicial,
             total_cajas,
             total_fondos,
             egresos_caja,
             egresos_fondos,
+            saldo_caja,
+            saldo_fondo,
             saldo_total
-        ) VALUES (?, ?, 0, 0, 0, 0, ?)
+        ) VALUES (?, ?, ?, 0, 0, 0, 0, ?, ?, ?)
     ");
 
     $stmt->execute([
         $hoy,
-        $saldoAnterior,
-        $saldoAnterior // arranca igual, pero después se recalcula
+        $montoInicial,
+        $fondoInicial,
+        $montoInicial, // arranca igual, pero después se recalcula
+        $fondoInicial,
+        $montoInicial + $fondoInicial
     ]);
 
     echo json_encode([
         'success' => true,
-        'monto_inicial' => $saldoAnterior
+        'monto_inicial' => $montoInicial,
+        'fondo_inicial' => $fondoInicial
     ]);
 
 } catch (Throwable $e) {

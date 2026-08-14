@@ -543,9 +543,33 @@ body.dark-mode input:-webkit-autofill:focus {
   transition: background-color 9999s ease-in-out 0s;
 }
 .required-asterisk {
-  color: #dc3545; /* Rojo de Bootstrap */
+  color: #dc3545;
   margin-left: 3px;
   font-weight: bold;
+}
+
+/* Bloque info-paciente en historia_clinica_new */
+.paciente-info-bar {
+  background: #e8f4fd;
+  border-left: 4px solid #17a2b8;
+  color: #1a2a3a;
+}
+body.dark-mode .paciente-info-bar {
+  background: #1e2d3d !important;
+  border-left-color: #17a2b8 !important;
+  color: #e4e6eb !important;
+}
+body.dark-mode .paciente-info-bar .text-muted {
+  color: #8aacbe !important;
+}
+body.dark-mode .paciente-info-bar i.text-secondary {
+  color: #8aacbe !important;
+}
+body.dark-mode .paciente-info-bar b {
+  color: #cde !important;
+}
+body.dark-mode .paciente-info-bar .paciente-info-nombre {
+  color: #ffffff !important;
 }
 
 .select2-container--default .select2-selection--single {

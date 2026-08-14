@@ -8,14 +8,21 @@ header('Content-Type: application/json');
 
 try {
 
-    $data = json_decode(file_get_contents("php://input"), true);
+    $data = json_decode(file_get_contents("php://input"), true) ?? [];
 
-    $montoInicial = (float)($data['monto_inicial'] ?? 0);
-    $fondoInicial = (float)($data['fondo_inicial'] ?? 0);
+    $tieneMonto = array_key_exists('monto_inicial', $data) && $data['monto_inicial'] !== null && $data['monto_inicial'] !== '';
+    $tieneFondo = array_key_exists('fondo_inicial', $data) && $data['fondo_inicial'] !== null && $data['fondo_inicial'] !== '';
+
+    if (!$tieneMonto && !$tieneFondo) {
+        throw new Exception("Ingresá al menos un valor para guardar");
+    }
+
+    $montoInicial = $tieneMonto ? (float)$data['monto_inicial'] : null;
+    $fondoInicial = $tieneFondo ? (float)$data['fondo_inicial'] : null;
 
     $fecha = date('Y-m-d');
 
-    if ($montoInicial < 0 || $fondoInicial < 0) {
+    if (($montoInicial !== null && $montoInicial < 0) || ($fondoInicial !== null && $fondoInicial < 0)) {
         throw new Exception("Los montos no pueden ser negativos");
     }
 
@@ -60,26 +67,37 @@ try {
 
         $stmt->execute([
             $fecha,
-            $montoInicial,
-            $fondoInicial,
-            $montoInicial + $fondoInicial
+            $montoInicial ?? 0,
+            $fondoInicial ?? 0,
+            ($montoInicial ?? 0) + ($fondoInicial ?? 0)
         ]);
 
     } else {
 
+        // Solo actualiza los campos que efectivamente vinieron en el request,
+        // para no pisar con 0 el valor que no se quiso modificar
+        $sets = [];
+        $params = [];
+
+        if ($tieneMonto) {
+            $sets[] = "monto_inicial = ?";
+            $params[] = $montoInicial;
+        }
+
+        if ($tieneFondo) {
+            $sets[] = "fondo_inicial = ?";
+            $params[] = $fondoInicial;
+        }
+
+        $params[] = $fecha;
+
         $stmt = $pdo->prepare("
             UPDATE resumen_financiero_diario
-            SET
-                monto_inicial = ?,
-                fondo_inicial = ?
+            SET " . implode(', ', $sets) . "
             WHERE fecha = ?
         ");
 
-        $stmt->execute([
-            $montoInicial,
-            $fondoInicial,
-            $fecha
-        ]);
+        $stmt->execute($params);
     }
 
     reconstruirDia($pdo, $fecha);

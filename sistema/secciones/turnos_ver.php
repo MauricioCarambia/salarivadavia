@@ -399,6 +399,19 @@ $mensaje = urlencode($mensaje);
                     Total: $<span id="total">0.00</span>
                 </h4>
 
+                <!-- CALCULADOR DE VUELTO (solo efectivo) -->
+                <div id="boxVuelto" style="display:none;" class="mt-3">
+                    <div class="input-group input-group-sm">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text"><i class="fas fa-hand-holding-usd"></i> Entrega</span>
+                        </div>
+                        <input type="number" id="montoEntrega" class="form-control" placeholder="$ que entrega el paciente" min="0" step="0.01">
+                        <div class="input-group-append">
+                            <span class="input-group-text font-weight-bold" id="labelVuelto">Vuelto: $0.00</span>
+                        </div>
+                    </div>
+                </div>
+
                 <button type="button" class="btn btn-primary btn-block mt-3" id="btnPreview">
                     <i class="fas fa-eye"></i> Ver resumen
                 </button>
@@ -499,6 +512,10 @@ $mensaje = urlencode($mensaje);
 
         }, 'json');
         cargarHistorial();
+
+        // Inicializar label del switch según estado real del checkbox
+        $('#asistioSwitch').trigger('change');
+
         if ($('#medio_pago').val() === 'transferencia') {
             $('#boxDestino').show();
         }
@@ -592,6 +609,7 @@ $mensaje = urlencode($mensaje);
         }).then(result => {
 
             if (result.isConfirmed) {
+                Swal.close();
                 cobrarTurno();
             }
 
@@ -739,7 +757,31 @@ $mensaje = urlencode($mensaje);
         });
 
         $('#total').text(total.toFixed(2));
+        calcularVuelto();
     }
+
+    function calcularVuelto() {
+        const total    = parseFloat($('#total').text()) || 0;
+        const entrega  = parseFloat($('#montoEntrega').val()) || 0;
+        const vuelto   = entrega - total;
+        const label    = document.getElementById('labelVuelto');
+        if (vuelto < 0) {
+            label.textContent = 'Falta: $' + Math.abs(vuelto).toLocaleString('es-AR', {minimumFractionDigits:2});
+            label.style.color = '#dc3545';
+        } else {
+            label.textContent = 'Vuelto: $' + vuelto.toLocaleString('es-AR', {minimumFractionDigits:2});
+            label.style.color = vuelto > 0 ? '#28a745' : '';
+        }
+    }
+
+    // Mostrar/ocultar calculador según medio de pago
+    $('#medio_pago').on('change', function() {
+        $('#boxVuelto').toggle($(this).val() === 'efectivo');
+        $('#montoEntrega').val('');
+        calcularVuelto();
+    }).trigger('change');
+
+    $('#montoEntrega').on('input', calcularVuelto);
 
     $('#btnPreview').click(function() {
 
@@ -774,10 +816,15 @@ $mensaje = urlencode($mensaje);
 
     });
 
+    let _cobrando = false;
     function cobrarTurno() {
+
+        if (_cobrando) return;
+        _cobrando = true;
 
         // ✅ FIX: selector correcto
         if (!$('#asistioSwitch').is(':checked')) {
+            _cobrando = false;
             return Swal.fire('Error', 'El paciente no asistió', 'error');
         }
 
@@ -793,12 +840,14 @@ $mensaje = urlencode($mensaje);
             transferencia_tipo === 'clinica' &&
             !empleado_destino_id) {
 
+            _cobrando = false;
             return Swal.fire('Error', 'Seleccionar destino de transferencia', 'error');
         }
 
         $.get('ajax/verificar_caja_abierta.php', function(res) {
 
             if (!res.success) {
+                _cobrando = false;
                 return Swal.fire('Error', res.message || 'No hay caja abierta', 'error');
             }
 
@@ -809,6 +858,7 @@ $mensaje = urlencode($mensaje);
             });
 
             if (practicas.length === 0) {
+                _cobrando = false;
                 return Swal.fire('Error', 'Agregá prácticas para cobrar', 'error');
             }
 
@@ -823,6 +873,7 @@ $mensaje = urlencode($mensaje);
                 console.log("RESPUESTA COBRO:", res);
 
                 if (!res || !res.success) {
+                    _cobrando = false;
                     return Swal.fire('Error', res?.message || 'No se pudo cobrar', 'error');
                 }
 
@@ -831,13 +882,18 @@ $mensaje = urlencode($mensaje);
                     profesional: "<?= $profesional ?>",
                     numero_completo: res.numero || "",
                     total: parseFloat(res.total || 0),
-                    detalle: Array.isArray(res.detalle) ? res.detalle : []
+                    detalle: Array.isArray(res.detalle) ? res.detalle : [],
+                    medio_pago: res.medio_pago || medio_pago
                 };
 
                 cargarHistorial();
 
                 $('#tablaCobro tbody').empty();
                 $('#total').text('0');
+
+                // Resetear medio de pago para evitar cobrar transfer sin querer
+                $('#medio_pago').val('efectivo').trigger('change');
+                $('#transferencia_tipo').val('clinica');
 
                 $('#asistioSwitch')
                     .prop('checked', true)
@@ -849,6 +905,7 @@ $mensaje = urlencode($mensaje);
                     console.error("Error impresión:", e);
                 }
 
+                _cobrando = false;
                 Swal.fire({
                     icon: 'success',
                     title: 'Cobro realizado',
@@ -856,9 +913,13 @@ $mensaje = urlencode($mensaje);
                     showConfirmButton: false
                 });
 
-            }, 'json');
+            }, 'json').fail(function() {
+                _cobrando = false;
+            });
 
-        }, 'json');
+        }, 'json').fail(function() {
+            _cobrando = false;
+        });
     }
     /*******************************************************
      * codigo para impresora
@@ -1252,11 +1313,7 @@ $mensaje = urlencode($mensaje);
 
     });
     $('#asistioSwitch').change(function() {
-        if ($(this).is(':checked')) {
-            $(this).next('label').text('Asistió');
-        } else {
-            $(this).next('label').text('No asistió');
-        }
+        $('label[for="asistioSwitch"]').text($(this).is(':checked') ? 'Asistió' : 'No asistió');
     });
     $('#transferencia_tipo').change(function() {
 

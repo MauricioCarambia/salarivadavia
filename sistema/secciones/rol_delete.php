@@ -1,9 +1,11 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/csrf.php';
 
 $rand = rand();
 $id = $_GET['id'] ?? null;
 $confirmar = $_GET['confirmar'] ?? '';
+$tokenValido = hash_equals($_SESSION['csrf_token'] ?? '', $_GET['csrf_token'] ?? '');
 
 if (!is_numeric($id)) {
     die('<div class="alert alert-danger">ID inválido</div>');
@@ -51,7 +53,7 @@ $empleados_con_rol = $stmt->fetchColumn();
 
                     <?php else: ?>
 
-                        <?php if ($confirmar === 'si'): ?>
+                        <?php if ($confirmar === 'si' && $tokenValido): ?>
 
                             <?php
                             try {
@@ -101,7 +103,7 @@ $empleados_con_rol = $stmt->fetchColumn();
                                 <strong>Esta acción no se puede deshacer.</strong>
                             </div>
 
-                            <a href="?seccion=rol_delete&id=<?= $rol_id ?>&confirmar=si&nc=<?= $rand ?>"
+                            <a href="?seccion=rol_delete&id=<?= $rol_id ?>&confirmar=si&csrf_token=<?= urlencode(csrf_token()) ?>&nc=<?= $rand ?>"
                                class="btn btn-danger">
                                 <i class="fa fa-trash"></i> Eliminar
                             </a>

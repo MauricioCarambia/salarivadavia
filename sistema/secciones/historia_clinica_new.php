@@ -9,6 +9,14 @@ $pacienteId = (int) ($_GET['paciente_id'] ?? 0);
 $turnoId = (int) ($_GET['turno'] ?? 0);
 $profesionalId = $_SESSION['user_id'] ?? 0;
 
+// Datos del paciente para mostrar en el encabezado
+$paciente = null;
+if ($pacienteId) {
+    $stmtP = $pdo->prepare("SELECT nombre, apellido, documento, nacimiento, celular, nro_afiliado FROM pacientes WHERE Id = ? LIMIT 1");
+    $stmtP->execute([$pacienteId]);
+    $paciente = $stmtP->fetch(PDO::FETCH_ASSOC);
+}
+
 // =========================
 // GUARDAR
 // =========================
@@ -93,6 +101,44 @@ VALUES
     <h1 class="card-title m-4 ">
         Nueva Historia Clinica
     </h1>
+
+    <?php if ($paciente): ?>
+    <?php
+        $edad = '';
+        if (!empty($paciente['nacimiento'])) {
+            $nac = new DateTime($paciente['nacimiento']);
+            $edad = $nac->diff(new DateTime())->y . ' años';
+        }
+    ?>
+    <div class="paciente-info-bar mx-4 mb-3 p-3 rounded">
+        <div class="d-flex flex-wrap align-items-center" style="gap:24px;">
+            <div style="font-size:2rem;color:#17a2b8;"><i class="fas fa-user-circle"></i></div>
+            <div>
+                <div class="paciente-info-nombre" style="font-size:1.2rem;font-weight:700;color:#1a2a3a;">
+                    <?= htmlspecialchars($paciente['apellido'] . ', ' . $paciente['nombre']) ?>
+                </div>
+                <?php if ($edad): ?>
+                    <small class="text-muted"><?= $edad ?></small>
+                <?php endif; ?>
+            </div>
+            <div class="d-flex flex-wrap" style="gap:16px;font-size:.92rem;">
+                <?php if (!empty($paciente['documento'])): ?>
+                <span><i class="fas fa-id-card text-secondary mr-1"></i><b>DNI:</b> <?= htmlspecialchars($paciente['documento']) ?></span>
+                <?php endif; ?>
+                <?php if (!empty($paciente['nacimiento'])): ?>
+                <span><i class="fas fa-birthday-cake text-secondary mr-1"></i><b>Nac:</b> <?= date('d/m/Y', strtotime($paciente['nacimiento'])) ?></span>
+                <?php endif; ?>
+                <?php if (!empty($paciente['celular'])): ?>
+                <span><i class="fas fa-phone text-secondary mr-1"></i><?= htmlspecialchars($paciente['celular']) ?></span>
+                <?php endif; ?>
+                <?php if (!empty($paciente['nro_afiliado'])): ?>
+                <span><i class="fas fa-id-badge text-secondary mr-1"></i><b>N° socio:</b> <?= htmlspecialchars($paciente['nro_afiliado']) ?></span>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <form method="POST" id="formHC">
 
         <!-- ================= DATOS PRINCIPALES ================= -->

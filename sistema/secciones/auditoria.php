@@ -10,6 +10,11 @@ if (empty($_SESSION['es_admin']) && !in_array('auditoria', $_SESSION['accesos'] 
     die('<div class="alert alert-danger">No tenés permisos para acceder a esta sección</div>');
 }
 
+// Limpieza automática: borra registros con 2 meses o más de antigüedad
+// cada vez que se abre esta sección, sin depender de un cron externo
+$pdo->prepare("DELETE FROM auditoria WHERE creado_en < DATE_SUB(NOW(), INTERVAL 2 MONTH)")
+    ->execute();
+
 $stmt = $pdo->query("
     SELECT id, usuario_nombre, accion, detalle, motivo, creado_en
     FROM auditoria
@@ -46,7 +51,7 @@ $accionLabels = [
             <tbody>
                 <?php foreach ($registros as $r): ?>
                     <tr>
-                        <td><?= htmlspecialchars(date('d/m/Y H:i:s', strtotime($r['creado_en']))) ?></td>
+                        <td data-order="<?= htmlspecialchars($r['creado_en']) ?>"><?= htmlspecialchars(date('d/m/Y H:i:s', strtotime($r['creado_en']))) ?></td>
                         <td><?= htmlspecialchars($r['usuario_nombre'] ?? '-') ?></td>
                         <td><?= htmlspecialchars($accionLabels[$r['accion']] ?? $r['accion']) ?></td>
                         <td><?= nl2br(htmlspecialchars($r['detalle'] ?? '')) ?></td>

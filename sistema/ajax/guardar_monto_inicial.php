@@ -40,23 +40,24 @@ try {
    if (!$existe) {
     // Tomar saldo del día anterior como base
     $stmt = $pdo->prepare("
-        SELECT
-            (monto_inicial + total_cajas - egresos_caja) AS saldo_caja,
-            (total_fondos - egresos_fondos)              AS saldo_fondo
+        SELECT saldo_caja, saldo_fondo
         FROM resumen_financiero_diario
         WHERE fecha < ?
         ORDER BY fecha DESC
         LIMIT 1
     ");
     $stmt->execute([$hoy]);
-    $anterior = $stmt->fetch(PDO::FETCH_ASSOC);
+    $anterior = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['saldo_caja' => 0, 'saldo_fondo' => 0];
+
+    $fondoInicial = (float)$anterior['saldo_fondo'];
 
     $stmt = $pdo->prepare("
         INSERT INTO resumen_financiero_diario
-        (fecha, monto_inicial, total_cajas, total_fondos, egresos_caja, egresos_fondos)
-        VALUES (?, ?, 0, 0, 0, 0)
+        (fecha, monto_inicial, fondo_inicial, total_cajas, total_fondos, egresos_caja, egresos_fondos,
+         saldo_caja, saldo_fondo, saldo_total)
+        VALUES (?, ?, ?, 0, 0, 0, 0, ?, ?, ?)
     ");
-    $stmt->execute([$hoy, $montoInicial]);
+    $stmt->execute([$hoy, $montoInicial, $fondoInicial, $montoInicial, $fondoInicial, $montoInicial + $fondoInicial]);
 
 } else {
     $stmt = $pdo->prepare("
