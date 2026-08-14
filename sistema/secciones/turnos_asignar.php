@@ -412,7 +412,7 @@ $fechaCompleta = $dt->format('d/m/Y');
                             paciente: nombre,
                             profesional: res.profesional,
                             especialidad: res.especialidad,
-                            fecha: res.fecha.split(' ')[0],
+                            fecha: res.fecha.split(' ')[0].split('-').reverse().join('-'),
                             hora: res.hora,
                             sobreturno: res.sobreturno
                         }).catch(e => {

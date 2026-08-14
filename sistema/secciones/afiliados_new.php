@@ -466,7 +466,7 @@ $meses = [
                     ahora.toLocaleDateString("es-AR");
 
                 const hora =
-                    ahora.toLocaleTimeString("es-AR");
+                    ahora.toLocaleTimeString("es-AR", { hour: '2-digit', minute: '2-digit', hour12: false });
 
                 let c = [];
 
@@ -787,6 +787,9 @@ $meses = [
                         width: 520,
                     }).then(result => {
                         if (result.isDismissed) return;
+
+                        // Prevenir doble submit cerrando el SweetAlert activo
+                        Swal.close();
 
                         const debeImprimir = result.isConfirmed; // true = imprimir, false = no imprimir
                         enviarPagos(false, debeImprimir, afiliados, totalCarrito);

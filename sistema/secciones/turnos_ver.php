@@ -609,6 +609,7 @@ $mensaje = urlencode($mensaje);
         }).then(result => {
 
             if (result.isConfirmed) {
+                Swal.close();
                 cobrarTurno();
             }
 
@@ -815,10 +816,15 @@ $mensaje = urlencode($mensaje);
 
     });
 
+    let _cobrando = false;
     function cobrarTurno() {
+
+        if (_cobrando) return;
+        _cobrando = true;
 
         // ✅ FIX: selector correcto
         if (!$('#asistioSwitch').is(':checked')) {
+            _cobrando = false;
             return Swal.fire('Error', 'El paciente no asistió', 'error');
         }
 
@@ -834,12 +840,14 @@ $mensaje = urlencode($mensaje);
             transferencia_tipo === 'clinica' &&
             !empleado_destino_id) {
 
+            _cobrando = false;
             return Swal.fire('Error', 'Seleccionar destino de transferencia', 'error');
         }
 
         $.get('ajax/verificar_caja_abierta.php', function(res) {
 
             if (!res.success) {
+                _cobrando = false;
                 return Swal.fire('Error', res.message || 'No hay caja abierta', 'error');
             }
 
@@ -850,6 +858,7 @@ $mensaje = urlencode($mensaje);
             });
 
             if (practicas.length === 0) {
+                _cobrando = false;
                 return Swal.fire('Error', 'Agregá prácticas para cobrar', 'error');
             }
 
@@ -864,6 +873,7 @@ $mensaje = urlencode($mensaje);
                 console.log("RESPUESTA COBRO:", res);
 
                 if (!res || !res.success) {
+                    _cobrando = false;
                     return Swal.fire('Error', res?.message || 'No se pudo cobrar', 'error');
                 }
 
@@ -895,6 +905,7 @@ $mensaje = urlencode($mensaje);
                     console.error("Error impresión:", e);
                 }
 
+                _cobrando = false;
                 Swal.fire({
                     icon: 'success',
                     title: 'Cobro realizado',
@@ -902,9 +913,13 @@ $mensaje = urlencode($mensaje);
                     showConfirmButton: false
                 });
 
-            }, 'json');
+            }, 'json').fail(function() {
+                _cobrando = false;
+            });
 
-        }, 'json');
+        }, 'json').fail(function() {
+            _cobrando = false;
+        });
     }
     /*******************************************************
      * codigo para impresora

@@ -140,12 +140,28 @@ try {
     // Si el afiliado no tenía pagos previos, ese primer ítem genera fondo jorge.
     $es_primer_pago = !$tenia_pagos_previos;
 
+    $stmtDuplicado = $pdo->prepare("
+        SELECT COUNT(*) FROM pagos_afiliados pa
+        INNER JOIN pacientes p ON p.Id = pa.paciente_id
+        WHERE SUBSTRING_INDEX(SUBSTRING_INDEX(p.nro_afiliado, '/', 1), ' ', 1) = (
+            SELECT SUBSTRING_INDEX(SUBSTRING_INDEX(nro_afiliado, '/', 1), ' ', 1)
+            FROM pacientes WHERE Id = ?
+        )
+        AND pa.fecha_correspondiente = ?
+    ");
+
     foreach ($items as $idx => $item) {
         $monto = (float)($item['monto'] ?? 0);
         $fecha = ($item['fecha'] ?? '') . '-01';   // YYYY-MM-01
         $ym    = $item['fecha'] ?? '';             // YYYY-MM
 
         if ($monto <= 0 || !$item['fecha']) continue;
+
+        // Verificar que no exista ya un pago para este mes/socio
+        $stmtDuplicado->execute([$paciente_id, $fecha]);
+        if ((int)$stmtDuplicado->fetchColumn() > 0) {
+            throw new Exception("Ya existe un pago registrado para $fecha del socio $nro_base");
+        }
 
         // 1. pagos_afiliados
         $stmtPago->execute([
