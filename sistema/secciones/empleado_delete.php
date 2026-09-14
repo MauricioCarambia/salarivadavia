@@ -15,17 +15,19 @@
                     <div class="panel-body">
                         <?php
                         require_once __DIR__ . '/../inc/db.php';
-                        
+                        require_once __DIR__ . '/../inc/csrf.php';
+
                         $confirmar = $_GET['confirmar'] ?? '';
                         $id = $_GET['id'] ?? '';
                         $rand = rand();
+                        $tokenValido = hash_equals($_SESSION['csrf_token'] ?? '', $_GET['csrf_token'] ?? '');
 
                         if (!is_numeric($id)) {
                             echo '<div class="alert alert-danger">ID inválido.</div>';
                             exit;
                         }
 
-                        if ($confirmar === 'si') {
+                        if ($confirmar === 'si' && $tokenValido) {
                             try {
                                 $pdo->beginTransaction();
 
@@ -50,7 +52,7 @@
                 Esta acción no puede deshacerse.<br>
               </div>
               <div class="pull-right">
-                <a href="?seccion=empleado_delete&id=' . htmlspecialchars($id) . '&confirmar=si&nc=' . $rand . '" class="btn btn-info">Eliminar</a>
+                <a href="?seccion=empleado_delete&id=' . htmlspecialchars($id) . '&confirmar=si&csrf_token=' . urlencode(csrf_token()) . '&nc=' . $rand . '" class="btn btn-info">Eliminar</a>
                 <a href="?seccion=empleado&nc=' . $rand . '" class="btn btn-info">Cancelar</a>
               </div>';
                         }

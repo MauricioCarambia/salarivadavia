@@ -1,8 +1,11 @@
 <?php
 require_once __DIR__ . '/../inc/db.php';
+require_once __DIR__ . '/../inc/csrf.php';
 
 $confirmar = $_GET['confirmar'] ?? '';
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$rand = $_GET['nc'] ?? rand();
+$tokenValido = hash_equals($_SESSION['csrf_token'] ?? '', $_GET['csrf_token'] ?? '');
 ?>
 
 <!-- Main Wrapper -->
@@ -26,7 +29,7 @@ $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 /* ===============================
    ELIMINAR
 ================================*/
-if ($confirmar === 'si' && $id > 0) {
+if ($confirmar === 'si' && $tokenValido && $id > 0) {
 
     $stmt = $pdo->prepare("
         DELETE FROM lista_espera
@@ -70,7 +73,7 @@ else {
         </div>
 
         <div class="pull-right">
-            <a href="?seccion=lista_espera_delete&id='.$id.'&confirmar=si&nc='.$rand.'" 
+            <a href="?seccion=lista_espera_delete&id='.$id.'&confirmar=si&csrf_token='.urlencode(csrf_token()).'&nc='.$rand.'"
                class="btn btn-danger">
                Eliminar
             </a>

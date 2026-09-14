@@ -16,17 +16,19 @@
                     <div class="panel-body">
                         <?php
                        require_once __DIR__ . '/../inc/db.php';
-                        
+                       require_once __DIR__ . '/../inc/csrf.php';
+
                         $confirmar = $_GET['confirmar'] ?? '';
                         $id = $_GET['id'] ?? '';
                         $rand = rand(); // Generás un número aleatorio para evitar cacheo en los links
-                        
+                        $tokenValido = hash_equals($_SESSION['csrf_token'] ?? '', $_GET['csrf_token'] ?? '');
+
                         if (!is_numeric($id)) {
                             echo '<div class="alert alert-danger">ID inválido.</div>';
                             exit;
                         }
 
-                        if ($confirmar === 'si') {
+                        if ($confirmar === 'si' && $tokenValido) {
                             // Usar transacción para asegurar integridad
                             try {
                                 $pdo->beginTransaction();
@@ -54,7 +56,7 @@
       Esta acción no puede deshacerse.<br>
     </div>
     <div class="pull-right">
-      <a href="?seccion=movimiento_delete&id=' . htmlspecialchars($id) . '&confirmar=si&nc=' . $rand . '" class="btn btn-info">Eliminar</a>
+      <a href="?seccion=movimiento_delete&id=' . htmlspecialchars($id) . '&confirmar=si&csrf_token=' . urlencode(csrf_token()) . '&nc=' . $rand . '" class="btn btn-info">Eliminar</a>
       <a href="?seccion=caja&nc=' . $rand . '" class="btn btn-info">Cancelar</a>
     </div>';
                         }
