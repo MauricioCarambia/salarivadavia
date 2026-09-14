@@ -1,0 +1,63 @@
+<?php
+require_once __DIR__ . '/../inc/session.php';
+
+if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
+    header('Content-Type: application/json');
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'No autenticado']);
+    exit;
+}
+
+require_once __DIR__ . '/../inc/csrf.php';
+requerirCsrf();
+require_once __DIR__ . '/../inc/db.php';
+
+$id = $_POST['id'] ?? 0;
+
+try {
+
+    $sql = $pdo->prepare("
+    UPDATE cardiologia_sur SET
+        apellido = :apellido,
+        nombre = :nombre,
+        documento = :documento,
+        celular = :celular,
+        nacimiento = :nacimiento,
+        domicilio = :domicilio,
+        obra_social = :obra_social,
+        estudio = :estudio,
+        valor = :valor,
+        cobrado = :cobrado,
+        turno = :turno,
+        aviso = :aviso
+    WHERE id = :id
+");
+
+    $sql->execute([
+        ':apellido' => $_POST['apellido'],
+        ':nombre' => $_POST['nombre'],
+        ':documento' => $_POST['documento'],
+        ':celular' => $_POST['celular'],
+        ':nacimiento' => $_POST['nacimiento'],   // ✅ CORRECTO
+        ':domicilio' => $_POST['domicilio'],     // ✅ CORRECTO
+        ':obra_social' => $_POST['obra_social'],
+        ':estudio' => $_POST['estudio'],
+        ':valor' => $_POST['valor'],
+        ':cobrado' => $_POST['cobrado'],
+        ':turno' => $_POST['turno'],
+        ':aviso' => $_POST['aviso'],
+        ':id' => $id
+    ]);
+
+    echo json_encode(['ok' => true]);
+
+} catch (PDOException $e) {
+
+    error_log($e->getMessage());
+    http_response_code(500);
+
+    echo json_encode([
+        'ok' => false,
+        'error' => 'Error en base de datos'
+    ]);
+}

@@ -1,0 +1,20 @@
+# Credenciales y configuración sensible (NUNCA subir esto a GitHub)
+.env
+
+# Logs
+sistema/error_log
+error_log
+
+# Archivos subidos por usuarios (contenido, no código)
+sistema/uploads/*
+!sistema/uploads/.gitkeep
+
+# Librerías de terceros ya presentes en el hosting: pesan ~170MB y no las
+# tocamos nosotros, así que no hace falta versionarlas. Si preferís tenerlas
+# en el repo igual, borrá estas dos líneas.
+sistema/vendor/
+sistema/adminlte/
+
+# Archivos temporales del sistema operativo / editor
+Thumbs.db
+.DS_Store

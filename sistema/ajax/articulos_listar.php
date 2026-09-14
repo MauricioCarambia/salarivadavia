@@ -1,0 +1,19 @@
+<?php
+require_once __DIR__ . '/../inc/session.php';
+
+if (empty($_SESSION['login']) || $_SESSION['login'] !== 'si') {
+    header('Content-Type: application/json');
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'No autenticado']);
+    exit;
+}
+
+require_once __DIR__ . '/../inc/csrf.php';
+requerirCsrf();
+require_once __DIR__ . '/../inc/db.php';
+
+header('Content-Type: application/json');
+
+$stmt = $pdo->query("SELECT * FROM articulos ORDER BY id DESC");
+
+echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));

@@ -1,0 +1,320 @@
+<?php
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
+session_set_cookie_params(0, '/');
+session_name("turnos");
+session_cache_limiter("private");
+session_start();
+
+// Si ya tiene sesión válida no volver a mostrar el login
+if (!empty($_SESSION['login']) && $_SESSION['login'] === 'si') {
+    header("Location: index.php");
+    exit;
+}
+
+require_once __DIR__ . '/inc/db.php';
+require_once __DIR__ . '/inc/rate_limit.php';
+require_once __DIR__ . '/inc/csrf.php';
+require_once __DIR__ . '/inc/access_control.php';
+require_once __DIR__ . '/inc/auditoria.php';
+
+$rand = mt_rand();
+$mensaje = '';
+$ip = obtenerIpCliente();
+$accesoBloqueado = false;
+
+function registrarAccesoBloqueado(PDO $pdo, int $userId, string $nombre, string $ip): void
+{
+    $sessionPrevia = $_SESSION;
+
+    $_SESSION['user_id'] = $userId;
+    $_SESSION['nombre_completo'] = $nombre;
+
+    registrarAuditoria(
+        $pdo,
+        'acceso_bloqueado',
+        "Acceso denegado por IP no autorizada ({$ip})"
+    );
+
+    $_SESSION = $sessionPrevia;
+}
+
+if (!empty($_POST['usuario']) && !empty($_POST['contrasenia'])) {
+
+  $usuario = trim($_POST['usuario']);
+  $contrasenia = trim($_POST['contrasenia']);
+
+  if (!csrf_validate()) {
+
+    $mensaje = '<div class="alert alert-danger">Sesión expirada, por favor reintentá.</div>';
+
+  } elseif (($bloqueoSegundos = loginEstaBloqueado($pdo, $usuario, $ip)) !== null) {
+
+    $minutos = (int) ceil($bloqueoSegundos / 60);
+    $mensaje = '<div class="alert alert-danger">Demasiados intentos fallidos. Probá de nuevo en ' . $minutos . ' minuto(s).</div>';
+
+  } elseif (strlen($usuario) < 3 || strlen($contrasenia) < 3) {
+
+    $mensaje = '<div class="alert alert-warning">El usuario y la contraseña deben tener al menos 3 caracteres.</div>';
+
+  } else {
+
+    // =============================
+// BUSCAR EMPLEADO
+// =============================
+    $stmt = $pdo->prepare("
+    SELECT e.Id, e.usuario, e.contrasenia, e.nombre, e.rol_id, e.activo, r.nombre AS rol_nombre
+    FROM empleados e
+    LEFT JOIN roles r ON e.rol_id = r.id
+    WHERE e.usuario = ?
+    LIMIT 1
+");
+    $stmt->execute([$usuario]);
+    $empleado = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($empleado) {
+
+      // 👉 EXISTE COMO EMPLEADO → validar contraseña
+      if (!password_verify($contrasenia, $empleado['contrasenia'])) {
+        registrarIntentoFallido($pdo, $usuario, $ip);
+        $mensaje = '<div class="alert alert-danger">Contraseña incorrecta.</div>';
+      } elseif (!$empleado['activo']) {
+        $mensaje = '<div class="alert alert-danger">Usuario inactivo</div>';
+      } else {
+
+        $esAdmin = strtolower(trim($empleado['rol_nombre'])) === 'administrador';
+
+        $ipPermitidaParaEsteUsuario = !restriccionIpActiva()
+          || ipPermitida($ip)
+          || $esAdmin
+          || tieneAutorizacionTemporal($pdo, 'empleado', (int)$empleado['Id']);
+
+        if (!$ipPermitidaParaEsteUsuario) {
+
+          registrarAccesoBloqueado($pdo, (int)$empleado['Id'], $empleado['nombre'], $ip);
+          $mensaje = '<div class="alert alert-danger">Acceso restringido. Este sistema solo puede usarse desde la red de la clínica.</div>';
+
+        } else {
+
+        limpiarIntentosLogin($pdo, $usuario, $ip);
+        session_regenerate_id(true);
+        $_SESSION = [];
+
+        $_SESSION["login"] = 'si';
+        $_SESSION["tipo"] = 'empleado';
+        $_SESSION["user_id"] = $empleado['Id'];
+        $_SESSION["user_nombre"] = $empleado['usuario'];
+        $_SESSION["nombre_completo"] = $empleado['nombre'];
+        $_SESSION["rol_id"] = $empleado['rol_id'];
+        $_SESSION["rol_nombre"] = $empleado['rol_nombre'];
+
+        $_SESSION['es_admin'] = $esAdmin;
+
+        if ($_SESSION['es_admin']) {
+          $_SESSION['accesos'] = ['*'];
+        } else {
+
+          $stmtAccesos = $pdo->prepare("
+                SELECT a.nombre
+                FROM roles_accesos ra
+                INNER JOIN accesos a ON a.id = ra.acceso_id
+                WHERE ra.rol_id = ?
+            ");
+          $stmtAccesos->execute([$empleado['rol_id']]);
+
+          $_SESSION['accesos'] = array_column(
+            $stmtAccesos->fetchAll(PDO::FETCH_ASSOC),
+            'nombre'
+          );
+        }
+
+        registrarAuditoria($pdo, 'acceso_concedido', "Inicio de sesión de empleado desde {$ip}");
+
+        // Rotar token CSRF post-login para bloquear reenvíos del form
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+
+        header("Location: index.php");
+        exit;
+        }
+      }
+
+    } else {
+
+      // =============================
+      // BUSCAR PROFESIONAL
+      // =============================
+      $stmt = $pdo->prepare("
+        SELECT Id, nombre, apellido, usuario, contrasenia
+        FROM profesionales
+        WHERE usuario = ?
+        LIMIT 1
+    ");
+      $stmt->execute([$usuario]);
+      $profesional = $stmt->fetch(PDO::FETCH_ASSOC);
+
+      $passwordOk = false;
+
+      if ($profesional) {
+        if (password_verify($contrasenia, $profesional['contrasenia'])) {
+          $passwordOk = true;
+        } elseif ($contrasenia === $profesional['contrasenia']) {
+          // Contraseña antigua en texto plano: validar y migrar a hash
+          $passwordOk = true;
+          $nuevoHash = password_hash($contrasenia, PASSWORD_DEFAULT);
+          $pdo->prepare("UPDATE profesionales SET contrasenia = ? WHERE Id = ?")
+            ->execute([$nuevoHash, $profesional['Id']]);
+        }
+      }
+
+      if ($passwordOk){
+
+        $nombreCompleto = $profesional['nombre'] . ' ' . $profesional['apellido'];
+
+        $ipPermitidaParaEsteUsuario = !restriccionIpActiva()
+          || ipPermitida($ip)
+          || tieneAutorizacionTemporal($pdo, 'profesional', (int)$profesional['Id']);
+
+        if (!$ipPermitidaParaEsteUsuario) {
+
+          registrarAccesoBloqueado($pdo, (int)$profesional['Id'], $nombreCompleto, $ip);
+          $mensaje = '<div class="alert alert-danger">Acceso restringido. Este sistema solo puede usarse desde la red de la clínica.</div>';
+
+        } else {
+
+        limpiarIntentosLogin($pdo, $usuario, $ip);
+        session_regenerate_id(true);
+        $_SESSION = [];
+
+        $_SESSION["login"] = 'si';
+        $_SESSION["tipo"] = 'profesional';
+        $_SESSION["user_id"] = $profesional['Id'];
+        $_SESSION["nombre_completo"] = $nombreCompleto;
+
+        $_SESSION["accesos"] = [
+          'historia_pacientes',
+          'turnos_profesional',
+          'salir'
+        ];
+
+        $_SESSION["es_admin"] = false;
+
+        registrarAuditoria($pdo, 'acceso_concedido', "Inicio de sesión de profesional desde {$ip}");
+
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+
+        header("Location: index.php");
+        exit;
+        }
+
+      } else {
+        registrarIntentoFallido($pdo, $usuario, $ip);
+        $mensaje = '<div class="alert alert-danger">Usuario o contraseña incorrectos.</div>';
+      }
+    }
+  }
+}
+?>
+
+
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Login | Sistema de Turnos</title>
+  <link rel="icon" href="images/sala.ico">
+
+  <!-- AdminLTE -->
+  <link rel="stylesheet" href="adminlte/plugins/fontawesome-free/css/all.min.css">
+  <link rel="stylesheet" href="adminlte/plugins/icheck-bootstrap/icheck-bootstrap.min.css">
+  <link rel="stylesheet" href="adminlte/dist/css/adminlte.min.css">
+
+
+
+</head>
+
+<body class="hold-transition login-page">
+
+  <div class="login-box">
+
+    <!-- LOGO -->
+    <div class="login-logo">
+      <b>Sistema de Turnos</b>
+    </div>
+
+    <!-- CARD -->
+    <div class="card shadow-lg">
+      <div class="card-body login-card-body">
+
+        <p class="login-box-msg">Ingresar al sistema</p>
+
+        <?= $mensaje ?>
+
+        <?php if (!$accesoBloqueado): ?>
+
+        <form method="post" id="form-login">
+          <?= csrf_field() ?>
+
+          <div class="input-group mb-3">
+            <input type="text" name="usuario" class="form-control" placeholder="Usuario" required>
+            <div class="input-group-append">
+              <div class="input-group-text">
+                <span class="fas fa-user"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="input-group mb-3">
+            <input type="password" name="contrasenia" class="form-control" placeholder="Contraseña" required>
+            <div class="input-group-append">
+              <div class="input-group-text">
+                <span class="fas fa-lock"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-12">
+              <button type="submit" class="btn btn-success btn-block">
+                <i class="fas fa-sign-in-alt me-2"></i> Ingresar
+              </button>
+            </div>
+          </div>
+
+        </form>
+
+        <hr>
+
+        <a href="empleado_new.php" class="btn btn-primary btn-block">
+          <i class="fas fa-user-plus"></i> Crear cuenta
+        </a>
+        <?php endif; ?>
+<a href="../index.php" class="btn btn-secondary btn-block mt-2">
+  <i class="fas fa-home"></i> Ir a noticias
+</a>
+      </div>
+    </div>
+
+    <p class="text-center mt-3">
+      <small>Sistema desarrollado por Carambia Mauricio</small>
+    </p>
+
+  </div>
+
+  <!-- JS -->
+  <script src="adminlte/plugins/jquery/jquery.min.js"></script>
+  <script src="adminlte/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="adminlte/dist/js/adminlte.min.js"></script>
+  <script>
+    document.getElementById('form-login').addEventListener('submit', function () {
+      var btn = this.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ingresando...';
+    });
+  </script>
+
+</body>
+
+</html>

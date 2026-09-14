@@ -1,0 +1,407 @@
+<?php
+require_once __DIR__ . '/../inc/db.php';
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+$usuarioSesion = $_SESSION['user_id'] ?? null;
+$cajaAbierta = null;
+
+if ($usuarioSesion) {
+
+    $stmtCaja = $pdo->prepare("
+        SELECT caja_id 
+        FROM caja_sesion 
+        WHERE usuario_id = ? 
+        AND estado = 'abierta'
+        ORDER BY id DESC 
+        LIMIT 1
+    ");
+
+    $stmtCaja->execute([$usuarioSesion]);
+    $cajaAbierta = $stmtCaja->fetchColumn();
+}
+/* ==============================
+   📅 FILTROS
+============================== */
+$desde = $_GET['desde'] ?? date('Y-m-d');
+$hasta = $_GET['hasta'] ?? date('Y-m-d');
+$caja = $_GET['caja'] ?? $cajaAbierta ?? '';
+$turno = $_GET['turno'] ?? '';
+$usuario = isset($_GET['usuario']) ? $_GET['usuario'] : '';
+$usuarioSesion = $_SESSION['user_id'] ?? null;
+$desdeSQL = $desde . " 00:00:00";
+$hastaSQL = $hasta . " 23:59:59";
+
+
+/* ==============================
+   🧠 FILTROS DINÁMICOS
+============================== */
+$filtros = "";
+$paramsBase = [$desdeSQL, $hastaSQL];
+$paramsFiltros = [];
+
+if ($caja) {
+    $filtros .= " AND cs.caja_id = ? ";
+    $paramsFiltros[] = $caja;
+}
+
+if ($turno) {
+    $filtros .= " AND cs.turno = ? ";
+    $paramsFiltros[] = $turno;
+}
+
+if ($usuario) {
+    $filtros .= " AND c.usuario_id = ? ";
+    $paramsFiltros[] = $usuario;
+}
+
+/* ==============================
+   📊 1. REPORTE PROFESIONALES
+============================== */
+$sql = "
+SELECT 
+    p.Id,
+    p.nombre,
+    p.apellido,
+
+    COALESCE(c_sum.total_facturado, 0) AS Total_Facturado,
+
+    COALESCE(r.total_clinica, 0) - COALESCE(r.total_fondo, 0) AS Ganancia_Clinica,
+
+    COALESCE(r.total_fondo, 0) AS Total_Fondo,
+
+    (
+        COALESCE(r.deberia_pagar_profesional, 0)
+        -
+        COALESCE(r.ya_transferido_profesional, 0)
+        -
+        COALESCE(deuda.deuda_clinica_profesional, 0)
+    ) AS total_profesional,
+
+    (
+        COALESCE(r.total_clinica, 0) - COALESCE(r.total_fondo, 0)
+    ) AS Ganancia_Real
+
+FROM profesionales p
+
+/* TOTAL FACTURADO */
+LEFT JOIN (
+    SELECT 
+        c.profesional_id, 
+        SUM(c.total) AS total_facturado
+    FROM cobros c
+    LEFT JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
+    WHERE c.estado = 'activo'
+    AND c.fecha BETWEEN ? AND ?
+    $filtros
+    GROUP BY c.profesional_id
+) c_sum 
+ON c_sum.profesional_id = p.Id
+
+/* 🔴 DEUDA CLÍNICA (SEPARADA CORRECTAMENTE) */
+LEFT JOIN (
+    SELECT 
+        c.profesional_id,
+        SUM(c.deuda_clinica) AS deuda_clinica_profesional
+    FROM cobros c
+    LEFT JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
+    WHERE c.estado = 'activo'
+    AND c.transferencia_tipo = 'profesional'
+    AND c.fecha BETWEEN ? AND ?
+    $filtros
+    GROUP BY c.profesional_id
+) deuda
+ON deuda.profesional_id = p.Id
+
+/* REPARTO */
+LEFT JOIN (
+    SELECT 
+        c.profesional_id,
+
+        SUM(
+            CASE 
+                WHEN dr.tipo = 'egreso' 
+                 AND dr.categoria = 'profesional'
+                THEN cr.monto 
+                ELSE 0 
+            END
+        ) AS deberia_pagar_profesional,
+
+        SUM(
+            CASE 
+                WHEN dr.tipo = 'egreso'
+                 AND dr.categoria = 'profesional'
+                 AND c.transferencia_tipo IN ('profesional','empleado')
+                THEN cr.monto 
+                ELSE 0 
+            END
+        ) AS ya_transferido_profesional,
+
+        SUM(
+            CASE 
+                WHEN dr.tipo = 'ingreso'
+                THEN cr.monto 
+                ELSE 0 
+            END
+        ) AS total_clinica,
+
+        SUM(
+            CASE 
+                WHEN dr.categoria = 'fondo'
+                THEN cr.monto 
+                ELSE 0 
+            END
+        ) AS total_fondo
+
+    FROM cobros c
+    INNER JOIN cobros_reparto cr ON cr.cobro_id = c.id
+    INNER JOIN destinos_reparto dr ON dr.id = cr.destino_id
+    LEFT JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
+
+    WHERE c.estado = 'activo'
+    AND c.fecha BETWEEN ? AND ?
+    $filtros
+
+    GROUP BY c.profesional_id
+) r 
+ON r.profesional_id = p.Id
+
+WHERE COALESCE(c_sum.total_facturado, 0) > 0
+ORDER BY p.apellido ASC
+";
+
+/* ==============================
+   🔥 PARAMS
+============================== */
+$paramsReporte = array_merge(
+    $paramsBase,
+    $paramsFiltros,
+
+    $paramsBase,
+    $paramsFiltros,
+
+    $paramsBase,        // 👈 NUEVO (deuda)
+    $paramsFiltros
+);
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($paramsReporte);
+$reporte = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+/* ==============================
+   📊 TOTALES (a partir del reporte por profesional)
+============================== */
+// Pago real a profesionales: descuenta lo ya transferido directo y la deuda con la clínica
+$totalPagoProfesional = array_sum(array_column($reporte, 'total_profesional'));
+$totalFondos = array_sum(array_column($reporte, 'Total_Fondo'));
+$totalGananciaClinica = array_sum(array_column($reporte, 'Ganancia_Real'));
+
+/* ==============================
+   💰 TOTAL FACTURADO
+============================== */
+$sqlTotal = "
+SELECT SUM(c.total) 
+FROM cobros c
+LEFT JOIN caja_sesion cs ON cs.id = c.caja_sesion_id
+WHERE c.estado = 'activo'
+AND c.profesional_id IS NOT NULL
+AND c.fecha BETWEEN ? AND ?
+$filtros
+";
+
+$paramsTotal = array_merge($paramsBase, $paramsFiltros);
+
+$stmtTotal = $pdo->prepare($sqlTotal);
+$stmtTotal->execute($paramsTotal);
+$totalFacturado = (float)$stmtTotal->fetchColumn();
+
+/* ==============================
+   📦 AUX
+============================== */
+$cajas = $pdo->query("SELECT id, nombre FROM cajas")->fetchAll(PDO::FETCH_ASSOC);
+$usuarios = $pdo->query("SELECT id, nombre FROM empleados")->fetchAll(PDO::FETCH_ASSOC);
+
+$rand = rand(1000, 9999);
+?>
+
+<!-- FILTROS -->
+<div class="card card-outline card-info shadow-sm">
+    <div class="card-body">
+        <form method="GET">
+            <input type="hidden" name="seccion" value="<?= $_GET['seccion'] ?? 'pagos' ?>">
+
+            <div class="row align-items-end">
+                <div class="col-md-2 col-sm-6 mb-2">
+                    <label class="small font-weight-bold">Desde</label>
+                    <input type="date" name="desde" value="<?= $desde ?>" class="form-control form-control-sm">
+                </div>
+
+                <div class="col-md-2 col-sm-6 mb-2">
+                    <label class="small font-weight-bold">Hasta</label>
+                    <input type="date" name="hasta" value="<?= $hasta ?>" class="form-control form-control-sm">
+                </div>
+
+                <div class="col-md-2 col-sm-4 mb-2">
+                    <label class="small font-weight-bold">Caja</label>
+                    <select name="caja" class="form-control form-control-sm">
+                        <option value="">Todas</option>
+                        <?php foreach ($cajas as $c): ?>
+                            <option value="<?= $c['id'] ?>" <?= $caja == $c['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($c['nombre']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="col-md-2 col-sm-4 mb-2">
+                    <label class="small font-weight-bold">Turno</label>
+                    <select name="turno" class="form-control form-control-sm">
+                        <option value="">Todos</option>
+                        <option value="mañana" <?= $turno == 'mañana' ? 'selected' : '' ?>>Mañana</option>
+                        <option value="tarde" <?= $turno == 'tarde' ? 'selected' : '' ?>>Tarde</option>
+                    </select>
+                </div>
+
+                <div class="col-md-2 col-sm-4 mb-2">
+                    <label class="small font-weight-bold">Usuario</label>
+                    <select name="usuario" class="form-control form-control-sm">
+                        <option value="">Todos</option>
+                        <?php foreach ($usuarios as $u): ?>
+                            <option value="<?= $u['id'] ?>" <?= $usuario == $u['id'] ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($u['nombre']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="col-md-2 mb-2">
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-primary btn-sm mr-1">Filtrar
+                        </button>
+                        <a href="?seccion=<?= $_GET['seccion'] ?? 'pagos' ?>" class="btn btn-secondary btn-sm" title="Limpiar Filtros">Limpiar
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-3 col-sm-6">
+        <div class="small-box bg-info">
+            <div class="inner">
+                <h3>$<?= number_format($totalFacturado, 0, ',', '.') ?></h3>
+                <p>Total Facturado</p>
+            </div>
+            <div class="icon">
+                <i class="fas fa-file-invoice-dollar"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="small-box bg-danger">
+            <div class="inner">
+                <h3>$<?= number_format($totalPagoProfesional, 0, ',', '.') ?></h3>
+                <p>Pago a Profesionales</p>
+            </div>
+            <div class="icon">
+                <i class="fas fa-user-md"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 col-sm-6">
+        <div class="small-box bg-primary">
+            <div class="inner">
+                <h3>$<?= number_format($totalFondos, 0, ',', '.') ?></h3>
+                <p>Fondo Acumulado</p>
+            </div>
+            <div class="icon">
+                <i class="fas fa-piggy-bank"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="small-box bg-success">
+            <div class="inner">
+                <h3>$<?= number_format($totalGananciaClinica, 0, ',', '.') ?></h3>
+                <p>Ganancia Clínica</p>
+            </div>
+            <div class="icon">
+                <i class="fas fa-chart-line"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- TABLA -->
+<div class="card card-outline card-primary">
+    <div class="card-header">
+        <h3><i class="fas fa-user-md"></i> Pago de Profesionales</h3>
+    </div>
+
+    <div class="card-body table-responsive">
+        <table class="table table-striped datatable">
+            <thead>
+                <tr class="text-center">
+                    <th>Profesional</th>
+                    <th>Total Facturado</th>
+                    <th>Pago Profesional</th>
+
+                    <th>Fondo</th>
+                    <th>Ganancia Real</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($reporte as $fila): ?>
+                    <tr>
+                        <td>
+                            <strong><?= htmlspecialchars($fila['apellido'] . ' ' . $fila['nombre']) ?></strong>
+                        </td>
+
+                        <td class="text-info text-center">
+                            $<?= number_format($fila['Total_Facturado'], 2, ',', '.') ?>
+                        </td>
+
+                        <td class="text-danger text-center">
+                            $<?= number_format($fila['total_profesional'], 2, ',', '.') ?>
+                            <?php if ($fila['total_profesional'] < 0): ?>
+                                <br><small class="text-muted">(profesional debe)</small>
+                            <?php endif; ?>
+                        </td>
+
+                        <td class="text-primary text-center">
+                            $<?= number_format($fila['Total_Fondo'], 2, ',', '.') ?>
+                        </td>
+
+                        <td class="text-success text-center font-weight-bold">
+                            $<?= number_format($fila['Ganancia_Real'], 2, ',', '.') ?>
+                        </td>
+
+                        <td class="text-center">
+                            <div class="btn-group">
+                                <button class="btn btn-primary btn-sm rounded-circle" onclick="verPagos(<?= $fila['Id'] ?>)">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    function nuevoPago(id) {
+        window.location.href = `./?seccion=pagos_new&id=${id}&nc=<?= $rand ?>`;
+    }
+
+    function verPagos(id) {
+        window.location.href = `./?seccion=pagos_view&id=${id}&nc=<?= $rand ?>`;
+    }
+
+    function verTurnos(id) {
+        window.location.href = `./?seccion=pagos_fechas&id=${id}&nc=<?= $rand ?>`;
+    }
+</script>
